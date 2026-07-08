@@ -1,0 +1,1 @@
+﻿# Common event normalizer package

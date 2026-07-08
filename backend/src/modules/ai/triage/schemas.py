@@ -1,0 +1,1 @@
+﻿# TriageResult Pydantic model

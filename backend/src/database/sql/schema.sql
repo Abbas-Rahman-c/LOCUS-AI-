@@ -1,0 +1,1 @@
+﻿-- Core schema: workspaces, memberships, sources, captures, decisions, feedback

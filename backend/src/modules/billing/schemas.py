@@ -1,0 +1,1 @@
+﻿# CheckoutRequest, SubscriptionEvent schemas
