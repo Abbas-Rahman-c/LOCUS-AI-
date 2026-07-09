@@ -22,3 +22,6 @@ venv/
 htmlcov/
 
 node_modules
+
+# Local reference materials
+REF/
