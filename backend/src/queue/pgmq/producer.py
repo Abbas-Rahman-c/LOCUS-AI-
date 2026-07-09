@@ -1,7 +1,7 @@
 """
-Ingestion producer — enqueues normalised EventEnvelopes into the ingestion queue.
+Ingestion producer - enqueues normalised EventEnvelopes into the ingestion queue.
 
-Moved from modules/ingestion/queue/ — this is the canonical location.
+Moved from modules/ingestion/queue/ - this is the canonical location.
 Imports the shared client from queue.pgmq.client; never instantiates its own connection.
 """
 from __future__ import annotations

@@ -1,5 +1,5 @@
 """
-pgmq client — THE single pgmq connection point in the codebase.
+pgmq client - THE single pgmq connection point in the codebase.
 
 All modules that need to enqueue or consume messages must import from here.
 Do NOT instantiate a pgmq connection anywhere else in src/.
@@ -37,14 +37,14 @@ class PgmqClient:
             await conn.execute("SELECT pgmq.delete($1, $2)", queue.value, msg_id)
 
 
-# Module-level singleton — imported by producer.py and workers
+# Module-level singleton - imported by producer.py and workers
 _client: PgmqClient | None = None
 
 
 def get_pgmq_client() -> PgmqClient:
     """Return the shared pgmq client. Must be initialised via init_pgmq_client() at startup."""
     if _client is None:
-        raise RuntimeError("pgmq client not initialised — call init_pgmq_client() in lifespan")
+        raise RuntimeError("pgmq client not initialised - call init_pgmq_client() in lifespan")
     return _client
 
 

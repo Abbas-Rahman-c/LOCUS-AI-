@@ -1,5 +1,5 @@
 """
-Worker runner entry point — starts all registered consumer workers.
+Worker runner entry point - starts all registered consumer workers.
 Each worker polls its own pgmq queue. Workers are co-located here;
 business logic stays in the respective modules/.
 """

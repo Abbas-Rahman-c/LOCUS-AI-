@@ -1,7 +1,7 @@
 [tool.poetry]
 name = "locus-ai-backend"
 version = "0.1.0"
-description = "Locus AI — Decision Intelligence Backend"
+description = "Locus AI - Decision Intelligence Backend"
 authors = ["Locus AI Team"]
 python = "^3.12"
 
