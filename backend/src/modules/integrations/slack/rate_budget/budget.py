@@ -1,5 +1,5 @@
 """
-Slack per-source rate-budget — tracks calls-per-minute against Slack API limits.
+Slack per-source rate-budget - tracks calls-per-minute against Slack API limits.
 
 This module is co-located with the Slack connector it serves.
 The ingestion worker checks the budget BEFORE making a Slack API call, not after

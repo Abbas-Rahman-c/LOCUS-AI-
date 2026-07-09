@@ -1,5 +1,5 @@
 """
-Queue name constants — the canonical list of pgmq queues in the system.
+Queue name constants - the canonical list of pgmq queues in the system.
 Import these wherever a queue name is needed; never hardcode a string.
 """
 from enum import StrEnum

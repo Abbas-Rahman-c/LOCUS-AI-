@@ -1,5 +1,5 @@
 """
-Notion page change poller — co-located with the Notion connector.
+Notion page change poller - co-located with the Notion connector.
 
 Notion has no push notifications for this use case, so we poll on a schedule.
 jobs/cron/notion_poller.py calls poll_all_workspaces() every 5 minutes.

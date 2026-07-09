@@ -1,5 +1,5 @@
 """
-Gmail Watch API renewal logic — co-located with the Gmail connector.
+Gmail Watch API renewal logic - co-located with the Gmail connector.
 
 Gmail push notification watches expire after 7 days and must be proactively
 renewed. This module owns the renewal logic; jobs/cron/gmail_renewal.py calls

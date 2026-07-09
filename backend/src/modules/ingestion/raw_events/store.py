@@ -1,5 +1,5 @@
 """
-Raw event store — encrypted write with 30-day TTL + purge function.
+Raw event store - encrypted write with 30-day TTL + purge function.
 
 This module owns ALL business logic for raw event storage and cleanup.
 The jobs/cleanup/ cron entry point imports purge_expired_raw_events() from here.
@@ -27,7 +27,7 @@ async def purge_expired_raw_events() -> int:
     """Delete all raw events older than RAW_EVENT_TTL_DAYS (30 days).
     
     This is the canonical implementation of the purge logic.
-    Called by jobs/cleanup/ on a cron schedule — no SQL lives in jobs/.
+    Called by jobs/cleanup/ on a cron schedule - no SQL lives in jobs/.
 
     Returns:
         Number of records deleted.

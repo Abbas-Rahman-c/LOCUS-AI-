@@ -1,5 +1,5 @@
 """
-AI pipeline orchestrator — runs the full triage ? extraction ? embed ? confidence ? store chain.
+AI pipeline orchestrator - runs the full triage ? extraction ? embed ? confidence ? store chain.
 
 pgmq NOTE: This module does NOT create its own queue connection.
 If it needs to re-enqueue (e.g. for retry), it imports from:
@@ -28,12 +28,12 @@ async def run_pipeline(chunk: dict) -> None:
 
     triage = await classify(chunk)
     if triage.decision == "DISCARD":
-        log.debug("Triage DISCARD — chunk skipped")
+        log.debug("Triage DISCARD - chunk skipped")
         return
 
     extraction = await extract(chunk)
     if not extraction:
-        log.warning("Sonnet extraction returned no items — chunk skipped")
+        log.warning("Sonnet extraction returned no items - chunk skipped")
         return
 
     for item in extraction.items:

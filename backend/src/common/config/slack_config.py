@@ -1,8 +1,8 @@
 """
-Locus AI — Slack configuration.
+Locus AI — Slack configuration (importable module).
 
-Slack OAuth client ID/secret + signing secret for HMAC verification.
-Loaded from environment variables.
+Re-exports from the dot-named config file for clean import paths.
+Usage: from common.config.slack_config import get_slack_config
 """
 from __future__ import annotations
 
