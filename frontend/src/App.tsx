@@ -1,7 +1,7 @@
-import GetStarted from "./pages/GetStarted";
+import LandingPage from '../landing-page/LandingPage'
 
 function App() {
-  return <GetStarted />;
+  return <LandingPage />
 }
 
-export default App;
+export default App
