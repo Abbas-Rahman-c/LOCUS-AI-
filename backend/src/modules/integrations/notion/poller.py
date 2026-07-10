@@ -1,5 +1,5 @@
 """
-Notion page change poller - co-located with the Notion connector.
+Notion page change poller  co-located with the Notion connector.
 
 Notion has no push notifications for this use case, so we poll on a schedule.
 jobs/cron/notion_poller.py calls poll_all_workspaces() every 5 minutes.
@@ -33,4 +33,4 @@ async def _get_notion_sources() -> list[dict]:
 async def _poll_workspace(source: dict) -> None:
     """Diff Notion pages for one workspace and enqueue changed pages."""
     # TODO: fetch pages via Notion API, diff vs last_seen_state, enqueue changed pages
-    raise NotImplementedError
+    raise NotImplementedError

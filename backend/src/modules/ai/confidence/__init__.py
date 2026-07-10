@@ -1,1 +1,1 @@
-﻿# Confidence scoring package
+# Confidence scoring package

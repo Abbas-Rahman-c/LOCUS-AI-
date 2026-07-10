@@ -1,1 +1,1 @@
-﻿# WorkspaceCreate, WorkspaceResponse
+# WorkspaceCreate, WorkspaceResponse

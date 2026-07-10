@@ -1,1 +1,1 @@
-﻿# DigestResponse: period, user_scope, items[]
+# DigestResponse: period, user_scope, items[]

@@ -1,1 +1,1 @@
-﻿# Answer synthesis package
+# Answer synthesis package

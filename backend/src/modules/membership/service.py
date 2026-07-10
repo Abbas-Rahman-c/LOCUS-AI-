@@ -1,1 +1,1 @@
-﻿# Membership CRUD + role enforcement
+# Membership CRUD + role enforcement

@@ -1,1 +1,1 @@
-﻿# Evaluation harness package
+# Evaluation harness package

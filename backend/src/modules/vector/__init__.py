@@ -1,1 +1,1 @@
-﻿# pgvector HNSW index management
+# pgvector HNSW index management

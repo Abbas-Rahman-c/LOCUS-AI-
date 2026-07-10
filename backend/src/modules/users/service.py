@@ -1,1 +1,1 @@
-﻿# User CRUD against Supabase
+# User CRUD against Supabase

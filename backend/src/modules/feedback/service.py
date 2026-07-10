@@ -1,1 +1,1 @@
-﻿# Store feedback; route corrections to evaluation harness
+# Store feedback; route corrections to evaluation harness

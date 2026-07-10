@@ -1,5 +1,5 @@
 """
-Cleanup cron entry point - 30-day raw event purge.
+Cleanup cron entry point  30-day raw event purge.
 
 This file contains ONLY the schedule registration.
 All business logic (the actual DELETE query, encryption-key cleanup) lives in:
@@ -15,4 +15,4 @@ async def run_purge_job() -> None:
     """Thin wrapper called by the APScheduler cron trigger."""
     log.info("[cron] raw-event purge job started")
     deleted = await purge_expired_raw_events()
-    log.info("[cron] raw-event purge job complete - %d records deleted", deleted)
+    log.info("[cron] raw-event purge job complete  %d records deleted", deleted)

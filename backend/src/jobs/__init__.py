@@ -1,1 +1,1 @@
-﻿# Jobs package
+# Jobs package

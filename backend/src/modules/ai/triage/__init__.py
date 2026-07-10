@@ -1,1 +1,1 @@
-﻿# Stage 1 — Haiku fast-filter
+# Stage 1 â Haiku fast-filter

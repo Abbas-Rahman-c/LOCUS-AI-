@@ -1,1 +1,1 @@
-﻿# Retrieval / RAG package
+# Retrieval / RAG package

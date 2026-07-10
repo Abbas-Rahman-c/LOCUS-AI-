@@ -1,1 +1,1 @@
-﻿# Prompt templates package
+# Prompt templates package

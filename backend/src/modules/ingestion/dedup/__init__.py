@@ -1,1 +1,1 @@
-﻿# Dedup ledger package
+# Dedup ledger package

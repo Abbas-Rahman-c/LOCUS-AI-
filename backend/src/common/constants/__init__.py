@@ -1,1 +1,1 @@
-﻿# constants package
+# constants package

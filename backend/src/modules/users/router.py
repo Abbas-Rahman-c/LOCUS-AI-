@@ -1,1 +1,1 @@
-﻿# User routes: GET/PATCH /users/me
+# User routes: GET/PATCH /users/me

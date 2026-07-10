@@ -1,1 +1,1 @@
-﻿# Answer synthesis prompt — grounded in retrieved decisions, no hallucination
+# Answer synthesis prompt â grounded in retrieved decisions, no hallucination

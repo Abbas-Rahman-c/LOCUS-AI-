@@ -1,1 +1,1 @@
-﻿# Double-layer tenant isolation: RLS + retrieval pre-filter
+# Double-layer tenant isolation: RLS + retrieval pre-filter

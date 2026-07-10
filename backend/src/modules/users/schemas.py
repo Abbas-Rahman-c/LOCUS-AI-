@@ -1,1 +1,1 @@
-﻿# UserProfile Pydantic models
+# UserProfile Pydantic models

@@ -1,1 +1,1 @@
-﻿# ExtractionResult: title, summary, owner, rationale, alternatives, confidence
+# ExtractionResult: title, summary, owner, rationale, alternatives, confidence

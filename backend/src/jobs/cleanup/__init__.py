@@ -1,1 +1,1 @@
-# Cleanup cron entry points - no business logic here
+# Cleanup cron entry points  no business logic here

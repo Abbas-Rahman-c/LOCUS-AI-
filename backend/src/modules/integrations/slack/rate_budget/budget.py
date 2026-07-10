@@ -1,5 +1,5 @@
 """
-Slack per-source rate-budget - tracks calls-per-minute against Slack API limits.
+Slack per-source rate-budget  tracks calls-per-minute against Slack API limits.
 
 This module is co-located with the Slack connector it serves.
 The ingestion worker checks the budget BEFORE making a Slack API call, not after
@@ -39,4 +39,4 @@ async def consume_budget(workspace_id: str, calls: int = 1) -> None:
 async def reset_expired_windows() -> None:
     """Clean up rate_budget rows older than 2 minutes (called by cleanup cron if desired)."""
     # TODO: DELETE FROM rate_budgets WHERE window_start < NOW() - INTERVAL '2 minutes'
-    raise NotImplementedError
+    raise NotImplementedError

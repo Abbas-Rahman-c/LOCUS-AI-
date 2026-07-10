@@ -1,1 +1,1 @@
-﻿# Plan management: upgrade, downgrade, cancellation, failed payment
+# Plan management: upgrade, downgrade, cancellation, failed payment

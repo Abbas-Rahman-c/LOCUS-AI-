@@ -1,1 +1,1 @@
-﻿# Stripe secret key + webhook signing secret
+# Stripe secret key + webhook signing secret

@@ -1,1 +1,1 @@
-﻿# Slack webhook package
+# Slack webhook package

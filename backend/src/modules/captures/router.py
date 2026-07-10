@@ -1,1 +1,1 @@
-﻿# GET /captures — list, filter by source/type/confidence
+# GET /captures â list, filter by source/type/confidence

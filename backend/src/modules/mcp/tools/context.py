@@ -1,1 +1,1 @@
-﻿# get_decision_context() MCP tool
+# get_decision_context() MCP tool

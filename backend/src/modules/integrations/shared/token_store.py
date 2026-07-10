@@ -1,1 +1,1 @@
-﻿# Encrypted OAuth token persistence via Supabase Vault
+# Encrypted OAuth token persistence via Supabase Vault

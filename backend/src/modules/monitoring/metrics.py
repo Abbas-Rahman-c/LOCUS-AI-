@@ -1,1 +1,1 @@
-﻿# Prometheus-compatible metrics endpoint
+# Prometheus-compatible metrics endpoint

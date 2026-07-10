@@ -1,1 +1,1 @@
-﻿# DecisionStatus enum: PROPOSED | DECIDED | SUPERSEDED
+# DecisionStatus enum: PROPOSED | DECIDED | SUPERSEDED

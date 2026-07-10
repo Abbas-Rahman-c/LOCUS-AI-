@@ -1,1 +1,1 @@
-﻿# Golden set package
+# Golden set package

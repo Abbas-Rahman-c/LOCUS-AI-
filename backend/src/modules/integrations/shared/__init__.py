@@ -1,1 +1,1 @@
-﻿# Shared integration utilities
+# Shared integration utilities

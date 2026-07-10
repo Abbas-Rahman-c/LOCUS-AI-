@@ -1,1 +1,1 @@
-﻿# MemberInvite, MemberRole schemas
+# MemberInvite, MemberRole schemas

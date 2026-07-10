@@ -1,1 +1,1 @@
-﻿# Captures module — primary storage entity from DS Arch doc
+# Captures module â primary storage entity from DS Arch doc

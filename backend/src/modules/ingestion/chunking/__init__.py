@@ -1,1 +1,1 @@
-﻿# Thread-level chunking package
+# Thread-level chunking package

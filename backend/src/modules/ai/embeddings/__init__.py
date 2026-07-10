@@ -1,1 +1,1 @@
-﻿# Embedding package
+# Embedding package

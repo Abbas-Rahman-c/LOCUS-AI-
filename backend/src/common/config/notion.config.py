@@ -1,1 +1,1 @@
-﻿# Notion OAuth credentials + polling interval
+# Notion OAuth credentials + polling interval

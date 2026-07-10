@@ -1,1 +1,1 @@
-﻿# OpenAI API key + model settings (alternative LLM provider)
+# OpenAI API key + model settings (alternative LLM provider)

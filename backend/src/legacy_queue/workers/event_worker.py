@@ -1,16 +1,16 @@
 """
-Ingestion event worker - polls the ingestion queue and dispatches each event
+Ingestion event worker  polls the ingestion queue and dispatches each event
 through the full AI pipeline.
 
-Moved from modules/ingestion/workers/ - this is the canonical location.
+Moved from modules/ingestion/workers/  this is the canonical location.
 Imports the shared pgmq client from queue.pgmq; does NOT create its own connection.
 """
 from __future__ import annotations
 import asyncio
 import logging
 
-from queue.pgmq.client import get_pgmq_client
-from queue.pgmq.queues import QueueName
+from pgmq.client import get_pgmq_client
+from pgmq.queues import QueueName
 
 log = logging.getLogger(__name__)
 
@@ -21,7 +21,7 @@ POLL_INTERVAL_SECONDS = 2
 async def run_event_worker() -> None:
     """Long-running worker loop: read ? dispatch ? delete from ingestion queue."""
     client = get_pgmq_client()
-    log.info("Event worker started - polling %s", QueueName.INGESTION)
+    log.info("Event worker started  polling %s", QueueName.INGESTION)
 
     while True:
         messages = await client.read(QueueName.INGESTION, vt=VISIBILITY_TIMEOUT_SECONDS, batch=5)
@@ -30,7 +30,7 @@ async def run_event_worker() -> None:
                 await _process_message(msg["message"])
                 await client.delete(QueueName.INGESTION, msg["msg_id"])
             except Exception:
-                log.exception("Failed to process msg_id=%s - will retry after VT expires", msg["msg_id"])
+                log.exception("Failed to process msg_id=%s  will retry after VT expires", msg["msg_id"])
         if not messages:
             await asyncio.sleep(POLL_INTERVAL_SECONDS)
 
@@ -53,3 +53,4 @@ async def _process_message(payload: dict) -> None:
     chunks = await chunk_envelope(payload)
     for chunk in chunks:
         await run_pipeline(chunk)
+

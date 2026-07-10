@@ -1,1 +1,1 @@
-﻿# KMS integration for OAuth token key management
+# KMS integration for OAuth token key management

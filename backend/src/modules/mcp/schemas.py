@@ -1,1 +1,1 @@
-﻿# MCPToolRequest / MCPToolResponse schemas
+# MCPToolRequest / MCPToolResponse schemas

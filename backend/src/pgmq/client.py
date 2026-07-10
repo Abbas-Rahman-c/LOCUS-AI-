@@ -5,8 +5,10 @@ All modules that need to enqueue or consume messages must import from here.
 Do NOT instantiate a pgmq connection anywhere else in src/.
 """
 from __future__ import annotations
+
 import asyncpg
-from queue.pgmq.queues import QueueName
+
+from pgmq.queues import QueueName
 
 
 class PgmqClient:
@@ -17,27 +19,39 @@ class PgmqClient:
 
     async def send(self, queue: QueueName, message: dict) -> int:
         """Enqueue a message. Returns the message ID."""
+        import json
+
         async with self._pool.acquire() as conn:
             row = await conn.fetchrow(
-                "SELECT pgmq.send($1, $2::jsonb)", queue.value, message
+                "SELECT pgmq.send($1, $2::jsonb)", queue.value, json.dumps(message)
             )
             return row[0]
 
     async def read(self, queue: QueueName, vt: int = 30, batch: int = 1) -> list[dict]:
         """Read up to `batch` messages with visibility timeout `vt` seconds."""
+        import json
+
         async with self._pool.acquire() as conn:
             rows = await conn.fetch(
                 "SELECT * FROM pgmq.read($1, $2, $3)", queue.value, vt, batch
             )
-            return [dict(r) for r in rows]
+            results = []
+            for r in rows:
+                d = dict(r)
+                if isinstance(d.get("message"), str):
+                    try:
+                        d["message"] = json.loads(d["message"])
+                    except Exception:
+                        pass
+                results.append(d)
+            return results
 
     async def delete(self, queue: QueueName, msg_id: int) -> None:
         """Permanently delete a processed message."""
         async with self._pool.acquire() as conn:
-            await conn.execute("SELECT pgmq.delete($1, $2)", queue.value, msg_id)
+            await conn.execute("SELECT pgmq.delete($1::text, $2::bigint)", queue.value, msg_id)
 
 
-# Module-level singleton - imported by producer.py and workers
 _client: PgmqClient | None = None
 
 

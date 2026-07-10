@@ -1,1 +1,1 @@
-﻿# Ingestion pipeline package
+# Ingestion pipeline package

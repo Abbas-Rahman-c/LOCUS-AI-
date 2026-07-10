@@ -1,1 +1,1 @@
-﻿# Feedback module
+# Feedback module

@@ -1,1 +1,1 @@
-﻿# SourceType enum: SLACK | GMAIL | NOTION
+# SourceType enum: SLACK | GMAIL | NOTION

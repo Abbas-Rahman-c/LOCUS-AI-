@@ -1,1 +1,1 @@
-﻿# Supabase / Postgres connection settings (supabase-py + asyncpg)
+# Supabase / Postgres connection settings (supabase-py + asyncpg)
