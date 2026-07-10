@@ -34,7 +34,10 @@ class PgmqClient:
     async def delete(self, queue: QueueName, msg_id: int) -> None:
         """Permanently delete a processed message."""
         async with self._pool.acquire() as conn:
-            await conn.execute("SELECT pgmq.delete($1, $2)", queue.value, msg_id)
+            # Cast msg_id — pgmq.delete has overloads; asyncpg needs an explicit type
+            await conn.execute(
+                "SELECT pgmq.delete($1, $2::bigint)", queue.value, msg_id
+            )
 
 
 # Module-level singleton - imported by producer.py and workers
