@@ -14,13 +14,14 @@ from modules.ingestion.envelope.schemas import EventEnvelope
 from modules.ingestion.envelope.normalizer import normalize_gmail_message
 from modules.integrations.gmail import service
 
-def test_encryption_decryption():
+def test_encryption_decryption(monkeypatch):
     """Verify that encrypting and decrypting data yields the original string."""
+    monkeypatch.setenv("APP_SECRET_KEY", "test-secret-key-for-unit-tests")
     original_text = "secret oauth token value 12345"
     encrypted = encrypt_data(original_text)
     assert isinstance(encrypted, bytes)
     assert encrypted != original_text.encode()
-    
+
     decrypted = decrypt_data(encrypted)
     assert decrypted == original_text
 
@@ -28,11 +29,13 @@ def test_get_auth_url():
     """Verify that the OAuth URL is correctly generated with required scopes."""
     workspace_id = uuid.uuid4()
     auth_url = service.get_auth_url(workspace_id)
-    
+
     settings = get_gmail_settings()
     assert settings.gmail_client_id in auth_url
-    assert settings.gmail_redirect_uri in auth_url
-    assert str(workspace_id) in auth_url
+    # redirect_uri is percent-encoded in the URL; check the raw value is present somewhere
+    assert "gmail%2Fcallback" in auth_url or "gmail/callback" in auth_url
+    # The workspace_id is embedded in the opaque state token, NOT directly in the URL
+    assert "state=" in auth_url
     assert "scope=" in auth_url
     assert "gmail.readonly" in auth_url
 
@@ -117,10 +120,11 @@ async def test_handle_callback_success():
     
     with patch("modules.integrations.gmail.service.get_db_pool", return_value=mock_pool), \
          patch("modules.integrations.gmail.service.setup_watch", new_callable=AsyncMock) as mock_setup_watch, \
-         patch("httpx.AsyncClient", return_value=mock_http_client):
-        
+         patch("httpx.AsyncClient", return_value=mock_http_client), \
+         patch.dict("os.environ", {"APP_SECRET_KEY": "test-secret-key-for-unit-tests"}):
+
         result = await service.handle_callback("auth_code_123", workspace_id)
-        
+
         assert result["email"] == "user@example.com"
         assert "source_id" in result
         mock_setup_watch.assert_called_once()

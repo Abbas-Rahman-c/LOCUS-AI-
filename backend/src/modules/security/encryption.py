@@ -12,7 +12,9 @@ log = logging.getLogger(__name__)
 
 def _get_encryption_key() -> bytes:
     """Retrieve and format the 32-byte encryption key from environment variable."""
-    secret = os.getenv("APP_SECRET_KEY", "fallback_secret_key_which_is_thirty_two_bytes_long_123!")
+    secret = os.getenv("APP_SECRET_KEY")
+    if not secret:
+        raise RuntimeError("APP_SECRET_KEY must be configured; refusing to encrypt with a fallback key")
     # Derive a key from the secret
     import hashlib
     return hashlib.sha256(secret.encode()).digest()

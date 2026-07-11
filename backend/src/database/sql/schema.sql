@@ -1,4 +1,4 @@
--- Core schema: workspaces, memberships, sources, captures, decisions, feedback
+-- Core schema: tenants, source connections, captures, decisions, feedback
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 -- Workspaces table
@@ -8,21 +8,23 @@ CREATE TABLE IF NOT EXISTS public.workspaces (
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Sources table (integrations)
-CREATE TABLE IF NOT EXISTS public.sources (
+-- Integration connection contract.  OAuth material is referenced, never embedded.
+CREATE TABLE IF NOT EXISTS public.source_connections (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    workspace_id UUID REFERENCES public.workspaces(id) ON DELETE CASCADE,
-    source_type TEXT NOT NULL, -- 'gmail', 'slack', 'notion'
+    tenant_id UUID REFERENCES public.workspaces(id) ON DELETE CASCADE NOT NULL,
+    source TEXT NOT NULL, -- 'gmail', 'slack', 'notion'
+    external_workspace_id TEXT NOT NULL,
+    oauth_token_ref UUID,
     status TEXT NOT NULL DEFAULT 'active',
-    config JSONB NOT NULL DEFAULT '{}',
+    metadata JSONB NOT NULL DEFAULT '{}',
     watch_expiry TIMESTAMPTZ,
-    created_at TIMESTAMPTZ DEFAULT NOW()
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE (tenant_id, source, external_workspace_id)
 );
 
 -- OAuth Tokens table
 CREATE TABLE IF NOT EXISTS public.oauth_tokens (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    source_id UUID REFERENCES public.sources(id) ON DELETE CASCADE UNIQUE,
     access_token TEXT NOT NULL, -- AES-GCM Encrypted
     refresh_token TEXT,          -- AES-GCM Encrypted
     expires_at TIMESTAMPTZ,
@@ -30,6 +32,10 @@ CREATE TABLE IF NOT EXISTS public.oauth_tokens (
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+ALTER TABLE public.source_connections
+    ADD CONSTRAINT source_connections_oauth_token_ref_fkey
+    FOREIGN KEY (oauth_token_ref) REFERENCES public.oauth_tokens(id) ON DELETE SET NULL;
 
 -- Raw Events table (for encrypted storage of incoming payloads)
 CREATE TABLE IF NOT EXISTS public.raw_events (

@@ -2,13 +2,16 @@
 Gmail OAuth routes + Pub/Sub push endpoint.
 """
 from __future__ import annotations
+import hmac
 import logging
+import os
 import uuid
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Header, HTTPException, Query
 from fastapi.responses import RedirectResponse
 
 from modules.integrations.gmail import service
 from modules.integrations.gmail.pubsub.handler import handle_gmail_pubsub_push
+from modules.integrations.gmail.oauth_state import consume_state
 
 log = logging.getLogger(__name__)
 
@@ -34,11 +37,11 @@ async def connect_gmail(
 @router.get("/callback")
 async def oauth_callback(
     code: str = Query(..., description="Google authorization code"),
-    state: str = Query(..., description="Workspace ID state parameter")
+    state: str = Query(..., description="Single-use OAuth state token")
 ):
     """Callback endpoint for Google OAuth redirection."""
     try:
-        workspace_id = uuid.UUID(state)
+        workspace_id = consume_state(state)
         result = await service.handle_callback(code, workspace_id)
         return {
             "status": "success",
@@ -67,13 +70,19 @@ async def pubsub_push(payload: dict):
 
 @router.post("/manual-sync")
 async def manual_sync(
-    workspace_id: uuid.UUID = Query(..., description="Workspace ID to sync Gmail for")
+    workspace_id: uuid.UUID = Query(..., description="Workspace ID to sync Gmail for"),
+    x_manual_sync_token: str | None = Header(None),
 ):
     """
     DEV-ONLY: Manually trigger a Gmail history sync for the given workspace.
     Useful for testing without Pub/Sub — just send an email, then call this endpoint.
     Returns a summary of events ingested.
     """
+    expected_token = os.getenv("GMAIL_MANUAL_SYNC_TOKEN")
+    if os.getenv("ENABLE_GMAIL_MANUAL_SYNC") != "true" or not expected_token:
+        raise HTTPException(status_code=404, detail="Manual sync is disabled")
+    if not x_manual_sync_token or not hmac.compare_digest(x_manual_sync_token, expected_token):
+        raise HTTPException(status_code=403, detail="Manual sync is not authorized")
     try:
         count = await service.manual_sync(workspace_id)
         return {

@@ -3,7 +3,7 @@ Cleanup cron entry point  30-day raw event purge.
 
 This file contains ONLY the schedule registration.
 All business logic (the actual DELETE query, encryption-key cleanup) lives in:
-  modules/ingestion/raw-events/store.py ? purge_expired_raw_events()
+  modules/ingestion/raw_events/store.py -> purge_expired_raw_events()
 """
 import logging
 from modules.ingestion.raw_events.store import purge_expired_raw_events
