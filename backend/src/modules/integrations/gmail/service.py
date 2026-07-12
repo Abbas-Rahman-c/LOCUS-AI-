@@ -17,12 +17,12 @@ from modules.security.encryption import encrypt_string, decrypt_string
 from modules.ingestion.envelope.normalizer import normalize_gmail_message
 from modules.ingestion.raw_events.store import store_raw_event
 from modules.integrations.gmail.oauth_state import create_state
-from pgmq.producer import enqueue_event
+from src.queue.pgmq.producer import enqueue_event
 
 log = logging.getLogger(__name__)
 
 
-def get_auth_url(workspace_id: uuid.UUID) -> str:
+def get_auth_url(tenant_id: uuid.UUID) -> str:
     """Build the Google OAuth2 authorization URL."""
     settings = get_gmail_settings()
     scopes = [
@@ -37,14 +37,14 @@ def get_auth_url(workspace_id: uuid.UUID) -> str:
         "redirect_uri": settings.gmail_redirect_uri,
         "response_type": "code",
         "scope": scope_str,
-        "state": create_state(workspace_id),
+        "state": create_state(tenant_id),
         "access_type": "offline",
         "prompt": "consent",
     }
     return f"https://accounts.google.com/o/oauth2/v2/auth?{urlencode(params)}"
 
 
-async def handle_callback(code: str, workspace_id: uuid.UUID) -> Dict[str, Any]:
+async def handle_callback(code: str, tenant_id: uuid.UUID) -> Dict[str, Any]:
     """Exchange auth code for tokens, fetch email, and save source."""
     settings = get_gmail_settings()
     pool = get_db_pool()
@@ -96,53 +96,52 @@ async def handle_callback(code: str, workspace_id: uuid.UUID) -> Dict[str, Any]:
                 WHERE tenant_id = $1 AND source = 'gmail'
                   AND external_workspace_id = $2
                 """,
-                workspace_id, email
+                tenant_id, email
             )
+
+            # Encrypt tokens
+            encrypted_access = encrypt_string(access_token)
+            encrypted_refresh = encrypt_string(refresh_token) if refresh_token else None
 
             if existing_source:
                 source_id = existing_source["id"]
+                token_ref = existing_source["oauth_token_ref"]
+                
                 await conn.execute(
                     """
                     UPDATE source_connections SET status = 'active' WHERE id = $1
                     """,
                     source_id
                 )
+                
+                if token_ref:
+                    await conn.execute(
+                        """UPDATE oauth_tokens
+                           SET access_token = $1, refresh_token = COALESCE($2, refresh_token),
+                               expires_at = $3, scopes = $4, updated_at = NOW() WHERE id = $5""",
+                        encrypted_access, encrypted_refresh, expires_at, scopes, token_ref,
+                    )
             else:
                 source_id = uuid.uuid4()
+                token_ref = str(uuid.uuid4())
+                
+                # Insert oauth token first because oauth_token_ref is NOT NULL in source_connections
+                await conn.execute(
+                    """
+                    INSERT INTO oauth_tokens (id, access_token, refresh_token, expires_at, scopes, updated_at)
+                    VALUES ($1, $2, $3, $4, $5, NOW())
+                    """,
+                    token_ref, encrypted_access, encrypted_refresh, expires_at, scopes
+                )
+                
                 config = json.dumps({"email_address": email, "history_id": None})
                 await conn.execute(
                     """
                     INSERT INTO source_connections
-                    (id, tenant_id, source, external_workspace_id, status, metadata)
-                    VALUES ($1, $2, 'gmail', $3, 'active', $4::jsonb)
+                    (id, tenant_id, source, external_workspace_id, status, oauth_token_ref, ingestion_mode, cursor_state)
+                    VALUES ($1, $2, 'gmail', $3, 'active', $4, 'polling', $5::jsonb)
                     """,
-                    source_id, workspace_id, email, config
-                )
-
-            # Encrypt tokens
-            encrypted_access = encrypt_string(access_token)
-            encrypted_refresh = encrypt_string(refresh_token) if refresh_token else None
-
-            token_ref = existing_source["oauth_token_ref"] if existing_source else None
-            if token_ref:
-                await conn.execute(
-                    """UPDATE oauth_tokens
-                       SET access_token = $1, refresh_token = COALESCE($2, refresh_token),
-                           expires_at = $3, scopes = $4, updated_at = NOW() WHERE id = $5""",
-                    encrypted_access, encrypted_refresh, expires_at, scopes, token_ref,
-                )
-            else:
-                token_ref = uuid.uuid4()
-                await conn.execute(
-                """
-                INSERT INTO oauth_tokens (id, access_token, refresh_token, expires_at, scopes, updated_at)
-                VALUES ($1, $2, $3, $4, $5, NOW())
-                """,
-                    token_ref, encrypted_access, encrypted_refresh, expires_at, scopes
-                )
-                await conn.execute(
-                    "UPDATE source_connections SET oauth_token_ref = $1 WHERE id = $2",
-                    token_ref, source_id,
+                    source_id, tenant_id, email, token_ref, config
                 )
 
     # 4. Setup watch (push notification) for this inbox
@@ -151,15 +150,15 @@ async def handle_callback(code: str, workspace_id: uuid.UUID) -> Dict[str, Any]:
     except Exception as e:
         log.warning("Failed to setup Gmail watch (Google Pub/Sub): %s. Sync will fall back to manual sync.", e)
         # Even if watch fails, we return success so the user can test using manual sync!
-        # Let's save a placeholder history_id in config if it wasn't set by watch
+        # Let's save a placeholder history_id in cursor_state if it wasn't set by watch
         async with pool.acquire() as conn:
-            source_row = await conn.fetchrow("SELECT metadata FROM source_connections WHERE id = $1", source_id)
+            source_row = await conn.fetchrow("SELECT cursor_state FROM source_connections WHERE id = $1", source_id)
             if source_row:
-                config = json.loads(source_row["metadata"])
+                config = json.loads(source_row["cursor_state"])
                 if "history_id" not in config:
                     config["history_id"] = 1  # default start history id
                     await conn.execute(
-                        "UPDATE source_connections SET metadata = $1::jsonb WHERE id = $2",
+                        "UPDATE source_connections SET cursor_state = $1::jsonb WHERE id = $2",
                         json.dumps(config), source_id
                     )
 
@@ -194,25 +193,26 @@ async def setup_watch(source_id: uuid.UUID) -> Dict[str, Any]:
             history_id = watch_data.get("historyId")
             expiration_ms = int(watch_data.get("expiration", 0))
 
-            # Convert expiration milliseconds to timestamp
-            watch_expiry = datetime.fromtimestamp(expiration_ms / 1000.0, tz=timezone.utc)
+            if expiration_ms <= 0:
+                raise RuntimeError("Gmail watch response did not include a valid expiration")
 
             # Update source_connections with latest history_id & watch_expiry
-            source_row = await conn.fetchrow("SELECT metadata FROM source_connections WHERE id = $1", source_id)
-            config = json.loads(source_row["metadata"]) if source_row else {}
+            source_row = await conn.fetchrow("SELECT cursor_state FROM source_connections WHERE id = $1", source_id)
+            config = json.loads(source_row["cursor_state"]) if source_row else {}
             config["history_id"] = history_id
+            config["watch_expiry"] = expiration_ms
 
             await conn.execute(
                 """
                 UPDATE source_connections
-                SET watch_expiry = $1, metadata = $2::jsonb
-                WHERE id = $3
+                SET cursor_state = $1::jsonb
+                WHERE id = $2
                 """,
-                watch_expiry, json.dumps(config), source_id
+                json.dumps(config), source_id
             )
 
             log.info("Successfully established watch for Gmail source_id=%s, historyId=%s, expires=%s",
-                     source_id, history_id, watch_expiry)
+                     source_id, history_id, datetime.fromtimestamp(expiration_ms / 1000.0, tz=timezone.utc))
             return watch_data
 
 
@@ -243,9 +243,9 @@ async def process_pubsub_notification(payload: Dict[str, Any]) -> None:
         # Find active Gmail source matching emailAddress
         source_row = await conn.fetchrow(
             """
-            SELECT id, tenant_id, metadata FROM source_connections
+            SELECT id, tenant_id, cursor_state FROM source_connections
             WHERE source = 'gmail' AND status = 'active'
-              AND metadata->>'email_address' = $1
+              AND cursor_state->>'email_address' = $1
             """,
             email
         )
@@ -254,8 +254,8 @@ async def process_pubsub_notification(payload: Dict[str, Any]) -> None:
             return
 
         source_id = source_row["id"]
-        workspace_id = source_row["tenant_id"]
-        config = json.loads(source_row["metadata"])
+        tenant_id = source_row["tenant_id"]
+        config = json.loads(source_row["cursor_state"])
         last_history_id = config.get("history_id")
 
         # Get valid OAuth access token
@@ -270,7 +270,7 @@ async def process_pubsub_notification(payload: Dict[str, Any]) -> None:
         if not last_history_id:
             config["history_id"] = new_history_id
             await conn.execute(
-                "UPDATE source_connections SET metadata = $1::jsonb WHERE id = $2",
+                "UPDATE source_connections SET cursor_state = $1::jsonb WHERE id = $2",
                 json.dumps(config), source_id
             )
             log.info("Initialized historyId for %s to %s", email, new_history_id)
@@ -290,11 +290,11 @@ async def process_pubsub_notification(payload: Dict[str, Any]) -> None:
                 # Fallback: get recent message ids and process them
                 recent_messages = await _fetch_recent_messages(client, access_token)
                 for msg_meta in recent_messages:
-                    await _fetch_normalize_and_enqueue(client, access_token, msg_meta["id"], workspace_id)
+                    await _fetch_normalize_and_enqueue(client, access_token, msg_meta["id"], tenant_id, source_id)
 
                 config["history_id"] = new_history_id
                 await conn.execute(
-                    "UPDATE source_connections SET metadata = $1::jsonb WHERE id = $2",
+                    "UPDATE source_connections SET cursor_state = $1::jsonb WHERE id = $2",
                     json.dumps(config), source_id
                 )
                 return
@@ -315,12 +315,12 @@ async def process_pubsub_notification(payload: Dict[str, Any]) -> None:
                     msg_id = msg_meta.get("id")
                     if msg_id and msg_id not in processed_message_ids:
                         processed_message_ids.add(msg_id)
-                        await _fetch_normalize_and_enqueue(client, access_token, msg_id, workspace_id)
+                        await _fetch_normalize_and_enqueue(client, access_token, msg_id, tenant_id, source_id)
 
-            # Update history_id in metadata
+            # Update history_id in cursor_state
             config["history_id"] = new_history_id
             await conn.execute(
-                "UPDATE source_connections SET metadata = $1::jsonb WHERE id = $2",
+                "UPDATE source_connections SET cursor_state = $1::jsonb WHERE id = $2",
                 json.dumps(config), source_id
             )
             log.info("Processed %d new emails for %s. Updated historyId to %s",
@@ -336,7 +336,7 @@ async def _fetch_recent_messages(client: httpx.AsyncClient, access_token: str) -
     return []
 
 
-async def manual_sync(workspace_id: uuid.UUID, max_messages: int = 10) -> int:
+async def manual_sync(tenant_id: uuid.UUID, max_messages: int = 10) -> int:
     """
     DEV helper: Fetch the N most recent Gmail messages for a workspace,
     normalize each one to EventEnvelope, store raw event, and enqueue.
@@ -347,17 +347,17 @@ async def manual_sync(workspace_id: uuid.UUID, max_messages: int = 10) -> int:
     async with pool.acquire() as conn:
         source_row = await conn.fetchrow(
             """
-            SELECT id, metadata FROM source_connections
+            SELECT id, cursor_state FROM source_connections
             WHERE tenant_id = $1 AND source = 'gmail' AND status = 'active'
             LIMIT 1
             """,
-            workspace_id
+            tenant_id
         )
         if not source_row:
-            raise ValueError(f"No active Gmail source found for workspace {workspace_id}")
+            raise ValueError(f"No active Gmail source found for workspace {tenant_id}")
 
         source_id = source_row["id"]
-        config = json.loads(source_row["metadata"])
+        config = json.loads(source_row["cursor_state"])
 
         try:
             access_token = await _get_valid_access_token(source_id, conn)
@@ -373,10 +373,10 @@ async def manual_sync(workspace_id: uuid.UUID, max_messages: int = 10) -> int:
             raise RuntimeError(f"Failed to list messages: {list_resp.text}")
 
         messages = list_resp.json().get("messages", [])
-        log.info("Manual sync: found %d recent messages for workspace %s", len(messages), workspace_id)
+        log.info("Manual sync: found %d recent messages for workspace %s", len(messages), tenant_id)
 
         for msg_meta in messages:
-            await _fetch_normalize_and_enqueue(client, access_token, msg_meta["id"], workspace_id)
+            await _fetch_normalize_and_enqueue(client, access_token, msg_meta["id"], tenant_id, source_id)
             count += 1
 
         # Update history_id from Gmail profile
@@ -390,10 +390,10 @@ async def manual_sync(workspace_id: uuid.UUID, max_messages: int = 10) -> int:
                 config["history_id"] = new_history_id
                 async with pool.acquire() as conn:
                     await conn.execute(
-                        "UPDATE source_connections SET metadata = $1::jsonb WHERE id = $2",
+                        "UPDATE source_connections SET cursor_state = $1::jsonb WHERE id = $2",
                         json.dumps(config), source_id
                     )
-                log.info("Updated historyId to %s for workspace %s", new_history_id, workspace_id)
+                log.info("Updated historyId to %s for workspace %s", new_history_id, tenant_id)
 
     return count
 
@@ -402,7 +402,8 @@ async def _fetch_normalize_and_enqueue(
     client: httpx.AsyncClient,
     access_token: str,
     message_id: str,
-    workspace_id: uuid.UUID
+    tenant_id: uuid.UUID,
+    connection_id: uuid.UUID
 ) -> None:
     """Fetch full Gmail message details, convert to EventEnvelope, save raw event, and enqueue."""
     try:
@@ -415,7 +416,7 @@ async def _fetch_normalize_and_enqueue(
         raw_msg = resp.json()
 
         # 1. Normalize
-        envelope = normalize_gmail_message(raw_msg, workspace_id)
+        envelope = normalize_gmail_message(raw_msg, tenant_id)
         envelope_dict = envelope.model_dump()
 
         # Serialize datetime and UUID fields for pgmq JSON payload
@@ -423,7 +424,7 @@ async def _fetch_normalize_and_enqueue(
         envelope_dict["tenant_id"] = str(envelope.tenant_id)
 
         # 2. Persist raw event (encrypted payload)
-        await store_raw_event(envelope_dict)
+        await store_raw_event(envelope_dict, connection_id)
 
         # 3. Enqueue to PGMQ
         await enqueue_event(envelope_dict)

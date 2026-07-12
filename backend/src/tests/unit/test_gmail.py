@@ -27,21 +27,21 @@ def test_encryption_decryption(monkeypatch):
 
 def test_get_auth_url():
     """Verify that the OAuth URL is correctly generated with required scopes."""
-    workspace_id = uuid.uuid4()
-    auth_url = service.get_auth_url(workspace_id)
+    tenant_id = uuid.uuid4()
+    auth_url = service.get_auth_url(tenant_id)
 
     settings = get_gmail_settings()
     assert settings.gmail_client_id in auth_url
     # redirect_uri is percent-encoded in the URL; check the raw value is present somewhere
     assert "gmail%2Fcallback" in auth_url or "gmail/callback" in auth_url
-    # The workspace_id is embedded in the opaque state token, NOT directly in the URL
+    # The tenant_id is embedded in the opaque state token, NOT directly in the URL
     assert "state=" in auth_url
     assert "scope=" in auth_url
     assert "gmail.readonly" in auth_url
 
 def test_normalize_gmail_message():
     """Verify that raw Gmail message responses are normalized to standard EventEnvelopes (spec 1.4)."""
-    workspace_id = uuid.uuid4()
+    tenant_id = uuid.uuid4()
     
     raw_message = {
         "id": "msg123",
@@ -61,11 +61,11 @@ def test_normalize_gmail_message():
         }
     }
     
-    envelope = normalize_gmail_message(raw_message, workspace_id)
+    envelope = normalize_gmail_message(raw_message, tenant_id)
     
     # Spec 1.4 contract assertions
     assert isinstance(envelope, EventEnvelope)
-    assert envelope.tenant_id == workspace_id           # which customer
+    assert envelope.tenant_id == tenant_id               # which customer
     assert envelope.source == "gmail"                   # source system
     assert envelope.source_id == "msg123"               # unique id for dedup
     assert envelope.actor == "sender@example.com"       # who sent it
@@ -79,7 +79,7 @@ def test_normalize_gmail_message():
 @pytest.mark.asyncio
 async def test_handle_callback_success():
     """Verify code exchange, email retrieval, and source saving in handle_callback."""
-    workspace_id = uuid.uuid4()
+    tenant_id = uuid.uuid4()
     
     # Mock token exchange response
     token_response = MagicMock()
@@ -123,8 +123,18 @@ async def test_handle_callback_success():
          patch("httpx.AsyncClient", return_value=mock_http_client), \
          patch.dict("os.environ", {"APP_SECRET_KEY": "test-secret-key-for-unit-tests"}):
 
-        result = await service.handle_callback("auth_code_123", workspace_id)
+        result = await service.handle_callback("auth_code_123", tenant_id)
 
         assert result["email"] == "user@example.com"
         assert "source_id" in result
         mock_setup_watch.assert_called_once()
+        token_insert = next(
+            call for call in mock_conn.execute.await_args_list
+            if "INSERT INTO oauth_tokens" in call.args[0]
+        )
+        source_insert = next(
+            call for call in mock_conn.execute.await_args_list
+            if "INSERT INTO source_connections" in call.args[0]
+        )
+        assert isinstance(token_insert.args[1], str)
+        assert source_insert.args[4] == token_insert.args[1]

@@ -10,7 +10,7 @@ import asyncpg
 from dotenv import load_dotenv
 
 from database.connection import init_db_pool
-from pgmq.client import init_pgmq_client
+from src.queue.pgmq.client import init_pgmq_client
 
 log = logging.getLogger(__name__)
 
@@ -53,6 +53,18 @@ async def lifespan(app: FastAPI):
             log.warning(f"schema.sql not found at {schema_path}")
     except Exception as e:
         log.error(f"Failed to run schema migrations: {e}")
+
+    oauth_migration_path = os.path.join(
+        os.path.dirname(os.path.dirname(__file__)), "database", "migrations", "001_gmail_oauth_tokens.sql"
+    )
+    try:
+        with open(oauth_migration_path, "r", encoding="utf-8") as f:
+            oauth_migration_sql = f.read()
+        async with pool.acquire() as conn:
+            await conn.execute(oauth_migration_sql)
+        log.info("Gmail OAuth token storage verified")
+    except Exception as e:
+        log.error("Failed to initialize Gmail OAuth token storage: %s", e)
         
     # Try enabling PGMQ extension, otherwise use pgmq_fallback.sql
     log.info("Verifying PGMQ infrastructure...")

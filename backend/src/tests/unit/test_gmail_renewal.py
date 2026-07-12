@@ -18,8 +18,8 @@ async def test_renew_single_watch_updates_source_state() -> None:
     source_id = uuid.uuid4()
     source = {
         "id": source_id,
-        "workspace_id": uuid.uuid4(),
-        "config": {
+        "tenant_id": uuid.uuid4(),
+        "cursor_state": {
             "email_address": "user@example.com",
             "history_id": "123456",
         },
@@ -58,12 +58,12 @@ async def test_renew_single_watch_updates_source_state() -> None:
         await renewer._renew_single_watch(source)
 
     mock_conn.execute.assert_awaited_once()
-    sql, watch_expiry, config_json, executed_source_id = mock_conn.execute.await_args.args
+    sql, config_json, executed_source_id = mock_conn.execute.await_args.args
 
-    assert "UPDATE sources" in sql
+    assert "UPDATE source_connections" in sql
     assert executed_source_id == source_id
-    assert watch_expiry.tzinfo is not None
 
     stored_config = json.loads(config_json)
     assert stored_config["email_address"] == "user@example.com"
     assert stored_config["history_id"] == "654321"
+    assert stored_config["watch_expiry"] == 1893456000000
