@@ -5,6 +5,6 @@ RETURNS setof bigint
 LANGUAGE sql
 SECURITY DEFINER
 AS $$
-  -- We assume `pgmq` extension is installed and `ingestion_queue` exists
-  SELECT pgmq.send('ingestion_queue', envelope);
+  -- We assume `pgmq` extension is installed and `ingestion` queue exists
+  SELECT pgmq.send('ingestion', envelope);
 $$;

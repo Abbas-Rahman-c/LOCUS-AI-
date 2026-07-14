@@ -1,4 +1,4 @@
-"""Smoke test: DB connection + pgmq enqueue/read/delete on ingestion_queue."""
+"""Smoke test: DB connection + pgmq enqueue/read/delete on ingestion queue."""
 from __future__ import annotations
 
 import asyncio
@@ -13,7 +13,7 @@ from dotenv import load_dotenv
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 load_dotenv(BACKEND_DIR / ".env")
 
-QUEUE = "ingestion_queue"
+QUEUE = "ingestion"
 TEST_PAYLOAD = {
     "tenant_id": "00000000-0000-0000-0000-000000000001",
     "source": "slack",
