@@ -1,12 +1,16 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { getSupabaseClient } from './lib/supabase'
 
 const AUTH_MESSAGE_TYPE = 'locus:google-auth'
 
 export default function OAuthCallback() {
   const [message, setMessage] = useState('Completing your Google sign in...')
+  const hasStarted = useRef(false)
 
   useEffect(() => {
+    if (hasStarted.current) return
+    hasStarted.current = true
+
     const completeSignIn = async () => {
       try {
         const code = new URLSearchParams(window.location.search).get('code')
