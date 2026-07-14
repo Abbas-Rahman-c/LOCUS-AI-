@@ -10,7 +10,7 @@ import asyncpg
 from dotenv import load_dotenv
 
 from database.connection import init_db_pool
-from src.queue.pgmq.client import init_pgmq_client
+from queue.pgmq.client import init_pgmq_client
 
 log = logging.getLogger(__name__)
 

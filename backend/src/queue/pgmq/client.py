@@ -6,7 +6,7 @@ Do NOT instantiate a pgmq connection anywhere else in src/.
 """
 from __future__ import annotations
 import asyncpg
-from src.queue.pgmq.queues import QueueName
+from queue.pgmq.queues import QueueName
 
 
 class PgmqClient:

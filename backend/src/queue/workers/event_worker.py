@@ -9,8 +9,8 @@ from __future__ import annotations
 import asyncio
 import logging
 
-from src.queue.pgmq.client import get_pgmq_client
-from src.queue.pgmq.queues import QueueName
+from queue.pgmq.client import get_pgmq_client
+from queue.pgmq.queues import QueueName
 
 log = logging.getLogger(__name__)
 

@@ -6,7 +6,7 @@ business logic stays in the respective modules/.
 import asyncio
 import logging
 
-from src.queue.workers.event_worker import run_event_worker
+from queue.workers.event_worker import run_event_worker
 
 log = logging.getLogger(__name__)
 
