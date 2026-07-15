@@ -45,56 +45,56 @@ export default function ConnectWorkspaces({ email }: { email: string }) {
   }
 
   return (
-    <main className="min-h-screen bg-[#f8f8fc] px-5 py-10 text-[#17171b] sm:px-8 sm:py-14 lg:px-12 lg:py-16">
-      <div className="mx-auto flex min-h-[calc(100vh-8rem)] w-full max-w-[1360px] flex-col items-center">
+    <main className="min-h-screen bg-[#f8f8fc] px-5 py-6 text-[#17171b] sm:px-8 sm:py-8 lg:px-10">
+      <div className="mx-auto flex min-h-[calc(100vh-4rem)] w-full max-w-[1360px] flex-col items-center">
         <div className="flex items-center gap-3" aria-label="Locus AI">
-          <img src="/locus-mark.png" alt="" className="h-12 w-12 rounded-[7px]" />
-          <span className="text-[25px] font-bold leading-none">
+          <img src="/locus-mark.png" alt="" className="h-10 w-10 rounded-[6px]" />
+          <span className="text-[22px] font-bold leading-none">
             LOCUS <span className="text-[#4b38d1]">AI</span>
           </span>
         </div>
 
-        <section className="mt-16 text-center">
-          <h1 className="text-[32px] font-bold leading-tight sm:text-[38px]">Connect your workspaces</h1>
-          <p className="mx-auto mt-6 max-w-[680px] text-[17px] leading-[1.5] text-[#7a8190] sm:text-[20px]">
+        <section className="mt-8 text-center">
+          <h1 className="text-[28px] font-bold leading-tight sm:text-[32px]">Connect your workspaces</h1>
+          <p className="mx-auto mt-3 max-w-[660px] text-[15px] leading-[1.45] text-[#7a8190] sm:text-[17px]">
             Your Locus account is ready. Next: connect Slack, Notion, and
             <br className="hidden sm:block" /> Gmail so we can start capturing decisions.
           </p>
-          <div className="mt-4 flex flex-wrap items-center justify-center gap-2 text-[16px] text-[#7a8190]">
+          <div className="mt-2 flex flex-wrap items-center justify-center gap-2 text-[14px] text-[#7a8190]">
             <GoogleIcon />
             <span>Signed in as</span>
             <strong className="font-semibold text-[#25252b]">{email}</strong>
           </div>
         </section>
 
-        <section aria-label="Workspace tools" className="mt-16 grid w-full gap-6 md:grid-cols-3">
+        <section aria-label="Workspace tools" className="mt-8 grid w-full gap-5 md:grid-cols-3">
           {tools.map((tool) => {
             const isConnected = connectedTools.has(tool.id)
             return (
-              <article key={tool.id} className="flex min-h-[292px] flex-col rounded-[8px] border border-[#dfe1e8] bg-white p-6 shadow-[0_1px_2px_rgba(17,24,39,0.02)]">
+              <article key={tool.id} className="flex min-h-[238px] flex-col rounded-[8px] border border-[#dfe1e8] bg-white p-5 shadow-[0_1px_2px_rgba(17,24,39,0.02)]">
                 <div className="flex items-center gap-4">
-                  <div className="flex h-[68px] w-[68px] shrink-0 items-center justify-center rounded-[10px] border border-[#bfc4cf] bg-white">
+                  <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-[9px] border border-[#bfc4cf] bg-white">
                     <img
                       src={tool.iconSrc}
                       alt=""
-                      className="h-10 w-10 object-contain"
+                      className="h-9 w-9 bg-white object-contain"
                     />
                   </div>
                   <div>
-                    <h2 className="text-[20px] font-bold leading-tight">{tool.name}</h2>
-                    <p className={`mt-1 text-[16px] ${isConnected ? 'font-medium text-[#16835d]' : 'text-[#a2a8b5]'}`}>
+                    <h2 className="text-[18px] font-bold leading-tight">{tool.name}</h2>
+                    <p className={`mt-1 text-[14px] ${isConnected ? 'font-medium text-[#16835d]' : 'text-[#a2a8b5]'}`}>
                       {isConnected ? 'Connected' : 'Not connected'}
                     </p>
                   </div>
                 </div>
 
-                <p className="mt-6 flex-1 text-[17px] leading-[1.55] text-[#737b8c]">{tool.description}</p>
+                <p className="mt-4 flex-1 text-[15px] leading-[1.45] text-[#737b8c]">{tool.description}</p>
 
                 <button
                   type="button"
                   aria-pressed={isConnected}
                   onClick={() => toggleTool(tool.id)}
-                  className={`mt-6 min-h-12 w-full rounded-full px-5 text-[17px] font-semibold text-white transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#4b38d1] ${
+                  className={`mt-4 min-h-11 w-full rounded-full px-5 text-[15px] font-semibold text-white transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#4b38d1] ${
                     isConnected
                       ? 'bg-[#16835d] hover:bg-[#126e4f]'
                       : 'bg-[#4b38d1] hover:bg-[#3f2dbd]'
@@ -107,15 +107,15 @@ export default function ConnectWorkspaces({ email }: { email: string }) {
           })}
         </section>
 
-        <div className="mt-16 flex flex-col items-center pb-2">
+        <div className="mt-8 flex flex-col items-center pb-1">
           <button
             type="button"
             disabled={!canContinue}
-            className="min-h-[62px] w-full min-w-0 rounded-full bg-[#4b38d1] px-10 text-[18px] font-semibold text-white transition-colors hover:bg-[#3f2dbd] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#4b38d1] disabled:cursor-not-allowed disabled:bg-[#aaa7e7] sm:w-[410px]"
+            className="min-h-[50px] w-full min-w-0 rounded-full bg-[#4b38d1] px-10 text-[16px] font-semibold text-white transition-colors hover:bg-[#3f2dbd] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#4b38d1] disabled:cursor-not-allowed disabled:bg-[#aaa7e7] sm:w-[380px]"
           >
             Connect A Tool to Continue
           </button>
-          <p className="mt-4 text-center text-[14px] text-[#7a8190]">
+          <p className="mt-3 text-center text-[13px] text-[#7a8190]">
             You can connect or disconnect tools anytime from{' '}
             <span className="font-medium text-[#4b38d1]">Settings</span>
           </p>

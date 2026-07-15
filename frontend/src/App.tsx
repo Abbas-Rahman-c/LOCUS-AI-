@@ -6,9 +6,11 @@ import { getSupabaseClient } from './lib/supabase'
 
 function App() {
   const [userEmail, setUserEmail] = useState<string | null>(null)
-  const isOAuthCallback = new URLSearchParams(window.location.search).has(
-    'auth_callback',
-  )
+  const searchParams = new URLSearchParams(window.location.search)
+  const isOAuthCallback =
+    searchParams.has('auth_callback') ||
+    searchParams.has('code') ||
+    searchParams.has('error')
 
   useEffect(() => {
     const supabase = getSupabaseClient()
