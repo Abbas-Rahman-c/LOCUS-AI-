@@ -1,1 +1,1 @@
-﻿# GET /health — liveness + readiness probes
+# GET /health â liveness + readiness probes

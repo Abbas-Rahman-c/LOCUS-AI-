@@ -1,1 +1,1 @@
-﻿# Seeds: workspaces, test users, sample captures for local dev
+# Seeds: workspaces, test users, sample captures for local dev

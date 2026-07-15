@@ -1,1 +1,1 @@
-﻿# Generates weekly summary from decisions; scoped to user or team
+# Generates weekly summary from decisions; scoped to user or team

@@ -1,1 +1,1 @@
-﻿# Stage 2 — Sonnet structured extractor
+# Stage 2 â Sonnet structured extractor

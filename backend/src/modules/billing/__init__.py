@@ -1,1 +1,1 @@
-﻿# Billing module — Stripe
+# Billing module â Stripe

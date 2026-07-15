@@ -1,1 +1,1 @@
-﻿# Monday 09:00 delivery trigger
+# Monday 09:00 delivery trigger

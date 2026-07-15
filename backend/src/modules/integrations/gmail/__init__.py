@@ -1,1 +1,1 @@
-﻿# Gmail integration
+# Gmail integration

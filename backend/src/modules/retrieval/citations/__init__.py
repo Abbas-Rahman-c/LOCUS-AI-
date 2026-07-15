@@ -1,1 +1,1 @@
-﻿# Citation resolution package
+# Citation resolution package

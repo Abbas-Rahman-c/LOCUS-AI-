@@ -1,1 +1,1 @@
-﻿# Notion OAuth routes
+# Notion OAuth routes

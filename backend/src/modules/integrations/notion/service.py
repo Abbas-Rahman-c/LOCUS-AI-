@@ -1,1 +1,1 @@
-﻿# Poll-based change detection via page diffing
+# Poll-based change detection via page diffing

@@ -1,1 +1,1 @@
-﻿# Security module
+# Security module

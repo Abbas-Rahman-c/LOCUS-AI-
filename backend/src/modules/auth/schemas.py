@@ -1,1 +1,1 @@
-﻿# LoginRequest, SessionResponse Pydantic models
+# LoginRequest, SessionResponse Pydantic models

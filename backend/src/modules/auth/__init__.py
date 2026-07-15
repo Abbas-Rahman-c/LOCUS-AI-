@@ -1,1 +1,1 @@
-﻿# Auth module — Supabase Auth / JWT
+# Auth module â Supabase Auth / JWT

@@ -1,1 +1,1 @@
-﻿# Raw event store package
+"""Encrypted raw-event persistence."""

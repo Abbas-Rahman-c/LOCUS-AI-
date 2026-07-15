@@ -1,1 +1,1 @@
-﻿# Digest / Team Pulse module
+# Digest / Team Pulse module

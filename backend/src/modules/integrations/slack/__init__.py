@@ -1,1 +1,1 @@
-﻿# Slack integration
+# Slack integration

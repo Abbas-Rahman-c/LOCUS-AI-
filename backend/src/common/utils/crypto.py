@@ -1,1 +1,1 @@
-﻿# Encryption helpers — AES-GCM for raw content
+# Encryption helpers â AES-GCM for raw content

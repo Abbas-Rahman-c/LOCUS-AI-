@@ -1,1 +1,1 @@
-﻿# Generic OAuth2 PKCE flow helpers
+# Generic OAuth2 PKCE flow helpers

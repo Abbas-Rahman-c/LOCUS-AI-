@@ -1,1 +1,1 @@
-﻿# Supabase Vault package
+# Supabase Vault package

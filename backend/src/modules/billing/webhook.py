@@ -1,1 +1,1 @@
-﻿# Stripe webhook dispatcher — validates signature, updates subscription state
+# Stripe webhook dispatcher â validates signature, updates subscription state

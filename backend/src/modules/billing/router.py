@@ -1,1 +1,1 @@
-﻿# POST /billing/checkout, /billing/webhook
+# POST /billing/checkout, /billing/webhook

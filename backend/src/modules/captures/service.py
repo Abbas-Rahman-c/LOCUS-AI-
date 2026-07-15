@@ -1,1 +1,1 @@
-﻿# CRUD for the captures table; confirm/edit/reject actions
+# CRUD for the captures table; confirm/edit/reject actions

@@ -1,1 +1,1 @@
-﻿# Auth routes: /auth/login, /auth/callback
+# Auth routes: /auth/login, /auth/callback

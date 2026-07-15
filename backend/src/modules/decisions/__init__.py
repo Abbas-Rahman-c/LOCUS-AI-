@@ -1,1 +1,1 @@
-﻿# Decision register module
+# Decision register module

@@ -1,1 +1,1 @@
-﻿# LocusBaseException and HTTP error helpers
+# LocusBaseException and HTTP error helpers

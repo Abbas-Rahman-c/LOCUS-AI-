@@ -1,1 +1,1 @@
-﻿# Notion integration
+# Notion integration

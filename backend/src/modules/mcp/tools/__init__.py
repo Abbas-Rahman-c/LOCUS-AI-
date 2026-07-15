@@ -1,1 +1,1 @@
-﻿# MCP tools package
+# MCP tools package

@@ -1,1 +1,1 @@
-﻿# Hybrid search package
+# Hybrid search package

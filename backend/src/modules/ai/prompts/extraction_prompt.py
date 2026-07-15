@@ -1,1 +1,1 @@
-﻿# Sonnet extraction prompt — forced JSON tool-call schema
+# Sonnet extraction prompt â forced JSON tool-call schema

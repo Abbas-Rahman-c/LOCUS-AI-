@@ -12,4 +12,4 @@ async def run_notion_poll_job() -> None:
     """Called by scheduler every 5 minutes."""
     log.info("[cron] Notion poll started")
     await poll_all_workspaces()
-    log.info("[cron] Notion poll complete")
+    log.info("[cron] Notion poll complete")

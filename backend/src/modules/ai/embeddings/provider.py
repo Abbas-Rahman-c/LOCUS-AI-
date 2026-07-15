@@ -1,1 +1,1 @@
-﻿# Voyage / OpenAI embedding client — embeds decision summaries once at write-time
+# Voyage / OpenAI embedding client â embeds decision summaries once at write-time

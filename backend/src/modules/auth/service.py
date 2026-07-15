@@ -1,1 +1,1 @@
-﻿# JWT validation, tenant-scoped session creation
+# JWT validation, tenant-scoped session creation

@@ -1,1 +1,1 @@
-﻿# Calls Claude Haiku: KEEP | DISCARD | UNCERTAIN
+# Calls Claude Haiku: KEEP | DISCARD | UNCERTAIN

@@ -1,8 +1,9 @@
 """
-Raw event store - encrypted write with 30-day TTL + purge function.
+Raw event store (Section 1.6) — encrypted write with 30-day TTL + purge.
 
-This module owns ALL business logic for raw event storage and cleanup.
-The jobs/cleanup/ cron entry point imports purge_expired_raw_events() from here.
+Dedup is enforced here via `on conflict (tenant_id, source, source_id) do
+nothing` — store_raw_event returns None on a duplicate, which is exactly
+what modules.ingestion.dedup.ledger.mark_seen() expects.
 """
 from __future__ import annotations
 
@@ -16,8 +17,6 @@ from database.pool import get_db_pool
 from modules.security.encryption import decrypt_raw_content, encrypt_raw_content
 
 log = logging.getLogger(__name__)
-
-RAW_EVENT_TTL_DAYS = 30
 
 
 def _require_str(payload: dict, key: str) -> str:
@@ -33,6 +32,7 @@ async def _resolve_connection_id(
     source: str,
     payload: dict,
 ) -> uuid.UUID:
+    """Look up the source_connections row for this event, if not already known."""
     external_id = payload.get("external_workspace_id") or payload.get("team_id")
 
     if external_id:
@@ -73,10 +73,16 @@ async def _resolve_connection_id(
     return row["id"]
 
 
-async def store_raw_event(envelope: dict) -> uuid.UUID | None:
+async def store_raw_event(
+    envelope: dict, connection_id: uuid.UUID | None = None
+) -> uuid.UUID | None:
     """
     Encrypt and persist a raw event. Returns the stored record ID,
     or None if (tenant_id, source, source_id) already exists.
+
+    connection_id: pass this directly if the caller already knows it
+    (e.g. Gmail's service.py, which resolves it during OAuth callback).
+    If omitted, it's looked up automatically from source_connections.
     """
     tenant_id = uuid.UUID(_require_str(envelope, "tenant_id"))
     source = _require_str(envelope, "source")
@@ -87,7 +93,9 @@ async def store_raw_event(envelope: dict) -> uuid.UUID | None:
 
     pool = get_db_pool()
     async with pool.acquire() as conn:
-        connection_id = await _resolve_connection_id(conn, tenant_id, source, envelope)
+        if connection_id is None:
+            connection_id = await _resolve_connection_id(conn, tenant_id, source, envelope)
+
         row = await conn.fetchrow(
             """
             insert into public.raw_events (
@@ -123,6 +131,11 @@ async def store_raw_event(envelope: dict) -> uuid.UUID | None:
         )
 
     if row is None:
+        log.info(
+            "store_raw_event conflict (already present): source=%s source_id=%s",
+            source,
+            source_id,
+        )
         return None
 
     log.info(
@@ -150,11 +163,7 @@ async def load_raw_event_payload(raw_event_id: uuid.UUID) -> dict:
 
 
 async def purge_expired_raw_events() -> int:
-    """
-    Delete raw events past expires_at (default 30 days from insert).
-
-    Returns number of records deleted.
-    """
+    """Delete raw events past expires_at (default 30 days from insert)."""
     now = datetime.now(timezone.utc)
     log.info("Purging raw events with expires_at < %s", now.isoformat())
 
@@ -164,7 +173,6 @@ async def purge_expired_raw_events() -> int:
             "delete from public.raw_events where expires_at < $1",
             now,
         )
-    # asyncpg returns status like "DELETE 3"
     deleted_count = int(result.split()[-1]) if result else 0
     log.info("Purged %d raw events", deleted_count)
     return deleted_count

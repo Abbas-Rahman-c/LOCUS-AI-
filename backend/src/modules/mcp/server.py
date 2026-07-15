@@ -1,1 +1,1 @@
-﻿# MCP-compatible tool server (read-only for MVP)
+# MCP-compatible tool server (read-only for MVP)

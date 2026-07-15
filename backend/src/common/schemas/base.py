@@ -1,1 +1,1 @@
-﻿# Shared Pydantic base schemas (BaseRequest, BaseResponse, Pagination)
+# Shared Pydantic base schemas (BaseRequest, BaseResponse, Pagination)

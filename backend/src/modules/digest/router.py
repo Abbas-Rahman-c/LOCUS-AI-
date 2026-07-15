@@ -1,1 +1,1 @@
-﻿# GET /digest — personal and team weekly summaries
+# GET /digest â personal and team weekly summaries

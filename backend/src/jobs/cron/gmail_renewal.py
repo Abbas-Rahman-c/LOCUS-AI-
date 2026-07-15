@@ -12,4 +12,4 @@ async def run_gmail_renewal_job() -> None:
     """Called by scheduler every 6 days."""
     log.info("[cron] Gmail watch renewal started")
     await renew_all_watches()
-    log.info("[cron] Gmail watch renewal complete")
+    log.info("[cron] Gmail watch renewal complete")

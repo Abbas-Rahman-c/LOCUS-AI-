@@ -1,1 +1,1 @@
-﻿# Scores every prompt version against the golden set before shipping
+# Scores every prompt version against the golden set before shipping

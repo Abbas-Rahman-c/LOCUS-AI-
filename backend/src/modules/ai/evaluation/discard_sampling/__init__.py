@@ -1,1 +1,1 @@
-﻿# Discard sampling package
+# Discard sampling package

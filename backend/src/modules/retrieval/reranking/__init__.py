@@ -1,1 +1,1 @@
-﻿# Reranking package
+# Reranking package

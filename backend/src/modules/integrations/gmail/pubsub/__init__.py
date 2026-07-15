@@ -1,1 +1,1 @@
-﻿# Pub/Sub package
+# Pub/Sub package

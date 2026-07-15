@@ -1,1 +1,1 @@
-﻿# Integrations package
+# Integrations package

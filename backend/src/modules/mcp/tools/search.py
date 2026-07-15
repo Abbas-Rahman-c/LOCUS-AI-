@@ -1,1 +1,1 @@
-﻿# search_decisions() MCP tool
+# search_decisions() MCP tool

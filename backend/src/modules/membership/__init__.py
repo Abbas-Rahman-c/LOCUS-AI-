@@ -1,1 +1,1 @@
-﻿# Membership / RBAC module
+# Membership / RBAC module

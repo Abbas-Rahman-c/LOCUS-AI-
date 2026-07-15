@@ -1,1 +1,1 @@
-﻿# Scoring package
+# Scoring package

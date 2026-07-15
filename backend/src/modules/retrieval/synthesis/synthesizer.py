@@ -1,1 +1,1 @@
-﻿# Calls Sonnet with retrieved captures; streams cited answer token-by-token
+# Calls Sonnet with retrieved captures; streams cited answer token-by-token
