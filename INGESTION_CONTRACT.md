@@ -13,7 +13,7 @@ await enqueue_event(envelope)
 ```
 
 This calls into `queue/pgmq/client.py`, the single pgmq connection point in the
-codebase, which sends the message onto Supabase's `ingestion` queue (pgmq).
+codebase, which sends the message onto Supabase's `ingestion` (pgmq).
 
 ## What NOT to do
 
@@ -27,8 +27,8 @@ codebase, which sends the message onto Supabase's `ingestion` queue (pgmq).
 
 ## Why this matters
 
-Dedup, raw storage, and the AI pipeline all read from the Supabase `ingestion`
-queue. An event that lands anywhere else — Redis included — is invisible to the
+Dedup, raw storage, and the AI pipeline all read from the Supabase `ingestion` queue.
+An event that lands anywhere else — Redis included — is invisible to the
 rest of the system, even if the connector itself is working perfectly.
 
 ## Open item: runtime

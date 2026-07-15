@@ -1,9 +1,9 @@
 [tool.poetry]
 name = "locus-ai-backend"
 version = "0.1.0"
-description = "Locus AI  Decision Intelligence Backend"
+description = "Locus AI - Decision Intelligence Backend"
 authors = ["Locus AI Team"]
-python = "^3.12"
+package-mode = false
 
 [tool.poetry.dependencies]
 python          = "^3.12"
@@ -43,4 +43,4 @@ select      = ["E", "F", "I", "N", "UP"]
 [tool.mypy]
 python_version        = "3.12"
 strict                = true
-ignore_missing_imports = true
+ignore_missing_imports = true
