@@ -16,11 +16,15 @@ export default function OAuthCallback() {
         const code = new URLSearchParams(window.location.search).get('code')
         if (!code) throw new Error('Google did not return an authorization code.')
 
-        const { error } = await getSupabaseClient().auth.exchangeCodeForSession(code)
+        const { data, error } = await getSupabaseClient().auth.exchangeCodeForSession(code)
         if (error) throw error
 
         window.opener?.postMessage(
-          { type: AUTH_MESSAGE_TYPE, success: true },
+          {
+            type: AUTH_MESSAGE_TYPE,
+            success: true,
+            email: data.session.user.email,
+          },
           window.location.origin,
         )
         window.close()

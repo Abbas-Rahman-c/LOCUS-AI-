@@ -5,7 +5,11 @@ import { GoogleIcon } from './components/GoogleIcon'
 import { ProcessStepper } from './components/ProcessStepper'
 import { DashboardPreview } from './components/DashboardPreview'
 
-export default function GetStarted() {
+export default function GetStarted({
+  onAuthenticated,
+}: {
+  onAuthenticated: (email: string) => void
+}) {
   const [isSigningIn, setIsSigningIn] = useState(false)
   const [authError, setAuthError] = useState<string | null>(null)
 
@@ -18,11 +22,15 @@ export default function GetStarted() {
 
       setIsSigningIn(false)
       setAuthError(event.data.success ? null : event.data.error)
+
+      if (event.data.success && event.data.email) {
+        onAuthenticated(event.data.email)
+      }
     }
 
     window.addEventListener('message', handleAuthMessage)
     return () => window.removeEventListener('message', handleAuthMessage)
-  }, [])
+  }, [onAuthenticated])
 
   const handleGoogleSignUp = async () => {
     setAuthError(null)
