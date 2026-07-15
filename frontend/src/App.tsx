@@ -1,12 +1,50 @@
+import { useEffect, useState } from 'react'
 import LandingPage from '../landing-page/LandingPage'
+import ConnectWorkspaces from './ConnectWorkspaces'
 import OAuthCallback from './OAuthCallback'
+import { getSupabaseClient } from './lib/supabase'
 
 function App() {
-  if (new URLSearchParams(window.location.search).has('auth_callback')) {
+  const [userEmail, setUserEmail] = useState<string | null>(null)
+  const searchParams = new URLSearchParams(window.location.search)
+  const isOAuthCallback =
+    searchParams.has('auth_callback') ||
+    searchParams.has('code') ||
+    searchParams.has('error')
+
+  useEffect(() => {
+    const supabase = getSupabaseClient()
+
+    void supabase.auth.getSession().then(({ data }) => {
+      setUserEmail(data.session?.user.email ?? null)
+    })
+
+    const { data } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUserEmail(session?.user.email ?? null)
+    })
+
+    return () => data.subscription.unsubscribe()
+  }, [])
+
+  useEffect(() => {
+    if (userEmail && !isOAuthCallback) {
+      window.history.replaceState(
+        {},
+        '',
+        `${window.location.pathname}?connect_workspaces=1`,
+      )
+    }
+  }, [isOAuthCallback, userEmail])
+
+  if (isOAuthCallback) {
     return <OAuthCallback />
   }
 
-  return <LandingPage />
+  if (userEmail) {
+    return <ConnectWorkspaces email={userEmail} />
+  }
+
+  return <LandingPage onAuthenticated={setUserEmail} />
 }
 
 export default App
