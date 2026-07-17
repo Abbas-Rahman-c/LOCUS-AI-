@@ -7,6 +7,7 @@ import DecisionReady from "./DecisionReady";
 
 function App() {
   const [userEmail, setUserEmail] = useState<string | null>(null)
+  const [workspacesConnected, setWorkspacesConnected] = useState(false);
   const searchParams = new URLSearchParams(window.location.search)
   const isOAuthCallback =
     searchParams.has('auth_callback') ||
@@ -41,9 +42,14 @@ function App() {
     return <OAuthCallback />
   }
 
-  if (userEmail) {
-    return <ConnectWorkspaces email={userEmail} />
-  }
+  if (userEmail && !workspacesConnected) {
+  return <ConnectWorkspaces email={userEmail} onContinue={() => setWorkspacesConnected(true)} />;
+}
+
+if (userEmail && workspacesConnected) {
+  return <DecisionReady userEmail={userEmail} />;
+}
 
 return <LandingPage onAuthenticated={setUserEmail} />;
-export default App
+}
+export default App;
