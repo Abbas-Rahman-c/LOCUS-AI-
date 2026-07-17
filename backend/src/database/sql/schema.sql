@@ -211,3 +211,22 @@ $$ language 'plpgsql';
 CREATE TRIGGER update_decisions_modtime
     BEFORE UPDATE ON decisions
     FOR EACH ROW EXECUTE PROCEDURE update_modified_column();
+
+-- =====================================================================
+-- EVALUATION DATA (FEEDBACK LOOP)
+-- =====================================================================
+CREATE TABLE feedback_events (
+    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id           UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    query               TEXT NOT NULL,
+    synthesized_answer  TEXT NOT NULL,
+    signal              TEXT NOT NULL CHECK (signal IN ('up', 'down')),
+    comment             TEXT,
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+ALTER TABLE feedback_events ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY tenant_isolation_feedback_events ON feedback_events
+    USING (tenant_id = current_setting('app.current_tenant_id', true)::uuid)
+    WITH CHECK (tenant_id = current_setting('app.current_tenant_id', true)::uuid);
