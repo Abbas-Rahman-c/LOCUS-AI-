@@ -3,6 +3,7 @@ import LandingPage from '../landing-page/LandingPage'
 import ConnectWorkspaces from './ConnectWorkspaces'
 import OAuthCallback from './OAuthCallback'
 import { getSupabaseClient } from './lib/supabase'
+import DecisionReady from "./DecisionReady";
 
 function App() {
   const [userEmail, setUserEmail] = useState<string | null>(null)
@@ -44,7 +45,6 @@ function App() {
     return <ConnectWorkspaces email={userEmail} />
   }
 
-  return <LandingPage onAuthenticated={setUserEmail} />
-}
+return <DecisionReady />;}
 
 export default App
