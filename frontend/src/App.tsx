@@ -45,6 +45,5 @@ function App() {
     return <ConnectWorkspaces email={userEmail} />
   }
 
-return <DecisionReady />;}
-
+return <LandingPage onAuthenticated={setUserEmail} />;
 export default App
