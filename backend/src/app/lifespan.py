@@ -1,4 +1,4 @@
-﻿"""
+"""
 Application lifespan context manager.
 Handles startup (DB pool, queue connections) and shutdown teardown.
 """
@@ -24,23 +24,29 @@ async def lifespan(app: FastAPI):
     # Create pool BEFORE importing local `queue` package — that name shadows
     # the stdlib queue module used by asyncpg's ThreadPoolExecutor.
     log.info("Creating asyncpg pool...")
-    pool = await asyncpg.create_pool(
-        dsn=config.dsn,
-        min_size=config.min_size,
-        max_size=config.max_size,
-        statement_cache_size=0,  # required for Supabase PgBouncer transaction mode
-    )
-    app.state.db_pool = pool
+    try:
+        pool = await asyncpg.create_pool(
+            dsn=config.dsn,
+            min_size=config.min_size,
+            max_size=config.max_size,
+            statement_cache_size=0,  # required for Supabase PgBouncer transaction mode
+        )
+        app.state.db_pool = pool
 
-    from database.pool import init_db_pool
-    from queue.pgmq.client import init_pgmq_client
+        from database.pool import init_db_pool
+        from queue.pgmq.client import init_pgmq_client
 
-    await init_db_pool(pool)
-    await init_pgmq_client(pool)
-    log.info("DB pool + pgmq client initialised")
+        await init_db_pool(pool)
+        await init_pgmq_client(pool)
+        log.info("DB pool + pgmq client initialised")
+    except Exception as e:
+        log.error(f"Failed to connect to the database: {e}")
+        log.warning("App starting without database connection. Features relying on DB will fail.")
+        pool = None
 
     try:
         yield
     finally:
-        log.info("Closing asyncpg pool...")
-        await pool.close()
+        if pool is not None:
+            log.info("Closing asyncpg pool...")
+            await pool.close()
