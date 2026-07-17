@@ -86,3 +86,17 @@ def decrypt_string(encrypted_str: str) -> str:
     nonce = raw[:_NONCE_LEN]
     ciphertext = raw[_NONCE_LEN:]
     return _aesgcm().decrypt(nonce, ciphertext, None).decode("utf-8")
+
+
+# ── Backward-compatibility aliases ────────────────────────────────────────────
+# Some early test files and store.py imported these names. Kept so we don't
+# break callers during the auth migration.
+
+def encrypt_data(plaintext: str) -> bytes:
+    """Alias for encrypt_raw_content — accepts str, returns versioned bytes blob."""
+    return encrypt_raw_content(plaintext.encode("utf-8"))
+
+
+def decrypt_data(blob: bytes) -> str:
+    """Alias for decrypt_raw_content — returns plaintext str."""
+    return decrypt_raw_content(blob).decode("utf-8")
