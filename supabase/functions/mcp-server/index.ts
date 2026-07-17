@@ -199,12 +199,12 @@ Deno.serve(async (req: Request) => {
   try {
     switch (method) {
       case "search_decisions": {
-        const results = await searchDecisions(params as SearchDecisionsParams);
+        const results = await searchDecisions(params as unknown as SearchDecisionsParams);
         return jsonOk({ results });
       }
 
       case "get_decision_context": {
-        const record = await getDecisionContext(params as GetDecisionContextParams);
+        const record = await getDecisionContext(params as unknown as GetDecisionContextParams);
         if (!record) return jsonError("Decision not found", 404);
         return jsonOk(record);
       }
