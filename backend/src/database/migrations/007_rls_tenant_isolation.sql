@@ -1,8 +1,8 @@
 -- =====================================================================
--- Tenant isolation row-level security (source of truth)
+-- M7: Tenant isolation row-level security
+-- Source of truth: backend/src/database/rls/policies.sql (keep in sync)
 -- Idempotent: safe to re-run.
--- Predicate (workers / API): app.current_tenant_id Grand Unified Configuration (GUC)
--- Predicate (PostgREST): auth.uid() via public.memberships
+-- Apply via Supabase SQL Editor or: psql "$DATABASE_URL" -f this file
 -- =====================================================================
 
 -- ---------------------------------------------------------------------

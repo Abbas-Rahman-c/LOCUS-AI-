@@ -10,7 +10,7 @@
 // local .env — Edge Functions read from project secrets in production.
 
 import { enqueueEvent } from "../_shared/queue.ts";
-import { getServiceClient } from "../_shared/supabase.ts";
+import { withAdmin } from "../_shared/db.ts";
 
 const SIGNING_SECRET = Deno.env.get("SLACK_SIGNING_SECRET");
 const MAX_TIMESTAMP_SKEW_SECONDS = 60 * 5; // 5 minutes, matches Slack's own recommendation
@@ -103,15 +103,18 @@ Deno.serve(async (req: Request) => {
   // Look up the real tenant via the source_connections row OAuth created,
   // matching on the Slack team ID that comes with every event payload.
   const teamId = String(payload.team_id ?? "");
-  const supabase = getServiceClient();
-  const { data: connection, error: lookupError } = await supabase
-    .from("source_connections")
-    .select("tenant_id")
-    .eq("source", "slack")
-    .eq("external_workspace_id", teamId)
-    .single();
+  const connection = await withAdmin(async (sql) => {
+    const rows = await sql`
+      select tenant_id
+      from public.source_connections
+      where source = 'slack'
+        and external_workspace_id = ${teamId}
+      limit 1
+    `;
+    return rows[0] ?? null;
+  });
 
-  if (lookupError || !connection) {
+  if (!connection) {
     // No matching connection — can't attribute this event to a tenant.
     // Acknowledge so Slack doesn't retry, but don't enqueue.
     return new Response("OK (no matching connection)", { status: 200 });

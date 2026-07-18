@@ -11,7 +11,7 @@
 // Proper fix: create a small Postgres function that wraps vault.create_secret,
 // call it via RPC here, store the returned secret id instead.
 
-import { getServiceClient } from "../_shared/supabase.ts";
+import { withTenant } from "../_shared/db.ts";
 
 const CLIENT_ID = Deno.env.get("SLACK_CLIENT_ID");
 const CLIENT_SECRET = Deno.env.get("SLACK_CLIENT_SECRET");
@@ -64,25 +64,32 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    const supabase = getServiceClient();
-
-    // NOTE: table is source_connections, not "sources".
-    // oauth_token_ref holds the raw token for now — see TODO above.
-    const { error } = await supabase.from("source_connections").upsert(
-      {
-        tenant_id: TEST_TENANT_ID,
-        source: "slack",
-        external_workspace_id: tokenData.team?.id,
-        oauth_token_ref: tokenData.access_token, // TODO: move to Vault
-        ingestion_mode: "realtime",
-        status: "active",
-        cursor_state: { bot_user_id: tokenData.bot_user_id },
-      },
-      { onConflict: "tenant_id,source,external_workspace_id" }
-    );
-
-    if (error) {
-      return new Response(`Failed to store token: ${error.message}`, {
+    try {
+      await withTenant(TEST_TENANT_ID, async (sql) => {
+        await sql`
+          insert into public.source_connections (
+            tenant_id, source, external_workspace_id, oauth_token_ref,
+            ingestion_mode, status, cursor_state
+          ) values (
+            ${TEST_TENANT_ID}::uuid,
+            'slack',
+            ${tokenData.team?.id ?? null},
+            ${tokenData.access_token},
+            'realtime',
+            'active',
+            ${sql.json({ bot_user_id: tokenData.bot_user_id ?? null })}::jsonb
+          )
+          on conflict (tenant_id, source, external_workspace_id)
+          do update set
+            oauth_token_ref = excluded.oauth_token_ref,
+            status = 'active',
+            cursor_state = excluded.cursor_state,
+            ingestion_mode = excluded.ingestion_mode
+        `;
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      return new Response(`Failed to store token: ${message}`, {
         status: 500,
       });
     }

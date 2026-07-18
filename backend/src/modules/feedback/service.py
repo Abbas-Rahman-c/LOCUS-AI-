@@ -1,5 +1,5 @@
 from modules.feedback.schemas import FeedbackRequest
-from database.connection import get_db_pool
+from database.tenant_context import tenant_connection
 import logging
 
 logger = logging.getLogger(__name__)
@@ -15,21 +15,12 @@ async def store_feedback(request: FeedbackRequest):
     backfilled later.  The endpoint returns success either way — we never want
     a database outage to block the user from rating an answer.
     """
-    try:
-        pool = get_db_pool()
-    except RuntimeError:
-        logger.warning(
-            "DB pool not initialised — logging feedback instead: "
-            f"signal={request.signal} query={request.query!r}"
-        )
-        return
-
     query = """
         INSERT INTO feedback_events (tenant_id, query, synthesized_answer, signal, comment)
         VALUES ($1, $2, $3, $4, $5)
     """
     try:
-        async with pool.acquire() as conn:
+        async with tenant_connection(request.tenant_id) as conn:
             await conn.execute(
                 query,
                 request.tenant_id,
@@ -40,6 +31,12 @@ async def store_feedback(request: FeedbackRequest):
             )
         logger.info(
             f"Stored feedback signal={request.signal} for query={request.query!r}"
+        )
+    except RuntimeError as e:
+        # Pool not initialised
+        logger.warning(
+            "DB pool not initialised — logging feedback instead: "
+            f"signal={request.signal} query={request.query!r} ({e})"
         )
     except Exception as e:
         logger.error(f"Failed to store feedback: {e}")

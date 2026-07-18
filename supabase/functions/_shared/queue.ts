@@ -1,12 +1,10 @@
 // supabase/functions/_shared/queue.ts
 //
-// NOTE FOR REBIRA: Same deal as supabase.ts — this mirrors Sudhira's
-// queue.ts from PR #4. Once that PR merges, use the real shared file
-// instead of this copy. This is what INGESTION_CONTRACT.md requires:
-// every connector enqueues through this one RPC, never Redis, never a
-// standalone "ingestEvent()" function.
+// Every connector enqueues through this one path (INGESTION_CONTRACT.md).
+// Uses DATABASE_URL / admin SQL so pgmq.send works without service_role
+// table access on public.* tenant tables.
 
-import { getServiceClient } from "./supabase.ts";
+import { withAdmin } from "./db.ts";
 
 export interface IngestionEnvelope {
   tenant_id: string;
@@ -20,15 +18,12 @@ export interface IngestionEnvelope {
 }
 
 export async function enqueueEvent(envelope: IngestionEnvelope) {
-  const supabase = getServiceClient();
-
-  const { error } = await supabase.rpc("enqueue_ingestion_event", {
-    envelope,
-  });
-
-  if (error) {
-    // Don't swallow this — a failed enqueue means the event is lost.
-    // Caller should log this loudly and consider retry/dead-letter handling.
-    throw new Error(`Failed to enqueue event: ${error.message}`);
+  try {
+    await withAdmin(async (sql) => {
+      await sql`select pgmq.send('ingestion', ${sql.json(envelope)}::jsonb)`;
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    throw new Error(`Failed to enqueue event: ${message}`);
   }
 }
