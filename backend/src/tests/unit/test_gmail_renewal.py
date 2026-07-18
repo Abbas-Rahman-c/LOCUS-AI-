@@ -44,14 +44,15 @@ async def test_renew_single_watch_updates_source_state() -> None:
     mock_conn.transaction.return_value.__aenter__ = AsyncMock(return_value=None)
     mock_conn.transaction.return_value.__aexit__ = AsyncMock(return_value=False)
 
-    mock_pool = MagicMock()
-    mock_pool.acquire = MagicMock()
-    mock_pool.acquire.return_value.__aenter__ = AsyncMock(return_value=mock_conn)
-    mock_pool.acquire.return_value.__aexit__ = AsyncMock(return_value=False)
-
     settings = MagicMock(gmail_pubsub_topic="projects/mock/topics/gmail-push")
 
-    with patch("modules.integrations.gmail.watch_renewal.renewer.get_db_pool", return_value=mock_pool), \
+    with patch(
+        "modules.integrations.gmail.watch_renewal.renewer.tenant_connection",
+        return_value=MagicMock(
+            __aenter__=AsyncMock(return_value=mock_conn),
+            __aexit__=AsyncMock(return_value=False),
+        ),
+    ), \
          patch("modules.integrations.gmail.watch_renewal.renewer.get_gmail_settings", return_value=settings), \
          patch("modules.integrations.gmail.watch_renewal.renewer._get_valid_access_token", new_callable=AsyncMock, return_value="access-token"), \
          patch("httpx.AsyncClient", return_value=mock_http_client):

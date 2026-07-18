@@ -6,8 +6,8 @@ renewed. This module owns the renewal logic; jobs/cron/gmail_renewal.py calls
 renew_all_watches() on a 6-day cron schedule.
 
 The renewal flow:
-  1. Query Gmail sources whose cursor_state watch expiry is within 48h.
-  2. Call Gmail users.watch() to get a new expiry.
+  1. Query Gmail sources whose cursor_state watch expiry is within 48h (admin).
+  2. Call Gmail users.watch() to get a new expiry (per-tenant GUC).
   3. Update source_connections.cursor_state with the new expiry timestamp.
 """
 from __future__ import annotations
@@ -19,7 +19,7 @@ from typing import Any
 import httpx
 
 from common.config import get_gmail_settings
-from database.connection import get_db_pool
+from database.tenant_context import admin_connection, tenant_connection
 from modules.integrations.gmail.service import _get_valid_access_token
 
 log = logging.getLogger(__name__)
@@ -39,10 +39,9 @@ async def renew_all_watches() -> None:
 
 
 async def _get_expiring_sources() -> list[dict]:
-    """Query source_connections table for Gmail connections whose watch expires within RENEWAL_LOOKAHEAD_HOURS."""
+    """Cross-tenant scan via admin DATABASE_URL (bypasses row-level security)."""
     cutoff = datetime.now(timezone.utc) + timedelta(hours=RENEWAL_LOOKAHEAD_HOURS)
-    pool = get_db_pool()
-    async with pool.acquire() as conn:
+    async with admin_connection() as conn:
         rows = await conn.fetch(
             """
             SELECT id, tenant_id, cursor_state
@@ -61,10 +60,10 @@ async def _get_expiring_sources() -> list[dict]:
 async def _renew_single_watch(source: dict) -> None:
     """Call Gmail users.watch() and update cursor_state in source_connections."""
     source_id = source["id"]
-    pool = get_db_pool()
+    tenant_id = source["tenant_id"]
     settings = get_gmail_settings()
 
-    async with pool.acquire() as conn:
+    async with tenant_connection(tenant_id) as conn:
         access_token = await _get_valid_access_token(source_id, conn)
 
         async with httpx.AsyncClient() as client:

@@ -8,7 +8,6 @@ Covers:
   4. POST /feedback  — graceful fallback when DB pool is down
 """
 import pytest
-import json
 from unittest.mock import patch, AsyncMock, MagicMock
 
 from fastapi import FastAPI
@@ -21,15 +20,21 @@ app.include_router(feedback_router)
 
 client = TestClient(app)
 
+
+def _mock_tenant_connection(mock_conn):
+    return MagicMock(
+        __aenter__=AsyncMock(return_value=mock_conn),
+        __aexit__=AsyncMock(return_value=False),
+    )
+
+
 # ── Feedback endpoint tests ──────────────────────────────────────────
 
-@patch("modules.feedback.service.get_db_pool")
-def test_feedback_thumbs_up_persists(mock_get_pool):
+@patch("modules.feedback.service.tenant_connection")
+def test_feedback_thumbs_up_persists(mock_tenant_connection):
     """A valid 'up' signal should INSERT into feedback_events."""
     mock_conn = AsyncMock()
-    mock_pool = MagicMock()
-    mock_pool.acquire.return_value.__aenter__.return_value = mock_conn
-    mock_get_pool.return_value = mock_pool
+    mock_tenant_connection.return_value = _mock_tenant_connection(mock_conn)
 
     payload = {
         "query": "What architecture did we pick?",
@@ -42,7 +47,6 @@ def test_feedback_thumbs_up_persists(mock_get_pool):
 
     assert response.status_code == 200
     assert response.json()["status"] == "success"
-    # Verify the INSERT was called with correct positional args
     mock_conn.execute.assert_called_once()
     args = mock_conn.execute.call_args[0]
     assert args[1] == payload["tenant_id"]
@@ -51,13 +55,11 @@ def test_feedback_thumbs_up_persists(mock_get_pool):
     assert args[4] == "up"
 
 
-@patch("modules.feedback.service.get_db_pool")
-def test_feedback_thumbs_down_persists(mock_get_pool):
+@patch("modules.feedback.service.tenant_connection")
+def test_feedback_thumbs_down_persists(mock_tenant_connection):
     """A valid 'down' signal should also INSERT into feedback_events."""
     mock_conn = AsyncMock()
-    mock_pool = MagicMock()
-    mock_pool.acquire.return_value.__aenter__.return_value = mock_conn
-    mock_get_pool.return_value = mock_pool
+    mock_tenant_connection.return_value = _mock_tenant_connection(mock_conn)
 
     payload = {
         "query": "What DB do we use?",
@@ -90,8 +92,11 @@ def test_feedback_rejects_invalid_signal():
     assert response.json()["detail"] == "Signal must be 'up' or 'down'"
 
 
-@patch("modules.feedback.service.get_db_pool", side_effect=RuntimeError("Database pool not initialized"))
-def test_feedback_graceful_when_db_is_down(mock_get_pool):
+@patch(
+    "modules.feedback.service.tenant_connection",
+    side_effect=RuntimeError("Database pool not initialized"),
+)
+def test_feedback_graceful_when_db_is_down(mock_tenant_connection):
     """When the DB pool is unavailable, feedback should still return 200 (logged, not lost)."""
     payload = {
         "query": "Any question",

@@ -13,7 +13,7 @@
 // When the DS team's retrieve_decisions() function is merged, swap in the real call.
 // Agreed interface (confirmed with Natnael): { query, tenant_id, filters?, limit?, offset? } → DecisionRecord[]
 
-import { getServiceClient } from "../_shared/supabase.ts";
+import { withTenant } from "../_shared/db.ts";
 
 // ---------------------------------------------------------------------------
 // Types — agreed with Natnael, grounded in migration 003_public_design_schema
@@ -76,49 +76,72 @@ async function searchDecisions(params: SearchDecisionsParams): Promise<DecisionR
   //   const results = await retrieve_decisions({ query, tenant_id, filters, limit, offset })
   //   return results  // already shaped as DecisionRecord[]
   //
-  // For now: fall back to a simple full-text search against the DB directly.
-  const supabase = getServiceClient();
+  // For now: fall back to a simple keyword search against the DB directly,
+  // under locus_app with app.current_tenant_id set (row-level security).
+  const rows = await withTenant(tenant_id, async (sql) => {
+    // Build optional filter fragments
+    const status = filters?.status ?? null;
+    const confidenceMin = filters?.confidence_min ?? null;
+    const dateFrom = filters?.date_range?.from ?? null;
+    const dateTo = filters?.date_range?.to ?? null;
 
-  let dbQuery = supabase
-    .from("decisions")
-    .select(`
-      id,
-      decision_statement,
-      rationale,
-      alternatives_considered,
-      status,
-      confidence,
-      superseded_by,
-      created_at,
-      updated_at,
-      decision_actors ( actor_id, role ),
-      decision_sources ( permalink )
-    `)
-    .eq("tenant_id", tenant_id)  // tenant isolation — enforced server-side
-    .range(offset, offset + limit - 1);
+    return await sql`
+      select
+        d.id,
+        d.decision_statement,
+        d.rationale,
+        d.alternatives_considered,
+        d.status,
+        d.confidence,
+        d.superseded_by,
+        d.created_at,
+        d.updated_at,
+        coalesce(
+          (
+            select json_agg(json_build_object('actor_id', da.actor_id, 'role', da.role))
+            from public.decision_actors da
+            where da.decision_id = d.id and da.tenant_id = d.tenant_id
+          ),
+          '[]'::json
+        ) as decision_actors,
+        coalesce(
+          (
+            select json_agg(json_build_object('permalink', ds.permalink))
+            from public.decision_sources ds
+            where ds.decision_id = d.id and ds.tenant_id = d.tenant_id
+          ),
+          '[]'::json
+        ) as decision_sources
+      from public.decisions d
+      where d.tenant_id = ${tenant_id}::uuid
+        and (${status}::text is null or d.status = ${status})
+        and (${confidenceMin}::float8 is null or d.confidence >= ${confidenceMin})
+        and (${dateFrom}::timestamptz is null or d.created_at >= ${dateFrom}::timestamptz)
+        and (${dateTo}::timestamptz is null or d.created_at <= ${dateTo}::timestamptz)
+        and (
+          ${query}::text = ''
+          or d.decision_statement ilike '%' || ${query} || '%'
+        )
+      order by d.created_at desc
+      limit ${limit}
+      offset ${offset}
+    `;
+  });
 
-  // Apply optional filters
-  if (filters?.status) dbQuery = dbQuery.eq("status", filters.status);
-  if (filters?.confidence_min !== undefined) dbQuery = dbQuery.gte("confidence", filters.confidence_min);
-  if (filters?.date_range?.from) dbQuery = dbQuery.gte("created_at", filters.date_range.from);
-  if (filters?.date_range?.to) dbQuery = dbQuery.lte("created_at", filters.date_range.to);
-  if (filters?.actor) dbQuery = dbQuery.eq("decision_actors.actor_id", filters.actor);
-
-  // Simple keyword match against FTS index until vector search is ready
-  if (query) dbQuery = dbQuery.textSearch("decision_statement", query, { type: "websearch" });
-
-  const { data, error } = await dbQuery;
-  if (error) throw new Error(`search_decisions DB error: ${error.message}`);
-
-  return (data ?? []).map((row: any) => ({
+  return rows.map((row) => ({
     id: row.id,
     decision_statement: row.decision_statement,
     rationale: row.rationale ?? null,
     alternatives_considered: row.alternatives_considered ?? [],
-    actors: (row.decision_actors ?? []).map((a: any) => ({ id: a.actor_id, role: a.role })),
+    actors: (row.decision_actors ?? []).map((a: { actor_id: string; role: string }) => ({
+      id: a.actor_id,
+      role: a.role,
+    })),
     status: row.status,
     confidence: row.confidence,
-    source_links: (row.decision_sources ?? []).map((s: any) => s.permalink),
+    source_links: (row.decision_sources ?? [])
+      .map((s: { permalink: string | null }) => s.permalink)
+      .filter(Boolean),
   }));
 }
 
@@ -137,42 +160,59 @@ async function getDecisionContext(params: GetDecisionContextParams): Promise<Dec
   if (!tenant_id) throw new Error("tenant_id is required");
   if (!id) throw new Error("id is required");
 
-  const supabase = getServiceClient();
+  const data = await withTenant(tenant_id, async (sql) => {
+    const rows = await sql`
+      select
+        d.id,
+        d.decision_statement,
+        d.rationale,
+        d.alternatives_considered,
+        d.status,
+        d.confidence,
+        d.superseded_by,
+        d.created_at,
+        d.updated_at,
+        coalesce(
+          (
+            select json_agg(json_build_object('actor_id', da.actor_id, 'role', da.role))
+            from public.decision_actors da
+            where da.decision_id = d.id and da.tenant_id = d.tenant_id
+          ),
+          '[]'::json
+        ) as decision_actors,
+        coalesce(
+          (
+            select json_agg(json_build_object('permalink', ds.permalink))
+            from public.decision_sources ds
+            where ds.decision_id = d.id and ds.tenant_id = d.tenant_id
+          ),
+          '[]'::json
+        ) as decision_sources
+      from public.decisions d
+      where d.id = ${id}::uuid
+        and d.tenant_id = ${tenant_id}::uuid
+      limit 1
+    `;
+    return rows[0] ?? null;
+  });
 
-  const { data, error } = await supabase
-    .from("decisions")
-    .select(`
-      id,
-      decision_statement,
-      rationale,
-      alternatives_considered,
-      status,
-      confidence,
-      superseded_by,
-      created_at,
-      updated_at,
-      decision_actors ( actor_id, role ),
-      decision_sources ( permalink )
-    `)
-    .eq("id", id)
-    .eq("tenant_id", tenant_id)  // tenant isolation — never skip this
-    .single();
-
-  if (error) {
-    if (error.code === "PGRST116") return null; // not found
-    throw new Error(`get_decision_context DB error: ${error.message}`);
-  }
+  if (!data) return null;
 
   return {
     id: data.id,
     decision_statement: data.decision_statement,
     rationale: data.rationale ?? null,
     alternatives_considered: data.alternatives_considered ?? [],
-    actors: (data.decision_actors ?? []).map((a: any) => ({ id: a.actor_id, role: a.role })),
+    actors: (data.decision_actors ?? []).map((a: { actor_id: string; role: string }) => ({
+      id: a.actor_id,
+      role: a.role,
+    })),
     status: data.status,
     confidence: data.confidence,
     superseded_by: data.superseded_by ?? null,
-    source_links: (data.decision_sources ?? []).map((s: any) => s.permalink),
+    source_links: (data.decision_sources ?? [])
+      .map((s: { permalink: string | null }) => s.permalink)
+      .filter(Boolean),
     created_at: data.created_at,
     updated_at: data.updated_at,
   };

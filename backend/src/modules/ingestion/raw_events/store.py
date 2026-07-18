@@ -14,6 +14,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from database.pool import get_db_pool
+from database.tenant_context import tenant_connection
 from modules.security.encryption import decrypt_raw_content, encrypt_raw_content
 
 log = logging.getLogger(__name__)
@@ -91,8 +92,7 @@ async def store_raw_event(
     plaintext = json.dumps(envelope, default=str).encode("utf-8")
     raw_bytes = encrypt_raw_content(plaintext)
 
-    pool = get_db_pool()
-    async with pool.acquire() as conn:
+    async with tenant_connection(tenant_id) as conn:
         if connection_id is None:
             connection_id = await _resolve_connection_id(conn, tenant_id, source, envelope)
 
@@ -148,10 +148,11 @@ async def store_raw_event(
     return row["id"]
 
 
-async def load_raw_event_payload(raw_event_id: uuid.UUID) -> dict:
+async def load_raw_event_payload(
+    raw_event_id: uuid.UUID, tenant_id: uuid.UUID
+) -> dict:
     """Load and decrypt a raw event payload by id (for replay)."""
-    pool = get_db_pool()
-    async with pool.acquire() as conn:
+    async with tenant_connection(tenant_id) as conn:
         row = await conn.fetchrow(
             "select raw_content from public.raw_events where id = $1",
             raw_event_id,
@@ -163,7 +164,11 @@ async def load_raw_event_payload(raw_event_id: uuid.UUID) -> dict:
 
 
 async def purge_expired_raw_events() -> int:
-    """Delete raw events past expires_at (default 30 days from insert)."""
+    """Delete raw events past expires_at (default 30 days from insert).
+
+    Cross-tenant job — caller must initialise the shared pool with DATABASE_URL
+    (admin / bypass), e.g. jobs.cleanup.purge_raw.
+    """
     now = datetime.now(timezone.utc)
     log.info("Purging raw events with expires_at < %s", now.isoformat())
 
