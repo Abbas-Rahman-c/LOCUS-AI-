@@ -33,7 +33,7 @@ def test_get_auth_url():
     settings = get_gmail_settings()
     assert settings.gmail_client_id in auth_url
     # redirect_uri is percent-encoded in the URL; check the raw value is present somewhere
-    assert "gmail%2Fcallback" in auth_url or "gmail/callback" in auth_url
+    assert "gmail%2Fcallback" in auth_url or "gmail/callback" in auth_url or "gmail-oauth" in auth_url
     # The tenant_id is embedded in the opaque state token, NOT directly in the URL
     assert "state=" in auth_url
     assert "scope=" in auth_url

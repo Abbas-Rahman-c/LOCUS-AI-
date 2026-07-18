@@ -11,8 +11,8 @@ import json
 import logging
 from typing import Any
 
-from queue.pgmq.client import get_pgmq_client
-from queue.pgmq.queues import QueueName
+from queues.pgmq.client import get_pgmq_client
+from queues.pgmq.queues import QueueName
 
 log = logging.getLogger(__name__)
 

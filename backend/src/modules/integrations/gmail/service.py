@@ -17,7 +17,7 @@ from modules.security.encryption import encrypt_string, decrypt_string
 from modules.ingestion.envelope.normalizer import normalize_gmail_message
 from modules.ingestion.raw_events.store import store_raw_event
 from modules.integrations.gmail.oauth_state import create_state
-from queue.pgmq.producer import enqueue_event
+from queues.pgmq.producer import enqueue_event
 
 log = logging.getLogger(__name__)
 

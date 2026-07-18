@@ -17,7 +17,7 @@ log = logging.getLogger(__name__)
 
 async def start_all_workers() -> None:
     """Launch all queue workers concurrently."""
-    from queue.workers.event_worker import run_event_worker
+    from queues.workers.event_worker import run_event_worker
 
     log.info("Starting all queue workers...")
     await asyncio.gather(
@@ -40,7 +40,7 @@ async def _main() -> None:
     )
 
     from database.pool import init_db_pool
-    from queue.pgmq.client import init_pgmq_client
+    from queues.pgmq.client import init_pgmq_client
 
     await init_db_pool(pool)
     await init_pgmq_client(pool)
