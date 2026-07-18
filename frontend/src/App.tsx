@@ -3,9 +3,11 @@ import LandingPage from '../landing-page/LandingPage'
 import ConnectWorkspaces from './ConnectWorkspaces'
 import OAuthCallback from './OAuthCallback'
 import { getSupabaseClient } from './lib/supabase'
+import DecisionReady from "./DecisionReady";
 
 function App() {
   const [userEmail, setUserEmail] = useState<string | null>(null)
+  const [workspacesConnected, setWorkspacesConnected] = useState(false);
   const searchParams = new URLSearchParams(window.location.search)
   const isOAuthCallback =
     searchParams.has('auth_callback') ||
@@ -40,11 +42,14 @@ function App() {
     return <OAuthCallback />
   }
 
-  if (userEmail) {
-    return <ConnectWorkspaces email={userEmail} />
-  }
-
-  return <LandingPage onAuthenticated={setUserEmail} />
+  if (userEmail && !workspacesConnected) {
+  return <ConnectWorkspaces email={userEmail} onContinue={() => setWorkspacesConnected(true)} />;
 }
 
-export default App
+if (userEmail && workspacesConnected) {
+  return <DecisionReady userEmail={userEmail} />;
+}
+
+return <LandingPage onAuthenticated={setUserEmail} />;
+}
+export default App;

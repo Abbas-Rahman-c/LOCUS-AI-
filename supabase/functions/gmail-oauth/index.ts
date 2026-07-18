@@ -1,4 +1,4 @@
-import { getServiceClient } from "../_shared/supabase.ts";
+import { withTenant } from "../_shared/db.ts";
 
 console.log("Gmail OAuth handler started!");
 
@@ -71,24 +71,37 @@ Deno.serve(async (req: Request) => {
         return new Response("Email address not returned by Google", { status: 400 });
       }
 
-      // 3. Store the connection. Token stored as plain text for now to
-      // unblock testing, same shortcut Slack/Notion currently use.
-      const supabase = getServiceClient();
-      const { error } = await supabase.from("source_connections").upsert(
-        {
-          tenant_id: TEST_TENANT_ID,
-          source: "gmail",
-          external_workspace_id: email,
-          oauth_token_ref: tokenData.access_token, // TODO: move to Vault
-          ingestion_mode: "polling",
-          status: "active",
-          cursor_state: { history_id: null, refresh_token: tokenData.refresh_token },
-        },
-        { onConflict: "tenant_id,source,external_workspace_id" }
-      );
-
-      if (error) {
-        return new Response(`Failed to store token: ${error.message}`, {
+      // 3. Store the connection under tenant GUC (locus_app / APP_DATABASE_URL).
+      // Token stored as plain text for now to unblock testing.
+      try {
+        await withTenant(TEST_TENANT_ID, async (sql) => {
+          await sql`
+            insert into public.source_connections (
+              tenant_id, source, external_workspace_id, oauth_token_ref,
+              ingestion_mode, status, cursor_state
+            ) values (
+              ${TEST_TENANT_ID}::uuid,
+              'gmail',
+              ${email},
+              ${tokenData.access_token},
+              'polling',
+              'active',
+              ${sql.json({
+                history_id: null,
+                refresh_token: tokenData.refresh_token ?? null,
+              })}::jsonb
+            )
+            on conflict (tenant_id, source, external_workspace_id)
+            do update set
+              oauth_token_ref = excluded.oauth_token_ref,
+              status = 'active',
+              cursor_state = excluded.cursor_state,
+              ingestion_mode = excluded.ingestion_mode
+          `;
+        });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        return new Response(`Failed to store token: ${message}`, {
           status: 500,
         });
       }

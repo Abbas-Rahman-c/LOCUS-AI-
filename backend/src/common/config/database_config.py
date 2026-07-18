@@ -1,7 +1,11 @@
 """
 Supabase / Postgres connection settings (asyncpg).
 
-Usage: from common.config.database_config import get_database_config
+Usage:
+  from common.config.database_config import get_app_database_config, get_admin_database_config
+
+- APP_DATABASE_URL → non-bypass role (locus_app); workers + API runtime
+- DATABASE_URL → postgres; admin scripts, migrations, cross-tenant jobs
 """
 from __future__ import annotations
 
@@ -20,7 +24,7 @@ load_dotenv(_BACKEND_DIR / ".env")
 class DatabaseConfig:
     """Postgres connection settings for asyncpg."""
 
-    url: str = field(default_factory=lambda: os.environ.get("DATABASE_URL", ""))
+    url: str
     min_size: int = field(
         default_factory=lambda: int(os.environ.get("DATABASE_POOL_MIN_SIZE", "1"))
     )
@@ -34,5 +38,16 @@ class DatabaseConfig:
         return self.url.replace("postgresql+asyncpg://", "postgresql://")
 
 
+def get_admin_database_config() -> DatabaseConfig:
+    """postgres / bypass role — migrations, admin scripts, cross-tenant jobs."""
+    return DatabaseConfig(url=os.environ.get("DATABASE_URL", ""))
+
+
+def get_app_database_config() -> DatabaseConfig:
+    """Non-bypass locus_app role — workers and API (subject to row-level security)."""
+    return DatabaseConfig(url=os.environ.get("APP_DATABASE_URL", ""))
+
+
 def get_database_config() -> DatabaseConfig:
-    return DatabaseConfig()
+    """Backward-compatible alias for admin DATABASE_URL."""
+    return get_admin_database_config()

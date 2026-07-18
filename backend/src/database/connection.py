@@ -1,20 +1,11 @@
 """
 Shared database connection pool helper.
+
+Thin re-export of database.pool so imports stay on one singleton
+(lifespan / workers initialise via database.pool.init_db_pool).
 """
 from __future__ import annotations
-import asyncpg
 
-_pool: asyncpg.Pool | None = None
+from database.pool import get_db_pool, init_db_pool
 
-
-def get_db_pool() -> asyncpg.Pool:
-    """Get the active database pool. Must be initialized via init_db_pool() first."""
-    if _pool is None:
-        raise RuntimeError("Database pool not initialized. Call init_db_pool() in lifespan.")
-    return _pool
-
-
-def init_db_pool(pool: asyncpg.Pool) -> None:
-    """Initialize the global database pool."""
-    global _pool
-    _pool = pool
+__all__ = ["get_db_pool", "init_db_pool"]

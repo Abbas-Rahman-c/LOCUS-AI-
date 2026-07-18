@@ -11,7 +11,7 @@ from typing import Dict, Any
 from urllib.parse import urlencode
 import httpx
 
-from database.connection import get_db_pool
+from database.tenant_context import admin_connection, tenant_connection
 from common.config import get_gmail_settings
 from modules.security.encryption import encrypt_string, decrypt_string
 from modules.ingestion.envelope.normalizer import normalize_gmail_message
@@ -47,7 +47,6 @@ def get_auth_url(tenant_id: uuid.UUID) -> str:
 async def handle_callback(code: str, tenant_id: uuid.UUID) -> Dict[str, Any]:
     """Exchange auth code for tokens, fetch email, and save source."""
     settings = get_gmail_settings()
-    pool = get_db_pool()
 
     # 1. Exchange authorization code for tokens
     async with httpx.AsyncClient() as client:
@@ -87,7 +86,7 @@ async def handle_callback(code: str, tenant_id: uuid.UUID) -> Dict[str, Any]:
             raise RuntimeError("Email address not returned by Google OAuth")
 
     # 3. Save workspace source & tokens inside transaction
-    async with pool.acquire() as conn:
+    async with tenant_connection(tenant_id) as conn:
         async with conn.transaction():
             # The Gmail address is the provider's external workspace identity.
             existing_source = await conn.fetchrow(
@@ -146,12 +145,12 @@ async def handle_callback(code: str, tenant_id: uuid.UUID) -> Dict[str, Any]:
 
     # 4. Setup watch (push notification) for this inbox
     try:
-        await setup_watch(source_id)
+        await setup_watch(source_id, tenant_id)
     except Exception as e:
         log.warning("Failed to setup Gmail watch (Google Pub/Sub): %s. Sync will fall back to manual sync.", e)
         # Even if watch fails, we return success so the user can test using manual sync!
         # Let's save a placeholder history_id in cursor_state if it wasn't set by watch
-        async with pool.acquire() as conn:
+        async with tenant_connection(tenant_id) as conn:
             source_row = await conn.fetchrow("SELECT cursor_state FROM source_connections WHERE id = $1", source_id)
             if source_row:
                 config = json.loads(source_row["cursor_state"])
@@ -165,12 +164,11 @@ async def handle_callback(code: str, tenant_id: uuid.UUID) -> Dict[str, Any]:
     return {"source_id": str(source_id), "email": email}
 
 
-async def setup_watch(source_id: uuid.UUID) -> Dict[str, Any]:
+async def setup_watch(source_id: uuid.UUID, tenant_id: uuid.UUID) -> Dict[str, Any]:
     """Call Google watch() API and update source_connections with subscription metadata."""
     settings = get_gmail_settings()
-    pool = get_db_pool()
 
-    async with pool.acquire() as conn:
+    async with tenant_connection(tenant_id) as conn:
         access_token = await _get_valid_access_token(source_id, conn)
 
         async with httpx.AsyncClient() as client:
@@ -238,10 +236,9 @@ async def process_pubsub_notification(payload: Dict[str, Any]) -> None:
         log.warning("Gmail notification missing emailAddress")
         return
 
-    pool = get_db_pool()
-    async with pool.acquire() as conn:
-        # Find active Gmail source matching emailAddress
-        source_row = await conn.fetchrow(
+    # Cross-tenant email lookup needs admin; then bind tenant GUC for the rest.
+    async with admin_connection() as admin_conn:
+        source_row = await admin_conn.fetchrow(
             """
             SELECT id, tenant_id, cursor_state FROM source_connections
             WHERE source = 'gmail' AND status = 'active'
@@ -249,24 +246,22 @@ async def process_pubsub_notification(payload: Dict[str, Any]) -> None:
             """,
             email
         )
-        if not source_row:
-            log.warning("No active Gmail source connection found for email: %s", email)
-            return
+    if not source_row:
+        log.warning("No active Gmail source connection found for email: %s", email)
+        return
 
-        source_id = source_row["id"]
-        tenant_id = source_row["tenant_id"]
-        config = json.loads(source_row["cursor_state"])
-        last_history_id = config.get("history_id")
+    source_id = source_row["id"]
+    tenant_id = source_row["tenant_id"]
+    config = json.loads(source_row["cursor_state"])
+    last_history_id = config.get("history_id")
 
-        # Get valid OAuth access token
+    async with tenant_connection(tenant_id) as conn:
         try:
             access_token = await _get_valid_access_token(source_id, conn)
         except Exception as e:
             log.error("Cannot retrieve valid access token for email %s: %s", email, e)
             return
 
-        # If no last history_id stored, we cannot perform incremental sync.
-        # Save the new history_id and exit (or full sync initial batch if desired).
         if not last_history_id:
             config["history_id"] = new_history_id
             await conn.execute(
@@ -276,7 +271,6 @@ async def process_pubsub_notification(payload: Dict[str, Any]) -> None:
             log.info("Initialized historyId for %s to %s", email, new_history_id)
             return
 
-        # Fetch changes using Gmail History API
         history_url = f"https://gmail.googleapis.com/gmail/v1/users/me/history?startHistoryId={last_history_id}"
         async with httpx.AsyncClient() as client:
             history_resp = await client.get(
@@ -284,10 +278,8 @@ async def process_pubsub_notification(payload: Dict[str, Any]) -> None:
                 headers={"Authorization": f"Bearer {access_token}"}
             )
 
-            # Check for expired history (404/410)
             if history_resp.status_code in (404, 410):
                 log.warning("History ID %s is expired or out of date. Performing fallback full list.", last_history_id)
-                # Fallback: get recent message ids and process them
                 recent_messages = await _fetch_recent_messages(client, access_token)
                 for msg_meta in recent_messages:
                     await _fetch_normalize_and_enqueue(client, access_token, msg_meta["id"], tenant_id, source_id)
@@ -306,7 +298,6 @@ async def process_pubsub_notification(payload: Dict[str, Any]) -> None:
             history_data = history_resp.json()
             histories = history_data.get("history", [])
 
-            # Process added messages
             processed_message_ids = set()
             for history in histories:
                 messages_added = history.get("messagesAdded", [])
@@ -317,7 +308,6 @@ async def process_pubsub_notification(payload: Dict[str, Any]) -> None:
                         processed_message_ids.add(msg_id)
                         await _fetch_normalize_and_enqueue(client, access_token, msg_id, tenant_id, source_id)
 
-            # Update history_id in cursor_state
             config["history_id"] = new_history_id
             await conn.execute(
                 "UPDATE source_connections SET cursor_state = $1::jsonb WHERE id = $2",
@@ -343,8 +333,7 @@ async def manual_sync(tenant_id: uuid.UUID, max_messages: int = 10) -> int:
     Returns the count of messages ingested.
     No Pub/Sub required — useful for local testing.
     """
-    pool = get_db_pool()
-    async with pool.acquire() as conn:
+    async with tenant_connection(tenant_id) as conn:
         source_row = await conn.fetchrow(
             """
             SELECT id, cursor_state FROM source_connections
@@ -388,7 +377,7 @@ async def manual_sync(tenant_id: uuid.UUID, max_messages: int = 10) -> int:
             new_history_id = profile_resp.json().get("historyId")
             if new_history_id:
                 config["history_id"] = new_history_id
-                async with pool.acquire() as conn:
+                async with tenant_connection(tenant_id) as conn:
                     await conn.execute(
                         "UPDATE source_connections SET cursor_state = $1::jsonb WHERE id = $2",
                         json.dumps(config), source_id

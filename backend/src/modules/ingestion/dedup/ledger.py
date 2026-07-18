@@ -1,4 +1,4 @@
-﻿"""
+"""
 Dedup ledger (Section 1.5) backed by public.raw_events (Section 1.6).
 
 Key: UNIQUE (tenant_id, source, source_id) on public.raw_events.
@@ -10,7 +10,7 @@ from __future__ import annotations
 import logging
 import uuid
 
-from database.pool import get_db_pool
+from database.tenant_context import tenant_connection
 from modules.ingestion.raw_events.store import store_raw_event
 
 log = logging.getLogger(__name__)
@@ -33,8 +33,7 @@ async def is_duplicate(payload: dict) -> bool:
     source = _require_str(payload, "source")
     source_id = _require_str(payload, "source_id")
 
-    pool = get_db_pool()
-    async with pool.acquire() as conn:
+    async with tenant_connection(tenant_id) as conn:
         exists = await conn.fetchval(
             """
             select exists(

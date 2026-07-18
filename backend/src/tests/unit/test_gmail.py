@@ -112,13 +112,14 @@ async def test_handle_callback_success():
     mock_conn.transaction = MagicMock()
     mock_conn.transaction.return_value.__aenter__ = AsyncMock(return_value=None)
     mock_conn.transaction.return_value.__aexit__ = AsyncMock(return_value=False)
-    
-    mock_pool = MagicMock()
-    mock_pool.acquire = MagicMock()
-    mock_pool.acquire.return_value.__aenter__ = AsyncMock(return_value=mock_conn)
-    mock_pool.acquire.return_value.__aexit__ = AsyncMock(return_value=False)
-    
-    with patch("modules.integrations.gmail.service.get_db_pool", return_value=mock_pool), \
+
+    with patch(
+        "modules.integrations.gmail.service.tenant_connection",
+        return_value=MagicMock(
+            __aenter__=AsyncMock(return_value=mock_conn),
+            __aexit__=AsyncMock(return_value=False),
+        ),
+    ), \
          patch("modules.integrations.gmail.service.setup_watch", new_callable=AsyncMock) as mock_setup_watch, \
          patch("httpx.AsyncClient", return_value=mock_http_client), \
          patch.dict("os.environ", {"APP_SECRET_KEY": "test-secret-key-for-unit-tests"}):
@@ -128,6 +129,7 @@ async def test_handle_callback_success():
         assert result["email"] == "user@example.com"
         assert "source_id" in result
         mock_setup_watch.assert_called_once()
+        assert mock_setup_watch.await_args.args[1] == tenant_id
         token_insert = next(
             call for call in mock_conn.execute.await_args_list
             if "INSERT INTO oauth_tokens" in call.args[0]

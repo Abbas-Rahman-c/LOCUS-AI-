@@ -10,16 +10,16 @@ from contextlib import asynccontextmanager
 import asyncpg
 from fastapi import FastAPI
 
-from common.config.database_config import get_database_config
+from common.config.database_config import get_app_database_config
 
 log = logging.getLogger(__name__)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    config = get_database_config()
+    config = get_app_database_config()
     if not config.dsn:
-        raise RuntimeError("DATABASE_URL is not set — check backend/.env")
+        raise RuntimeError("APP_DATABASE_URL is not set — check backend/.env")
 
     log.info("Creating asyncpg pool...")
     try:

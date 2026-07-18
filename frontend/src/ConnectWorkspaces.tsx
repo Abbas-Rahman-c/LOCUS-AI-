@@ -31,8 +31,7 @@ const tools: Tool[] = [
   },
 ]
 
-export default function ConnectWorkspaces({ email }: { email: string }) {
-  const [connectedTools, setConnectedTools] = useState<Set<ToolId>>(new Set())
+export default function ConnectWorkspaces({ email, onContinue }: { email: string; onContinue: () => void }) {  const [connectedTools, setConnectedTools] = useState<Set<ToolId>>(new Set())
   const canContinue = connectedTools.size > 0
 
   const toggleTool = (toolId: ToolId) => {
@@ -111,6 +110,7 @@ export default function ConnectWorkspaces({ email }: { email: string }) {
           <button
             type="button"
             disabled={!canContinue}
+            onClick={onContinue}
             className="min-h-[50px] w-full min-w-0 rounded-full bg-[#4b38d1] px-10 text-[16px] font-semibold text-white transition-colors hover:bg-[#3f2dbd] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#4b38d1] disabled:cursor-not-allowed disabled:bg-[#aaa7e7] sm:w-[380px]"
           >
             Connect A Tool to Continue

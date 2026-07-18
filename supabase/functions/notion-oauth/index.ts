@@ -1,4 +1,4 @@
-import { getServiceClient } from "../_shared/supabase.ts";
+import { withTenant } from "../_shared/db.ts";
 
 console.log('Notion OAuth handler started!');
 
@@ -53,23 +53,31 @@ Deno.serve(async (req: Request) => {
         );
       }
 
-      const supabase = getServiceClient();
-
-      // Store plain token in oauth_token_ref for now to unblock testing
-      const { error } = await supabase.from("source_connections").upsert(
-        {
-          tenant_id: TEST_TENANT_ID,
-          source: "notion",
-          external_workspace_id: tokenData.workspace_id,
-          oauth_token_ref: tokenData.access_token,
-          ingestion_mode: "polling",
-          status: "active",
-        },
-        { onConflict: "tenant_id,source,external_workspace_id" }
-      );
-
-      if (error) {
-        return new Response(`Failed to store token: ${error.message}`, {
+      try {
+        await withTenant(TEST_TENANT_ID, async (sql) => {
+          await sql`
+            insert into public.source_connections (
+              tenant_id, source, external_workspace_id, oauth_token_ref,
+              ingestion_mode, status, cursor_state
+            ) values (
+              ${TEST_TENANT_ID}::uuid,
+              'notion',
+              ${tokenData.workspace_id},
+              ${tokenData.access_token},
+              'polling',
+              'active',
+              '{}'::jsonb
+            )
+            on conflict (tenant_id, source, external_workspace_id)
+            do update set
+              oauth_token_ref = excluded.oauth_token_ref,
+              status = 'active',
+              ingestion_mode = excluded.ingestion_mode
+          `;
+        });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        return new Response(`Failed to store token: ${message}`, {
           status: 500,
         });
       }

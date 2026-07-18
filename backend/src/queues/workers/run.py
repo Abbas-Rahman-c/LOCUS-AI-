@@ -10,7 +10,7 @@ import logging
 
 import asyncpg
 
-from common.config.database_config import get_database_config
+from common.config.database_config import get_app_database_config
 
 log = logging.getLogger(__name__)
 
@@ -27,9 +27,9 @@ async def start_all_workers() -> None:
 
 
 async def _main() -> None:
-    config = get_database_config()
+    config = get_app_database_config()
     if not config.dsn:
-        raise RuntimeError("DATABASE_URL is not set — check backend/.env")
+        raise RuntimeError("APP_DATABASE_URL is not set — check backend/.env")
 
     log.info("Creating asyncpg pool for workers...")
     pool = await asyncpg.create_pool(

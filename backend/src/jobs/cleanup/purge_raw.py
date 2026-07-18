@@ -11,7 +11,7 @@ import logging
 
 import asyncpg
 
-from common.config.database_config import get_database_config
+from common.config.database_config import get_admin_database_config
 from database.pool import init_db_pool
 from modules.ingestion.raw_events.store import purge_expired_raw_events
 
@@ -26,7 +26,8 @@ async def run_purge_job() -> None:
 
 
 async def _main() -> None:
-    config = get_database_config()
+    # Cross-tenant cleanup: use admin DATABASE_URL (bypasses row-level security)
+    config = get_admin_database_config()
     if not config.dsn:
         raise RuntimeError("DATABASE_URL is not set — check backend/.env")
 

@@ -1,8 +1,7 @@
 -- =====================================================================
--- Tenant isolation row-level security (source of truth)
+-- Tenant isolation row-level security
+-- Mirrors backend/src/database/rls/policies.sql (keep in sync)
 -- Idempotent: safe to re-run.
--- Predicate (workers / API): app.current_tenant_id Grand Unified Configuration (GUC)
--- Predicate (PostgREST): auth.uid() via public.memberships
 -- =====================================================================
 
 -- ---------------------------------------------------------------------
