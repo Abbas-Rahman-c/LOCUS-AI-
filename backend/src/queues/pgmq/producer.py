@@ -2,11 +2,11 @@
 Ingestion producer - enqueues normalised EventEnvelopes into the ingestion queue.
 
 Moved from modules/ingestion/queue/ - this is the canonical location.
-Imports the shared client from queue.pgmq.client; never instantiates its own connection.
+Imports the shared client from queues.pgmq.client; never instantiates its own connection.
 """
 from __future__ import annotations
-from queue.pgmq.client import get_pgmq_client
-from queue.pgmq.queues import QueueName
+from queues.pgmq.client import get_pgmq_client
+from queues.pgmq.queues import QueueName
 
 
 async def enqueue_event(envelope: dict) -> int:

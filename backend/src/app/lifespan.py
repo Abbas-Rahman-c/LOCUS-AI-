@@ -34,7 +34,7 @@ async def lifespan(app: FastAPI):
         app.state.db_pool = pool
 
         from database.pool import init_db_pool
-        from queue.pgmq.client import init_pgmq_client
+        from queues.pgmq.client import init_pgmq_client
 
         await init_db_pool(pool)
         await init_pgmq_client(pool)

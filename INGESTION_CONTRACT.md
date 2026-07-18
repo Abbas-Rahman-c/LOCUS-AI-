@@ -7,12 +7,12 @@
 Every connector enqueues a shaped event by calling:
 
 ```python
-from queue.pgmq.producer import enqueue_event
+from queues.pgmq.producer import enqueue_event
 
 await enqueue_event(envelope)
 ```
 
-This calls into `queue/pgmq/client.py`, the single pgmq connection point in the
+This calls into `queues/pgmq/client.py`, the single pgmq connection point in the
 codebase, which sends the message onto Supabase's `ingestion` (pgmq).
 
 ## What NOT to do
