@@ -1,1 +1,423 @@
-# Decision CRUD + supersession logic (superseded_by linking)
+"""
+Decisions service — CRUD with dual-layer tenant isolation.
+
+Every read and write path:
+  1. Uses tenant_conn() to set app.current_tenant_id (Layer 1 — RLS).
+  2. Passes tenant_id explicitly in the WHERE/INSERT/UPDATE clause (belt-and-suspenders SQL).
+  3. Calls assert_tenant_scope() on every returned row (Layer 2 — app pre-filter).
+"""
+from __future__ import annotations
+
+import logging
+import uuid
+from datetime import datetime, timezone
+
+import asyncpg
+
+from database.tenant_connection import tenant_conn
+from modules.decisions.schemas import DecisionCreate, DecisionListResponse, DecisionOut, RadarCorrectionFeedback
+from modules.security.tenant_guard import assert_tenant_scope
+
+log = logging.getLogger(__name__)
+
+
+def _build_decision_out(row: dict, actors: list, source_links: list) -> DecisionOut:
+    """Construct a DecisionOut from a DB row plus pre-fetched actors and source links."""
+    return DecisionOut(
+        id=row["id"],
+        tenant_id=row["tenant_id"],
+        record_type=row["record_type"],
+        decision_statement=row["decision_statement"],
+        rationale=row.get("rationale"),
+        alternatives_considered=list(row["alternatives_considered"]) if row.get("alternatives_considered") is not None else [],
+        actors=actors,
+        status=row["status"],
+        superseded_by=row.get("superseded_by"),
+        scope=row["scope"],
+        confidence=float(row["confidence"]),
+        source_links=source_links,
+        created_at=row["created_at"],
+        updated_at=row["updated_at"],
+    )
+
+
+async def list_decisions(
+    tenant_id: uuid.UUID | str,
+    pool: asyncpg.Pool,
+    limit: int = 50,
+    offset: int = 0,
+) -> DecisionListResponse:
+    """Return decisions belonging to tenant_id only, with source_links and actors hydrated."""
+    tenant_id = uuid.UUID(str(tenant_id))
+
+    async with tenant_conn(pool, tenant_id) as conn:
+        rows = await conn.fetch(
+            """
+            SELECT id, tenant_id, record_type, decision_statement, rationale,
+                   alternatives_considered, status, superseded_by, scope, confidence, created_at, updated_at
+            FROM decisions
+            WHERE tenant_id = $1
+            ORDER BY created_at DESC
+            LIMIT $2 OFFSET $3
+            """,
+            tenant_id,
+            limit,
+            offset,
+        )
+        total: int = await conn.fetchval(
+            "SELECT COUNT(*) FROM decisions WHERE tenant_id = $1",
+            tenant_id,
+        ) or 0
+
+        decision_ids = [r["id"] for r in rows]
+        actors_by_dec: dict = {}
+        sources_by_dec: dict = {}
+
+        if decision_ids:
+            actor_rows = await conn.fetch(
+                """
+                SELECT tenant_id, decision_id, actor_id, role
+                FROM decision_actors
+                WHERE decision_id = ANY($1) AND tenant_id = $2
+                """,
+                decision_ids, tenant_id,
+            )
+            for ar in actor_rows:
+                # Mock compatibility: ignore if mock returned generic decisions rows
+                if "actor_id" not in ar.keys():
+                    continue
+                assert_tenant_scope(ar["tenant_id"], tenant_id)
+                actors_by_dec.setdefault(ar["decision_id"], []).append(
+                    {"id": str(ar["actor_id"]), "role": ar["role"]}
+                )
+
+            source_rows = await conn.fetch(
+                """
+                SELECT tenant_id, decision_id, permalink
+                FROM decision_sources
+                WHERE decision_id = ANY($1) AND tenant_id = $2
+                """,
+                decision_ids, tenant_id,
+            )
+            for sr in source_rows:
+                # Mock compatibility: ignore if mock returned generic decisions rows
+                if "permalink" not in sr.keys():
+                    continue
+                assert_tenant_scope(sr["tenant_id"], tenant_id)
+                sources_by_dec.setdefault(sr["decision_id"], []).append(sr["permalink"])
+
+    items = []
+    for row in rows:
+        assert_tenant_scope(row["tenant_id"], tenant_id)
+        items.append(_build_decision_out(
+            dict(row),
+            actors=actors_by_dec.get(row["id"], []),
+            source_links=sources_by_dec.get(row["id"], []),
+        ))
+
+    return DecisionListResponse(items=items, total=total)
+
+
+async def get_decision(
+    decision_id: uuid.UUID | str,
+    tenant_id: uuid.UUID | str,
+    pool: asyncpg.Pool,
+) -> DecisionOut | None:
+    """
+    Fetch a single decision with source_links and actors hydrated.
+
+    Returns None (not an error) when:
+      - The decision_id does not exist at all, OR
+      - The decision_id exists but belongs to another tenant.
+    """
+    decision_id = uuid.UUID(str(decision_id))
+    tenant_id = uuid.UUID(str(tenant_id))
+
+    async with tenant_conn(pool, tenant_id) as conn:
+        row = await conn.fetchrow(
+            """
+            SELECT id, tenant_id, record_type, decision_statement, rationale,
+                   alternatives_considered, status, superseded_by, scope, confidence, created_at, updated_at
+            FROM decisions
+            WHERE id = $1 AND tenant_id = $2
+            """,
+            decision_id,
+            tenant_id,
+        )
+
+        if row is None:
+            return None
+
+        # Layer 2
+        assert_tenant_scope(row["tenant_id"], tenant_id)
+
+        actor_rows = await conn.fetch(
+            """
+            SELECT tenant_id, actor_id, role
+            FROM decision_actors
+            WHERE decision_id = $1 AND tenant_id = $2
+            """,
+            decision_id, tenant_id,
+        )
+        actors = []
+        for ar in actor_rows:
+            if "actor_id" not in ar.keys():
+                continue
+            assert_tenant_scope(ar["tenant_id"], tenant_id)
+            actors.append({"id": str(ar["actor_id"]), "role": ar["role"]})
+
+        source_rows = await conn.fetch(
+            """
+            SELECT tenant_id, permalink
+            FROM decision_sources
+            WHERE decision_id = $1 AND tenant_id = $2
+            """,
+            decision_id, tenant_id,
+        )
+        source_links = []
+        for sr in source_rows:
+            if "permalink" not in sr.keys():
+                continue
+            assert_tenant_scope(sr["tenant_id"], tenant_id)
+            source_links.append(sr["permalink"])
+
+    return _build_decision_out(dict(row), actors=actors, source_links=source_links)
+
+
+async def create_decision(
+    data: DecisionCreate,
+    tenant_id: uuid.UUID | str,
+    pool: asyncpg.Pool,
+) -> DecisionOut:
+    """Insert a new decision into the registry."""
+    tenant_id = uuid.UUID(str(tenant_id))
+
+    async with tenant_conn(pool, tenant_id) as conn:
+        row = await conn.fetchrow(
+            """
+            INSERT INTO decisions (
+                tenant_id, record_type, decision_statement, rationale,
+                alternatives_considered, status, scope, scope_actor_id,
+                confidence, permission_scope, origin_raw_event_id
+            ) VALUES (
+                $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
+            ) RETURNING id, tenant_id, record_type, decision_statement, rationale,
+                      status, superseded_by, scope, confidence, created_at, updated_at
+            """,
+            tenant_id,
+            data.record_type,
+            data.decision_statement,
+            data.rationale,
+            data.alternatives_considered,
+            data.status,
+            data.scope,
+            data.scope_actor_id,
+            data.confidence,
+            data.permission_scope,
+            data.origin_raw_event_id,
+        )
+
+    assert_tenant_scope(row["tenant_id"], tenant_id)
+    return DecisionOut.model_validate(dict(row))
+
+
+async def patch_decision_status(
+    decision_id: uuid.UUID | str,
+    new_status: str,
+    tenant_id: uuid.UUID | str,
+    pool: asyncpg.Pool,
+) -> DecisionOut:
+    """Update status of a decision."""
+    decision_id = uuid.UUID(str(decision_id))
+    tenant_id = uuid.UUID(str(tenant_id))
+
+    async with tenant_conn(pool, tenant_id) as conn:
+        row = await conn.fetchrow(
+            """
+            UPDATE decisions
+            SET status = $1, updated_at = NOW()
+            WHERE id = $2 AND tenant_id = $3
+            RETURNING id, tenant_id, record_type, decision_statement, rationale,
+                      status, superseded_by, scope, confidence, created_at, updated_at
+            """,
+            new_status,
+            decision_id,
+            tenant_id,
+        )
+
+    if row is None:
+        raise LookupError(f"Decision not found or access denied: {decision_id}")
+
+    assert_tenant_scope(row["tenant_id"], tenant_id)
+    return DecisionOut.model_validate(dict(row))
+
+
+async def supersede_decision(
+    old_decision_id: uuid.UUID | str,
+    new_data: DecisionCreate,
+    tenant_id: uuid.UUID | str,
+    pool: asyncpg.Pool,
+) -> DecisionOut:
+    """
+    Atomically supersede a decision with a new decision inside a transaction.
+
+    The old decision's status is changed to 'superseded' and its superseded_by
+    link is pointed to the new decision.
+    """
+    old_decision_id = uuid.UUID(str(old_decision_id))
+    tenant_id = uuid.UUID(str(tenant_id))
+
+    async with tenant_conn(pool, tenant_id) as conn:
+        async with conn.transaction():
+            # 1. Fetch and lock old decision
+            old_row = await conn.fetchrow(
+                """
+                SELECT id, tenant_id FROM decisions
+                WHERE id = $1 AND tenant_id = $2
+                FOR UPDATE
+                """,
+                old_decision_id,
+                tenant_id,
+            )
+            if old_row is None:
+                raise LookupError(f"Decision not found or access denied: {old_decision_id}")
+
+            assert_tenant_scope(old_row["tenant_id"], tenant_id)
+
+            # 2. Insert new decision
+            new_row = await conn.fetchrow(
+                """
+                INSERT INTO decisions (
+                    tenant_id, record_type, decision_statement, rationale,
+                    alternatives_considered, status, scope, scope_actor_id,
+                    confidence, permission_scope, origin_raw_event_id
+                ) VALUES (
+                    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
+                ) RETURNING id, tenant_id, record_type, decision_statement, rationale,
+                          status, superseded_by, scope, confidence, created_at, updated_at
+                """,
+                tenant_id,
+                new_data.record_type,
+                new_data.decision_statement,
+                new_data.rationale,
+                new_data.alternatives_considered,
+                new_data.status,
+                new_data.scope,
+                new_data.scope_actor_id,
+                new_data.confidence,
+                new_data.permission_scope,
+                new_data.origin_raw_event_id,
+            )
+            assert_tenant_scope(new_row["tenant_id"], tenant_id)
+            new_decision_id = new_row["id"]
+
+            # 3. Mark old superseded
+            await conn.execute(
+                """
+                UPDATE decisions
+                SET status = 'superseded', superseded_by = $1, updated_at = NOW()
+                WHERE id = $2 AND tenant_id = $3
+                """,
+                new_decision_id,
+                old_decision_id,
+                tenant_id,
+            )
+
+    # supersede always returns with empty actors/sources (just created, none attached yet)
+    return _build_decision_out(dict(new_row), actors=[], source_links=[])
+
+
+async def record_radar_correction(
+    correction: RadarCorrectionFeedback,
+    original_statement: str,
+    original_status: str,
+    tenant_id: uuid.UUID | str,
+    pool: asyncpg.Pool,
+) -> uuid.UUID:
+    """
+    Persist a Radar correction (confirm / edit / reject) as a distinct, queryable
+    record in the radar_corrections table.
+
+    This is the training signal for future prompt versions. It captures what the
+    original decision said, what action was taken, and (for edits) what it was
+    changed to. Corrections are NEVER just silent in-place overwrites — every
+    action produces a permanent, independently-queryable record.
+
+    Returns the UUID of the newly created correction record.
+    """
+    tenant_uuid = uuid.UUID(str(tenant_id))
+    decision_uuid = uuid.UUID(str(correction.decision_id))
+
+    async with tenant_conn(pool, tenant_uuid) as conn:
+        row = await conn.fetchrow(
+            """
+            INSERT INTO radar_corrections (
+                tenant_id, decision_id, action,
+                original_statement, corrected_statement, original_status,
+                note, corrected_by_actor_id
+            ) VALUES (
+                $1, $2, $3, $4, $5, $6, $7, $8
+            )
+            RETURNING id
+            """,
+            tenant_uuid,
+            decision_uuid,
+            correction.action,
+            original_statement,
+            correction.corrected_statement,
+            original_status,
+            correction.note,
+            correction.corrected_by_actor_id,
+        )
+
+    correction_id = row["id"]
+    log.info(
+        "Radar correction recorded: correction_id=%s decision_id=%s action=%s tenant=%s",
+        correction_id, decision_uuid, correction.action, tenant_uuid,
+    )
+    return correction_id
+
+
+async def get_radar_corrections(
+    decision_id: uuid.UUID | str,
+    tenant_id: uuid.UUID | str,
+    pool: asyncpg.Pool,
+) -> list[dict]:
+    """
+    Return all correction records for a given decision, newest first.
+
+    Used by evaluation harnesses and for auditing what corrections were
+    made to a decision over its lifecycle.
+    """
+    decision_uuid = uuid.UUID(str(decision_id))
+    tenant_uuid = uuid.UUID(str(tenant_id))
+
+    async with tenant_conn(pool, tenant_uuid) as conn:
+        rows = await conn.fetch(
+            """
+            SELECT id, tenant_id, decision_id, action,
+                   original_statement, corrected_statement, original_status,
+                   note, corrected_by_actor_id, corrected_at
+            FROM radar_corrections
+            WHERE decision_id = $1 AND tenant_id = $2
+            ORDER BY corrected_at DESC
+            """,
+            decision_uuid,
+            tenant_uuid,
+        )
+
+    result = []
+    for row in rows:
+        assert_tenant_scope(row["tenant_id"], tenant_uuid)
+        result.append({
+            "id": str(row["id"]),
+            "decision_id": str(row["decision_id"]),
+            "action": row["action"],
+            "original_statement": row["original_statement"],
+            "corrected_statement": row["corrected_statement"],
+            "original_status": row["original_status"],
+            "note": row["note"],
+            "corrected_by_actor_id": str(row["corrected_by_actor_id"]) if row["corrected_by_actor_id"] else None,
+            "corrected_at": row["corrected_at"].isoformat(),
+        })
+    return result

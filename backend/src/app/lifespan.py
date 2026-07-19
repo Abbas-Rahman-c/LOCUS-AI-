@@ -21,8 +21,6 @@ async def lifespan(app: FastAPI):
     if not config.dsn:
         raise RuntimeError("APP_DATABASE_URL is not set — check backend/.env")
 
-    # Create pool BEFORE importing local `queue` package — that name shadows
-    # the stdlib queue module used by asyncpg's ThreadPoolExecutor.
     log.info("Creating asyncpg pool...")
     try:
         pool = await asyncpg.create_pool(
