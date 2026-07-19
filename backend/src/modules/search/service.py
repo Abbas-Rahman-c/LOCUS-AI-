@@ -16,12 +16,13 @@ into one SearchResponse. tenant_id must already be authenticated and
 validated (via app.dependencies.get_current_tenant) before it ever reaches
 this function - never accepted from a request body.
 
-Open question for the backend team: permission_scopes has no established
-per-user source yet (public.memberships only carries tenant_id + role, no
-scope list). This module accepts it as a plain parameter and applies it
-exactly as Phase 2's Layer 2 always has; wiring it to a real source (e.g.
-a future memberships column, or derived from role) is unresolved and
-tracked separately, not decided here.
+permission_scopes is also never accepted from a request body: it is
+authorization data, resolved server-side by the router via
+modules.permissions.scope_resolver.resolve_permission_scopes(ctx) from the
+authenticated TenantContext alone, before this function is ever called.
+This function treats it as an opaque, already-resolved parameter and
+applies it exactly as Phase 2's Layer 2 always has - it neither knows nor
+cares how the caller derived it.
 """
 from __future__ import annotations
 

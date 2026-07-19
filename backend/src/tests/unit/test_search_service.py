@@ -168,6 +168,55 @@ class TestCitationValidation:
         assert result.citations == []
 
 
+class TestRealisticServerDerivedScopes:
+    """modules.permissions.scope_resolver.resolve_permission_scopes() always
+    returns [] today (no repository evidence supports granting anyone a
+    non-empty scope) - this is what the router actually passes to search()
+    for every real request. Workspace-wide (empty-scope) decisions must
+    still surface; scoped decisions must never leak into the answer's
+    citations, even when Claude is fed a cited number that would have
+    pointed at one had it survived filtering."""
+
+    async def test_workspace_wide_decision_surfaces_with_no_resolved_scopes(self):
+        workspace_wide = _match(permission_scope=[])
+        answer_result = AnswerResult(
+            answer="Per Decision 1.", citations=[1], model="m", latency_ms=1.0
+        )
+        retrieval_patch, answer_patch = _patched([workspace_wide], answer_result)
+
+        with retrieval_patch, answer_patch:
+            result = await search(object(), TENANT, "Why did we choose Stripe?", [], 5)
+
+        assert result.metadata.authorized_count == 1
+        assert len(result.citations) == 1
+        assert result.citations[0].decision_id == workspace_wide.decision_id
+
+    async def test_scoped_decision_never_appears_in_citations_with_no_resolved_scopes(self):
+        """A scoped decision is filtered out before context/citation
+        building ever sees it - Claude citing 'Decision 1' by position
+        cannot resurrect it, because position 1 in the authorized list is
+        a different (workspace-wide) decision entirely."""
+        scoped = _match(
+            decision_statement="Scoped decision", permission_scope=["team:billing"]
+        )
+        workspace_wide = _match(
+            decision_statement="Workspace-wide decision", permission_scope=[]
+        )
+        answer_result = AnswerResult(
+            answer="Per Decision 1.", citations=[1], model="m", latency_ms=1.0
+        )
+        retrieval_patch, answer_patch = _patched([scoped, workspace_wide], answer_result)
+
+        with retrieval_patch, answer_patch:
+            result = await search(object(), TENANT, "Why did we choose Stripe?", [], 5)
+
+        assert result.metadata.retrieved_count == 2
+        assert result.metadata.authorized_count == 1
+        assert len(result.citations) == 1
+        assert result.citations[0].decision_id == workspace_wide.decision_id
+        assert all(c.decision_id != scoped.decision_id for c in result.citations)
+
+
 class TestGroundedRefusal:
     async def test_no_authorized_decisions_yields_refusal_with_no_citations(self):
         match = _match(permission_scope=["team:sales"])  # will be filtered out

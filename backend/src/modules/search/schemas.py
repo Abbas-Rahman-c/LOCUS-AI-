@@ -8,12 +8,15 @@ tenant_id is deliberately NOT a field here - it is derived exclusively
 from the authenticated TenantContext (app.dependencies.get_current_tenant)
 at the router layer, never from the request body.
 
-permission_scopes IS a request field: unlike tenant_id (the hard RLS trust
-boundary), it is not yet backed by any per-user scope source in this
-codebase (memberships only carries tenant_id + role) - see the search
-service module docstring for the open question this leaves for the
-backend team. Defaults to empty, meaning "no scopes requested" rather
-than "all scopes" - callers must say what they want considered.
+permission_scopes is deliberately NOT a field here either, and never was
+safe to keep as one: it is authorization data, not a search input, and a
+client asking for a scope is not evidence it is entitled to it. The
+router resolves the caller's authorized scopes server-side via
+modules.permissions.scope_resolver.resolve_permission_scopes(ctx), using
+only the authenticated TenantContext (user_id, tenant_id, role) - never
+anything from this request body. See that module's docstring for the
+repository evidence behind what scopes an authenticated caller is
+actually granted.
 """
 from __future__ import annotations
 
@@ -25,13 +28,12 @@ from modules.retrieval.vector.schemas import DEFAULT_TOP_K, MAX_TOP_K
 
 
 class SearchRequest(BaseModel):
-    """POST /search request body."""
+    """POST /search request body: search inputs only, no authorization data."""
 
     model_config = ConfigDict(extra="forbid")
 
     question: str = Field(..., min_length=1)
     top_k: int = Field(default=DEFAULT_TOP_K, ge=1, le=MAX_TOP_K)
-    permission_scopes: list[str] = Field(default_factory=list)
 
 
 class SourceCitation(BaseModel):

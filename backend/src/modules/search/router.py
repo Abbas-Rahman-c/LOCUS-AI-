@@ -23,6 +23,7 @@ from common.config.voyage_config import VoyageConfigError
 from database.pool import get_db_pool
 from modules.ai.embeddings.provider import VoyageEmbeddingError, VoyageResponseValidationError
 from modules.answering.provider import AnswerAPIError, AnswerResponseValidationError
+from modules.permissions.scope_resolver import resolve_permission_scopes
 from modules.search.schemas import SearchRequest, SearchResponse
 from modules.search.service import search
 
@@ -38,12 +39,13 @@ async def search_endpoint(
 ) -> SearchResponse:
     """Production question -> grounded answer + citations endpoint."""
     pool = get_db_pool()
+    permission_scopes = resolve_permission_scopes(ctx)
     try:
         return await search(
             pool,
             ctx.tenant_id,
             request.question,
-            request.permission_scopes,
+            permission_scopes,
             request.top_k,
         )
     except VoyageConfigError as exc:

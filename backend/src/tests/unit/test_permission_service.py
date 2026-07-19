@@ -56,6 +56,23 @@ class TestFiltering:
         assert filter_accessible_decisions(["team:billing"], decisions) == []
 
 
+class TestWorkspaceWideFailsClosedForOrdinaryMembers:
+    """The realistic /search scenario: an ordinary member's server-derived
+    permission_scopes is [] (modules.permissions.scope_resolver - no
+    repository evidence supports granting anyone a non-empty scope).
+    Workspace-wide (empty-scope) decisions must still surface; any
+    genuinely scoped decision must be excluded - proving Layer 2 fails
+    closed rather than falling back to trusting anything client-supplied."""
+
+    def test_workspace_wide_decisions_survive_with_no_caller_scopes(self):
+        workspace_wide = _decision(permission_scope=[])
+        scoped = _decision(permission_scope=["team:billing"])
+
+        result = filter_accessible_decisions([], [workspace_wide, scoped])
+
+        assert result == [workspace_wide]
+
+
 class TestLogging:
     def test_logs_retrieved_authorized_rejected_and_timing(self, caplog):
         decisions = [

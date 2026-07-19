@@ -4,9 +4,20 @@ production search endpoint), through the real app.main ASGI app.
 
 modules.search.service.vector_search() and .generate_answer() are mocked
 at their modules.search.service import sites (no real Voyage/Anthropic/DB
-call); permission filtering and context building run for real. Auth uses
-real issue_tenant_jwt()-signed tokens, matching the pattern already
-established in tests/unit/test_retrieval.py's router tests.
+call); permission filtering, scope resolution, and context building run
+for real. Auth uses real issue_tenant_jwt()-signed tokens, matching the
+pattern already established in tests/unit/test_retrieval.py's router
+tests.
+
+permission_scopes is authorization data, not a search input: SearchRequest
+has no such field (extra="forbid" rejects it outright), and the router
+resolves the caller's scopes itself via
+modules.permissions.scope_resolver.resolve_permission_scopes(ctx), which
+always returns [] today (see that module's docstring for why). Every
+fixture decision below therefore uses permission_scope=[] (workspace-wide)
+as the realistic default - a non-empty permission_scope is used only in
+TestPermissionScopeFiltering, to prove such decisions are excluded no
+matter what a client's request claims.
 """
 from __future__ import annotations
 
@@ -33,7 +44,7 @@ def _match(**overrides) -> RetrievalMatch:
         "similarity_score": 0.87,
         "confidence": 0.94,
         "tenant_id": TENANT,
-        "permission_scope": ["team:billing"],
+        "permission_scope": [],
         "rationale": "Supports self-service billing.",
         "alternatives_considered": ["Paddle"],
         "created_at": datetime(2026, 7, 19, tzinfo=timezone.utc),
@@ -50,7 +61,7 @@ def _auth_headers(tenant_id=TENANT, role="member"):
 
 
 def _request_body(**overrides):
-    body = {"question": "Why did we choose Stripe?", "permission_scopes": ["team:billing"]}
+    body = {"question": "Why did we choose Stripe?"}
     body.update(overrides)
     return body
 
@@ -102,6 +113,39 @@ class TestAuthenticationRequired:
             )
         assert response.status_code == 422
 
+    def test_client_supplied_permission_scopes_is_rejected_as_unknown_field(self):
+        """permission_scopes is authorization data, not a search input:
+        SearchRequest has no such field at all (extra="forbid" rejects any
+        attempt to add one). A client cannot grant itself broader access by
+        supplying scopes in the request body."""
+        pool_patch, vector_patch, answer_patch = _patched([], AnswerResult(
+            answer="ok", citations=[], model="m", latency_ms=1.0
+        ))
+        with pool_patch, vector_patch, answer_patch:
+            response = client.post(
+                "/search",
+                json={**_request_body(), "permission_scopes": ["team:billing", "team:sales"]},
+                headers=_auth_headers(),
+            )
+        assert response.status_code == 422
+
+    def test_member_cannot_expand_access_via_request_supplied_scopes(self):
+        """Even if a client sends permission_scopes claiming access to a
+        scoped decision, the request is rejected outright (unknown field)
+        and the decision remains excluded - proving request data can never
+        expand what a member is authorized to see."""
+        scoped = _match(permission_scope=["team:sales"])
+        pool_patch, vector_patch, answer_patch = _patched([scoped], AnswerResult(
+            answer="ok", citations=[], model="m", latency_ms=1.0
+        ))
+        with pool_patch, vector_patch, answer_patch:
+            response = client.post(
+                "/search",
+                json={**_request_body(), "permission_scopes": ["team:sales"]},
+                headers=_auth_headers(),
+            )
+        assert response.status_code == 422
+
 
 class TestSuccessfulResponse:
     def test_returns_answer_citations_and_metadata(self):
@@ -144,6 +188,41 @@ class TestTenantIdDerivedFromAuth:
         assert str(tenant_arg) == str(TENANT)
 
 
+class TestServerDerivedScopesAreUsed:
+    def test_router_calls_scope_resolver_with_authenticated_context_not_request_data(self):
+        """Proof the scopes search() receives come from
+        modules.permissions.scope_resolver.resolve_permission_scopes(ctx),
+        never from request.permission_scopes (which doesn't exist)."""
+        answer_result = AnswerResult(answer="ok", citations=[], model="m", latency_ms=1.0)
+        pool_patch, vector_patch, answer_patch = _patched([], answer_result)
+
+        with pool_patch, vector_patch, answer_patch, patch(
+            "modules.search.router.resolve_permission_scopes", return_value=["team:billing"]
+        ) as resolver_mock:
+            client.post("/search", json=_request_body(), headers=_auth_headers(role="member"))
+
+        (ctx_arg,), _ = resolver_mock.call_args
+        assert ctx_arg.tenant_id == str(TENANT)
+        assert ctx_arg.role == "member"
+
+    def test_resolved_scopes_flow_into_the_search_pipeline(self):
+        """Whatever resolve_permission_scopes(ctx) returns is what actually
+        gates a scoped decision - proven end-to-end through the real
+        permission-filtering pipeline (not mocked)."""
+        scoped = _match(permission_scope=["team:billing"])
+        answer_result = AnswerResult(
+            answer="Per Decision 1.", citations=[1], model="m", latency_ms=1.0
+        )
+        pool_patch, vector_patch, answer_patch = _patched([scoped], answer_result)
+
+        with pool_patch, vector_patch, answer_patch, patch(
+            "modules.search.router.resolve_permission_scopes", return_value=["team:billing"]
+        ):
+            response = client.post("/search", json=_request_body(), headers=_auth_headers())
+
+        assert response.json()["metadata"]["authorized_count"] == 1
+
+
 class TestNoMatchingDecisions:
     def test_empty_retrieval_returns_refusal_and_zero_counts(self):
         answer_result = AnswerResult(
@@ -164,15 +243,67 @@ class TestNoMatchingDecisions:
 
 
 class TestPermissionScopeFiltering:
-    def test_wrong_scope_decisions_are_excluded(self):
+    def test_scoped_decisions_are_excluded_for_ordinary_members(self):
+        """No repository evidence supports granting a member any non-empty
+        scope, so resolve_permission_scopes(ctx) returns [] and a scoped
+        decision is excluded - fail-closed, not a request-data decision."""
         match = _match(permission_scope=["team:sales"])
         answer_result = AnswerResult(answer="ok", citations=[], model="m", latency_ms=1.0)
         pool_patch, vector_patch, answer_patch = _patched([match], answer_result)
 
         with pool_patch, vector_patch, answer_patch:
-            response = client.post("/search", json=_request_body(), headers=_auth_headers())
+            response = client.post("/search", json=_request_body(), headers=_auth_headers(role="member"))
 
         assert response.json()["metadata"]["authorized_count"] == 0
+
+    def test_workspace_wide_decisions_are_included_for_ordinary_members(self):
+        match = _match(permission_scope=[])
+        answer_result = AnswerResult(
+            answer="Per Decision 1.", citations=[1], model="m", latency_ms=1.0
+        )
+        pool_patch, vector_patch, answer_patch = _patched([match], answer_result)
+
+        with pool_patch, vector_patch, answer_patch:
+            response = client.post("/search", json=_request_body(), headers=_auth_headers(role="member"))
+
+        assert response.json()["metadata"]["authorized_count"] == 1
+
+    def test_owner_and_admin_get_no_special_cased_access_to_scoped_decisions(self):
+        """Task 1's evidence: no code anywhere (decisions/router.py,
+        decisions/service.py, or elsewhere) grants owner/admin roles
+        broader visibility than ordinary members. Scoped decisions must be
+        excluded for these roles too, exactly like a member."""
+        scoped = _match(permission_scope=["team:sales"])
+        answer_result = AnswerResult(answer="ok", citations=[], model="m", latency_ms=1.0)
+
+        for role in ("owner", "admin"):
+            pool_patch, vector_patch, answer_patch = _patched([scoped], answer_result)
+            with pool_patch, vector_patch, answer_patch:
+                response = client.post(
+                    "/search", json=_request_body(), headers=_auth_headers(role=role)
+                )
+            assert response.json()["metadata"]["authorized_count"] == 0, f"role={role}"
+
+    def test_scoped_decision_never_appears_in_citations(self):
+        """A decision excluded by permission filtering must never surface
+        as a citation, even if Claude's answer cites a position number that
+        would have pointed at it had it not been filtered out."""
+        scoped = _match(decision_statement="Scoped decision", permission_scope=["team:sales"])
+        workspace_wide = _match(decision_statement="Workspace-wide decision", permission_scope=[])
+        answer_result = AnswerResult(
+            answer="Per Decision 1.", citations=[1], model="m", latency_ms=1.0
+        )
+        pool_patch, vector_patch, answer_patch = _patched([scoped, workspace_wide], answer_result)
+
+        with pool_patch, vector_patch, answer_patch:
+            response = client.post("/search", json=_request_body(), headers=_auth_headers())
+
+        body = response.json()
+        assert body["metadata"]["retrieved_count"] == 2
+        assert body["metadata"]["authorized_count"] == 1
+        citation_ids = {c["decision_id"] for c in body["citations"]}
+        assert str(scoped.decision_id) not in citation_ids
+        assert str(workspace_wide.decision_id) in citation_ids
 
 
 class TestValidation:

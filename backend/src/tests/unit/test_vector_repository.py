@@ -2,9 +2,14 @@
 Unit tests for modules.retrieval.vector.repository.search_similar_decisions().
 
 Uses the real tenant_conn() (fixed in the prior commit) against a fake
-pool/connection - so these tests also double as evidence that retrieval
-genuinely runs inside a tenant-scoped RLS transaction, not a bare
-pool.acquire(). No real Postgres connection is made.
+pool/connection, so these tests prove the *code path* opens a transaction
+and calls set_config('app.current_tenant_id', ...) before querying - i.e.
+that RLS is correctly engaged at the connection level. No real Postgres
+connection is made here, so nothing in this file proves the database's RLS
+policies themselves actually filter rows - a real two-tenant PostgreSQL
+integration test is still needed for that and remains pending (no
+disposable project-configured test database is available in this
+environment; see the branch's final verification report).
 """
 from __future__ import annotations
 
@@ -135,7 +140,11 @@ class TestTenantScopedExecution:
         assert "tenant_id" in query  # present in SELECT and WHERE, never absent
 
 
-class TestRlsIsolationEvidence:
+class TestLayer2FailsClosedIfRlsIsEverMisconfigured:
+    """Proves the Python-level Layer 2 re-check only - not database RLS
+    itself, which no test in this file can exercise (no real Postgres
+    connection is made anywhere here)."""
+
     async def test_wrong_tenant_row_is_rejected_by_layer_2(self):
         """If a row for a DIFFERENT tenant ever came back (RLS misconfigured
         or bypassed), assert_tenant_scope() must catch it and fail loudly -

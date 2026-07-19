@@ -1,10 +1,16 @@
 """
 Unit tests for modules.permissions.repository.is_decision_accessible().
 
-Pure predicate, no mocking required: does decision.permission_scope
-overlap the caller's permission_scopes? Tenant boundaries are RLS's job
+Pure predicate, no mocking required: is the decision workspace-wide
+(empty permission_scope), or does its permission_scope overlap the
+caller's permission_scopes? Tenant boundaries are RLS's job
 (modules.retrieval.vector.repository) and are not re-checked here - every
 RetrievalMatch fixture below already shares one tenant_id.
+
+The empty-decision-scope-is-accessible rule is repository evidence, not a
+design choice made here - see modules.permissions.repository's module
+docstring for the citations (EventEnvelope's field description, the Gmail
+normalizer, and test_gmail.py's own assertion).
 """
 from __future__ import annotations
 
@@ -49,15 +55,24 @@ class TestMultiplePermissionScopes:
         assert is_decision_accessible(["team:engineering", "team:billing"], decision) is False
 
 
-class TestEmptyPermissionScopes:
-    def test_empty_caller_scopes_is_rejected(self):
+class TestEmptyCallerScopes:
+    def test_empty_caller_scopes_is_rejected_for_a_scoped_decision(self):
+        """A non-empty decision.permission_scope always requires a proven
+        overlap - a caller with no proven scopes can never satisfy that."""
         decision = _decision(permission_scope=["team:billing"])
         assert is_decision_accessible([], decision) is False
 
-    def test_empty_decision_scope_is_rejected(self):
-        decision = _decision(permission_scope=[])
-        assert is_decision_accessible(["team:billing"], decision) is False
 
-    def test_both_empty_is_rejected(self):
+class TestWorkspaceWideDecisions:
+    """An empty decision.permission_scope is workspace-wide (repository
+    evidence: EventEnvelope's field description, the Gmail normalizer,
+    test_gmail.py) - it is accessible to every tenant member regardless of
+    their own permission_scopes, including a caller with none at all."""
+
+    def test_empty_decision_scope_is_accessible_with_matching_caller_scopes(self):
         decision = _decision(permission_scope=[])
-        assert is_decision_accessible([], decision) is False
+        assert is_decision_accessible(["team:billing"], decision) is True
+
+    def test_empty_decision_scope_is_accessible_even_with_no_caller_scopes(self):
+        decision = _decision(permission_scope=[])
+        assert is_decision_accessible([], decision) is True
