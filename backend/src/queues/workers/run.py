@@ -17,12 +17,14 @@ log = logging.getLogger(__name__)
 
 async def start_all_workers() -> None:
     """Launch all queue workers concurrently."""
+    from queues.workers.embedding_worker import run_embedding_worker
     from queues.workers.event_worker import run_event_worker
 
     log.info("Starting all queue workers...")
     await asyncio.gather(
         run_event_worker(),
-        # Add embedding_worker, digest_worker here as they are built
+        run_embedding_worker(),
+        # Add digest_worker here once it is built
     )
 
 

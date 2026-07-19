@@ -5,6 +5,7 @@ All modules that need to enqueue or consume messages must import from here.
 Do NOT instantiate a pgmq connection anywhere else in src/.
 """
 from __future__ import annotations
+import json
 import asyncpg
 from queues.pgmq.queues import QueueName
 
@@ -16,10 +17,18 @@ class PgmqClient:
         self._pool = pool
 
     async def send(self, queue: QueueName, message: dict) -> int:
-        """Enqueue a message. Returns the message ID."""
+        """Enqueue a message. Returns the message ID.
+
+        asyncpg has no built-in dict -> jsonb codec, so binding a raw dict to
+        the $2::jsonb parameter fails client-side with "invalid input for
+        query argument $2 (expected str, got dict)" before the query ever
+        reaches Postgres (confirmed independently by
+        backend/scripts/test_pgmq_connection.py, which already works around
+        this the same way). json.dumps() it first.
+        """
         async with self._pool.acquire() as conn:
             row = await conn.fetchrow(
-                "SELECT pgmq.send($1, $2::jsonb)", queue.value, message
+                "SELECT pgmq.send($1, $2::jsonb)", queue.value, json.dumps(message)
             )
             return row[0]
 
