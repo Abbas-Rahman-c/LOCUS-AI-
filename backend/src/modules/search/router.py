@@ -1,0 +1,66 @@
+"""
+Locus AI — Production Search API (Phase 2).
+
+POST /search: authenticated tenant-scoped vector retrieval -> permission
+filter -> context builder -> Claude answer -> answer + source citations.
+Single-turn only: no conversation memory, no streaming, no agents, no
+hybrid search, no reranking.
+
+Uses the same mandatory Depends(get_current_tenant) every other protected
+route uses (decisions/router.py) - never
+retrieval/router.py::get_current_tenant_optional's client-supplied-
+tenant_id fallback. tenant_id is taken exclusively from the authenticated
+TenantContext; the request body carries only search inputs.
+"""
+from __future__ import annotations
+
+import logging
+
+from fastapi import APIRouter, Depends, HTTPException, status
+
+from app.dependencies import TenantContext, get_current_tenant
+from common.config.voyage_config import VoyageConfigError
+from database.pool import get_db_pool
+from modules.ai.embeddings.provider import VoyageEmbeddingError, VoyageResponseValidationError
+from modules.answering.provider import AnswerAPIError, AnswerResponseValidationError
+from modules.search.schemas import SearchRequest, SearchResponse
+from modules.search.service import search
+
+log = logging.getLogger(__name__)
+
+router = APIRouter(tags=["search"])
+
+
+@router.post("/search", response_model=SearchResponse)
+async def search_endpoint(
+    request: SearchRequest,
+    ctx: TenantContext = Depends(get_current_tenant),
+) -> SearchResponse:
+    """Production question -> grounded answer + citations endpoint."""
+    pool = get_db_pool()
+    try:
+        return await search(
+            pool,
+            ctx.tenant_id,
+            request.question,
+            request.permission_scopes,
+            request.top_k,
+        )
+    except VoyageConfigError as exc:
+        log.error("Voyage configuration error during /search: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Voyage configuration error",
+        ) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+    except (VoyageEmbeddingError, VoyageResponseValidationError) as exc:
+        log.error("Query embedding failure during /search: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY, detail="Query embedding failed"
+        ) from exc
+    except (AnswerAPIError, AnswerResponseValidationError) as exc:
+        log.error("Claude answer failure during /search: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY, detail="Answer generation failed"
+        ) from exc
