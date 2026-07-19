@@ -1,0 +1,41 @@
+{
+  "_purpose": "Reference template for what a real Slack ingestion event looks like end to end -- raw provider payload, then the canonical EventEnvelope it normalizes into (see modules/ingestion/envelope/schemas.py), then the decision record a golden-set example is built from. Golden dataset scenario packs (src/tests/fixtures/scenario_packs.json) currently use synthetic raw_transcript text and placeholder source_permalink values (e.g. https://example-slack.internal/...); this template exists so those synthetic examples can be authored/checked against what a real Slack payload and permalink actually look like, instead of an arbitrary guess.",
+
+  "raw_provider_payload": {
+    "_comment": "Slack Events API 'message' event shape (conversations.history / event subscription), trimmed to the fields Locus actually uses.",
+    "type": "message",
+    "channel": "C0912PRICING",
+    "user": "U03PRIYA",
+    "text": "ok let's do that, going with 3 tiers -- Free / Pro / Enterprise, effective next pricing page update",
+    "ts": "1752781200.000200",
+    "thread_ts": "1752780600.000100",
+    "team": "T02LOCUSAI"
+  },
+
+  "normalized_event_envelope": {
+    "_comment": "What normalizer.py should produce from the payload above, matching modules/ingestion/envelope/schemas.py::EventEnvelope exactly.",
+    "tenant_id": "20f0a8ca-afad-5b50-bdd6-c794c0199862",
+    "source": "slack",
+    "source_id": "C0912PRICING-1752781200.000200",
+    "actor": "U03PRIYA",
+    "thread_ref": "C0912PRICING-1752780600.000100",
+    "permission_scope": "C0912PRICING",
+    "raw_content": "ok let's do that, going with 3 tiers -- Free / Pro / Enterprise, effective next pricing page update",
+    "received_at": "2026-07-17T18:00:00Z"
+  },
+
+  "real_permalink_format": {
+    "_comment": "Slack's actual chat.getPermalink format -- what source_permalink should look like once ingestion is real, replacing the golden set's https://example-slack.internal/... placeholders.",
+    "pattern": "https://<workspace>.slack.com/archives/<channel_id>/p<ts_no_dot>",
+    "example": "https://locusai.slack.com/archives/C0912PRICING/p1752781200000200"
+  },
+
+  "resulting_decision_record": {
+    "_comment": "What this thread becomes downstream (matches sp-001 in scenario_packs.json) -- shown here so it's traceable back to a plausible real Slack thread, not just an assertion.",
+    "decision_id": "17f4533f-7a50-5081-aa78-bd2838b681bc",
+    "tenant_id": "20f0a8ca-afad-5b50-bdd6-c794c0199862",
+    "decision_statement": "Move from 5 pricing tiers to a simplified 3-tier structure: Free, Pro, Enterprise.",
+    "rationale": "7 of the last 12 lost deals cited tier confusion; simplifying should speed the sales cycle.",
+    "source_permalink": "https://locusai.slack.com/archives/C0912PRICING/p1752781200000200"
+  }
+}

@@ -1,0 +1,652 @@
+{
+  "scenario_packs": [
+    {
+      "id": "sp-001",
+      "tenant_id": "20f0a8ca-afad-5b50-bdd6-c794c0199862",
+      "source": "slack",
+      "domain": "pricing_tiers",
+      "raw_transcript": "Priya: ok so the 5-tier pricing doc -- sales says nobody understands the difference between Starter and Growth on the call, deals are stalling in the pricing conversation\nSam: yeah I pulled the last 12 lost deals, 7 of them mention confusion about tiers explicitly\nPriya: what if we just collapse it to 3: Free, Pro, Enterprise\nSam: I think that works, we lose some of the granularity but the sales cycle speed is worth it\nPriya: ok let's do that, going with 3 tiers -- Free / Pro / Enterprise, effective next pricing page update",
+      "decisions": [
+        {
+          "decision_id": "17f4533f-7a50-5081-aa78-bd2838b681bc",
+          "tenant_id": "20f0a8ca-afad-5b50-bdd6-c794c0199862",
+          "record_type": "decision",
+          "status": "decided",
+          "decision_statement": "Move from 5 pricing tiers to a simplified 3-tier structure: Free, Pro, Enterprise.",
+          "rationale": "7 of the last 12 lost deals cited tier confusion; simplifying should speed the sales cycle.",
+          "source_permalink": "https://example-slack.internal/pricing_tiers/aurora",
+          "distractor_type": "none"
+        },
+        {
+          "decision_id": "4b8d1cb9-f88d-5dc7-be65-bc677ff0de09",
+          "tenant_id": "20f0a8ca-afad-5b50-bdd6-c794c0199862",
+          "record_type": "decision",
+          "status": "superseded",
+          "decision_statement": "Launch with 5 pricing tiers: Free, Starter, Growth, Business, Enterprise.",
+          "rationale": "Original plan to capture more price points across customer segments.",
+          "source_permalink": "https://example-slack.internal/pricing_tiers/aurora-v1",
+          "distractor_type": "superseded"
+        }
+      ]
+    },
+    {
+      "id": "sp-002",
+      "tenant_id": "ec14b5fc-4191-5d4a-af46-c1a5099a3db4",
+      "source": "slack",
+      "domain": "pricing_tiers",
+      "raw_transcript": "Diego: ok so the 5-tier pricing doc -- sales says nobody understands the difference between Starter and Growth on the call, deals are stalling in the pricing conversation\nLena: yeah I pulled the last 12 lost deals, 7 of them mention confusion about tiers explicitly\nDiego: what if we just collapse it to 3: Free, Pro, Enterprise\nLena: I think that works, we lose some of the granularity but the sales cycle speed is worth it\nDiego: ok let's do that, going with 3 tiers -- Free / Pro / Enterprise, effective next pricing page update",
+      "decisions": [
+        {
+          "decision_id": "1427e05d-9454-5d1d-a602-967ce4f44e8d",
+          "tenant_id": "ec14b5fc-4191-5d4a-af46-c1a5099a3db4",
+          "record_type": "decision",
+          "status": "decided",
+          "decision_statement": "Move from 5 pricing tiers to a simplified 3-tier structure: Free, Pro, Enterprise.",
+          "rationale": "7 of the last 12 lost deals cited tier confusion; simplifying should speed the sales cycle.",
+          "source_permalink": "https://example-slack.internal/pricing_tiers/bramble",
+          "distractor_type": "none"
+        },
+        {
+          "decision_id": "24172dc8-f418-584e-bd24-b814d8a59dc0",
+          "tenant_id": "ec14b5fc-4191-5d4a-af46-c1a5099a3db4",
+          "record_type": "decision",
+          "status": "superseded",
+          "decision_statement": "Launch with 5 pricing tiers: Free, Starter, Growth, Business, Enterprise.",
+          "rationale": "Original plan to capture more price points across customer segments.",
+          "source_permalink": "https://example-slack.internal/pricing_tiers/bramble-v1",
+          "distractor_type": "superseded"
+        }
+      ]
+    },
+    {
+      "id": "sp-003",
+      "tenant_id": "ec14b5fc-4191-5d4a-af46-c1a5099a3db4",
+      "source": "slack",
+      "domain": "vendor_bgcheck",
+      "raw_transcript": "Lena: we evaluated Checkr and Sterling for background checks this week\nDiego: Checkr's API turnaround was under 24h in our test, Sterling was closer to 3 days\nLena: cost is similar, but the turnaround difference matters for our hiring timeline\nDiego: agreed, let's go with Checkr\nLena: locking that in, Checkr it is",
+      "decisions": [
+        {
+          "decision_id": "d3d1754f-8389-5828-97a4-7273bf67dc1a",
+          "tenant_id": "ec14b5fc-4191-5d4a-af46-c1a5099a3db4",
+          "record_type": "decision",
+          "status": "decided",
+          "decision_statement": "Selected Checkr as the background check vendor.",
+          "rationale": "Checkr's under-24h turnaround beat Sterling's ~3 days; cost was comparable.",
+          "source_permalink": "https://example-slack.internal/vendor_bgcheck/bramble",
+          "distractor_type": "none"
+        }
+      ]
+    },
+    {
+      "id": "sp-004",
+      "tenant_id": "d00712fa-3af1-5e17-ad55-729d7e2a78c4",
+      "source": "slack",
+      "domain": "vendor_bgcheck",
+      "raw_transcript": "Farah: we evaluated Checkr and Sterling for background checks this week\nNoah: Checkr's API turnaround was under 24h in our test, Sterling was closer to 3 days\nFarah: cost is similar, but the turnaround difference matters for our hiring timeline\nNoah: agreed, let's go with Checkr\nFarah: locking that in, Checkr it is",
+      "decisions": [
+        {
+          "decision_id": "f5c4b9c4-bf19-55e0-8ef0-b182bdcad28b",
+          "tenant_id": "d00712fa-3af1-5e17-ad55-729d7e2a78c4",
+          "record_type": "decision",
+          "status": "decided",
+          "decision_statement": "Selected Checkr as the background check vendor.",
+          "rationale": "Checkr's under-24h turnaround beat Sterling's ~3 days; cost was comparable.",
+          "source_permalink": "https://example-slack.internal/vendor_bgcheck/cobalt",
+          "distractor_type": "none"
+        }
+      ]
+    },
+    {
+      "id": "sp-005",
+      "tenant_id": "20f0a8ca-afad-5b50-bdd6-c794c0199862",
+      "source": "notion",
+      "domain": "oncall_rotation",
+      "raw_transcript": "## Q1 Incident Review -- On-call follow-up\n\nSummary: the March outage sat unacknowledged for 40 minutes because one engineer was the sole on-call and was asleep. Action: move to a weekly rotation across the backend team, with a designated secondary on-call for escalation if the primary doesn't ack within 10 minutes.\n\nOwner: Priya. Status: adopted starting next sprint.",
+      "decisions": [
+        {
+          "decision_id": "d58f8310-71d8-5f18-b82a-50bfb616a432",
+          "tenant_id": "20f0a8ca-afad-5b50-bdd6-c794c0199862",
+          "record_type": "decision",
+          "status": "decided",
+          "decision_statement": "Adopt a weekly on-call rotation across the backend team with a secondary escalation on-call.",
+          "rationale": "The March outage went unacknowledged 40 minutes under a single on-call; a secondary catches missed acks.",
+          "source_permalink": "https://example-notion.internal/oncall_rotation/aurora",
+          "distractor_type": "none"
+        }
+      ]
+    },
+    {
+      "id": "sp-006",
+      "tenant_id": "bec5ecdd-2246-58eb-a636-b794bb509aa8",
+      "source": "notion",
+      "domain": "oncall_rotation",
+      "raw_transcript": "## Q1 Incident Review -- On-call follow-up\n\nSummary: the March outage sat unacknowledged for 40 minutes because one engineer was the sole on-call and was asleep. Action: move to a weekly rotation across the backend team, with a designated secondary on-call for escalation if the primary doesn't ack within 10 minutes.\n\nOwner: Kai. Status: adopted starting next sprint.",
+      "decisions": [
+        {
+          "decision_id": "259a5e95-63c4-57f9-8cbb-8950c68d28e5",
+          "tenant_id": "bec5ecdd-2246-58eb-a636-b794bb509aa8",
+          "record_type": "decision",
+          "status": "decided",
+          "decision_statement": "Adopt a weekly on-call rotation across the backend team with a secondary escalation on-call.",
+          "rationale": "The March outage went unacknowledged 40 minutes under a single on-call; a secondary catches missed acks.",
+          "source_permalink": "https://example-notion.internal/oncall_rotation/driftwood",
+          "distractor_type": "none"
+        }
+      ]
+    },
+    {
+      "id": "sp-007",
+      "tenant_id": "d00712fa-3af1-5e17-ad55-729d7e2a78c4",
+      "source": "slack",
+      "domain": "deploy_freeze",
+      "raw_transcript": "Noah: we had 2 bad Friday deploys in a row cause weekend incidents\nFarah: what if we just freeze deploys 48h before any tagged release\nNoah: +1, and no exceptions without a director sign-off\nFarah: works for me, writing it up as policy",
+      "decisions": [
+        {
+          "decision_id": "7544462a-8fec-59e2-8059-122da7473a16",
+          "tenant_id": "d00712fa-3af1-5e17-ad55-729d7e2a78c4",
+          "record_type": "decision",
+          "status": "decided",
+          "decision_statement": "Enforce a 48-hour deploy freeze window before any tagged release.",
+          "rationale": "Two consecutive Friday deploys caused weekend incidents; exceptions require director sign-off.",
+          "source_permalink": "https://example-slack.internal/deploy_freeze/cobalt",
+          "distractor_type": "none"
+        }
+      ]
+    },
+    {
+      "id": "sp-008",
+      "tenant_id": "bec5ecdd-2246-58eb-a636-b794bb509aa8",
+      "source": "slack",
+      "domain": "deploy_freeze",
+      "raw_transcript": "Kai: we had 2 bad Friday deploys in a row cause weekend incidents\nRenee: what if we just freeze deploys 48h before any tagged release\nKai: +1, and no exceptions without a director sign-off\nRenee: works for me, writing it up as policy",
+      "decisions": [
+        {
+          "decision_id": "28fe5907-827f-5d88-bfb3-100ce4e82245",
+          "tenant_id": "bec5ecdd-2246-58eb-a636-b794bb509aa8",
+          "record_type": "decision",
+          "status": "decided",
+          "decision_statement": "Enforce a 48-hour deploy freeze window before any tagged release.",
+          "rationale": "Two consecutive Friday deploys caused weekend incidents; exceptions require director sign-off.",
+          "source_permalink": "https://example-slack.internal/deploy_freeze/driftwood",
+          "distractor_type": "none"
+        }
+      ]
+    },
+    {
+      "id": "sp-009",
+      "tenant_id": "20f0a8ca-afad-5b50-bdd6-c794c0199862",
+      "source": "slack",
+      "domain": "tech_stack_db",
+      "raw_transcript": "Sam: for the warehouse arm firmware backend, I did a spike comparing Postgres vs Mongo\nPriya: what's the deciding factor\nSam: we need real transactional guarantees across a few related tables, Mongo's multi-doc transactions felt bolted-on for our access patterns\nPriya: ok, Postgres then, let's not relitigate this every quarter\nSam: going with Postgres as primary datastore",
+      "decisions": [
+        {
+          "decision_id": "f0ab8759-3118-5562-a139-5c97c355a7b3",
+          "tenant_id": "20f0a8ca-afad-5b50-bdd6-c794c0199862",
+          "record_type": "decision",
+          "status": "decided",
+          "decision_statement": "Use Postgres as the primary datastore for the new service.",
+          "rationale": "Needed real multi-table transactional guarantees; Mongo's transaction model was a weaker fit.",
+          "source_permalink": "https://example-slack.internal/tech_stack_db/aurora",
+          "distractor_type": "none"
+        },
+        {
+          "decision_id": "6106a591-1393-51fb-9610-af744f072135",
+          "tenant_id": "20f0a8ca-afad-5b50-bdd6-c794c0199862",
+          "record_type": "decision",
+          "status": "proposed",
+          "decision_statement": "Considered Mongo as the datastore for the new service.",
+          "rationale": "Rejected -- multi-document transaction support felt bolted-on for this access pattern.",
+          "source_permalink": "https://example-slack.internal/tech_stack_db/aurora-alt",
+          "distractor_type": "rejected_alternative"
+        }
+      ]
+    },
+    {
+      "id": "sp-010",
+      "tenant_id": "d00712fa-3af1-5e17-ad55-729d7e2a78c4",
+      "source": "slack",
+      "domain": "tech_stack_db",
+      "raw_transcript": "Farah: for the reporting service backend, I did a spike comparing Postgres vs Mongo\nNoah: what's the deciding factor\nFarah: we need real transactional guarantees across a few related tables, Mongo's multi-doc transactions felt bolted-on for our access patterns\nNoah: ok, Postgres then, let's not relitigate this every quarter\nFarah: going with Postgres as primary datastore",
+      "decisions": [
+        {
+          "decision_id": "caa44e05-e032-5baf-979c-d90579c1b44e",
+          "tenant_id": "d00712fa-3af1-5e17-ad55-729d7e2a78c4",
+          "record_type": "decision",
+          "status": "decided",
+          "decision_statement": "Use Postgres as the primary datastore for the new service.",
+          "rationale": "Needed real multi-table transactional guarantees; Mongo's transaction model was a weaker fit.",
+          "source_permalink": "https://example-slack.internal/tech_stack_db/cobalt",
+          "distractor_type": "none"
+        },
+        {
+          "decision_id": "51daed2e-f872-52c0-8c17-edd37fddd65b",
+          "tenant_id": "d00712fa-3af1-5e17-ad55-729d7e2a78c4",
+          "record_type": "decision",
+          "status": "proposed",
+          "decision_statement": "Considered Mongo as the datastore for the new service.",
+          "rationale": "Rejected -- multi-document transaction support felt bolted-on for this access pattern.",
+          "source_permalink": "https://example-slack.internal/tech_stack_db/cobalt-alt",
+          "distractor_type": "rejected_alternative"
+        }
+      ]
+    },
+    {
+      "id": "sp-011",
+      "tenant_id": "20f0a8ca-afad-5b50-bdd6-c794c0199862",
+      "source": "notion",
+      "domain": "data_retention",
+      "raw_transcript": "## Data Retention -- Raw Ingested Events\n\nDecision: raw events (pre-chunking, pre-extraction) are retained for 30 days then purged.\nRationale: balances being able to debug/replay a pipeline issue against storage cost and data minimization -- 30 days covers essentially all support escalations we've seen historically.",
+      "decisions": [
+        {
+          "decision_id": "8250bd78-95f9-5b8f-ba08-5575d1043243",
+          "tenant_id": "20f0a8ca-afad-5b50-bdd6-c794c0199862",
+          "record_type": "decision",
+          "status": "decided",
+          "decision_statement": "Retain raw ingested events for 30 days before deletion.",
+          "rationale": "Balances debugging/replay needs against storage cost and data minimization.",
+          "source_permalink": "https://example-notion.internal/data_retention/aurora",
+          "distractor_type": "none"
+        }
+      ]
+    },
+    {
+      "id": "sp-012",
+      "tenant_id": "ec14b5fc-4191-5d4a-af46-c1a5099a3db4",
+      "source": "notion",
+      "domain": "data_retention",
+      "raw_transcript": "## Data Retention -- Raw Ingested Events\n\nDecision: raw events (pre-chunking, pre-extraction) are retained for 30 days then purged.\nRationale: balances being able to debug/replay a pipeline issue against storage cost and data minimization -- 30 days covers essentially all support escalations we've seen historically.",
+      "decisions": [
+        {
+          "decision_id": "41ef0a6e-ff8a-51ce-a8a6-40600974bada",
+          "tenant_id": "ec14b5fc-4191-5d4a-af46-c1a5099a3db4",
+          "record_type": "decision",
+          "status": "decided",
+          "decision_statement": "Retain raw ingested events for 30 days before deletion.",
+          "rationale": "Balances debugging/replay needs against storage cost and data minimization.",
+          "source_permalink": "https://example-notion.internal/data_retention/bramble",
+          "distractor_type": "none"
+        }
+      ]
+    },
+    {
+      "id": "sp-013",
+      "tenant_id": "20f0a8ca-afad-5b50-bdd6-c794c0199862",
+      "source": "notion",
+      "domain": "logging_retention",
+      "raw_transcript": "## Application Log Retention\n\nDecision: application logs (not raw ingested events -- separate system) are retained for 90 days in the hot tier, then archived to cold storage for 1 year.\nRationale: 90 days covers our typical incident post-mortem window; cold storage covers audits.",
+      "decisions": [
+        {
+          "decision_id": "dbcd2ffb-2959-50ca-8fa0-01bb37ab3657",
+          "tenant_id": "20f0a8ca-afad-5b50-bdd6-c794c0199862",
+          "record_type": "decision",
+          "status": "decided",
+          "decision_statement": "Retain application logs for 90 days hot, then 1 year in cold storage.",
+          "rationale": "90 days covers typical post-mortem windows; cold storage covers audit needs.",
+          "source_permalink": "https://example-notion.internal/logging_retention/aurora",
+          "distractor_type": "none"
+        }
+      ]
+    },
+    {
+      "id": "sp-014",
+      "tenant_id": "ec14b5fc-4191-5d4a-af46-c1a5099a3db4",
+      "source": "notion",
+      "domain": "logging_retention",
+      "raw_transcript": "## Application Log Retention\n\nDecision: application logs (not raw ingested events -- separate system) are retained for 90 days in the hot tier, then archived to cold storage for 1 year.\nRationale: 90 days covers our typical incident post-mortem window; cold storage covers audits.",
+      "decisions": [
+        {
+          "decision_id": "64f34bc7-0998-5912-be7a-f31b637eb11c",
+          "tenant_id": "ec14b5fc-4191-5d4a-af46-c1a5099a3db4",
+          "record_type": "decision",
+          "status": "decided",
+          "decision_statement": "Retain application logs for 90 days hot, then 1 year in cold storage.",
+          "rationale": "90 days covers typical post-mortem windows; cold storage covers audit needs.",
+          "source_permalink": "https://example-notion.internal/logging_retention/bramble",
+          "distractor_type": "none"
+        }
+      ]
+    },
+    {
+      "id": "sp-015",
+      "tenant_id": "ec14b5fc-4191-5d4a-af46-c1a5099a3db4",
+      "source": "gmail",
+      "domain": "remote_work_policy",
+      "raw_transcript": "Subject: Re: Remote work policy finalization\n\nDiego: Following up from the leadership sync -- we're going with fully remote-first, no mandatory office days, but each team can set their own optional in-person cadence.\nLena: Agreed, that matches what we told candidates during recruiting this quarter. Finalizing the handbook language today.",
+      "decisions": [
+        {
+          "decision_id": "391079c8-1efe-5d02-8632-4983dbf02f74",
+          "tenant_id": "ec14b5fc-4191-5d4a-af46-c1a5099a3db4",
+          "record_type": "decision",
+          "status": "decided",
+          "decision_statement": "Adopt a remote-first policy with no mandatory office days; teams may set optional in-person cadences.",
+          "rationale": "Matches recruiting commitments made to candidates this quarter.",
+          "source_permalink": "https://example-gmail.internal/remote_work_policy/bramble",
+          "distractor_type": "none"
+        }
+      ]
+    },
+    {
+      "id": "sp-016",
+      "tenant_id": "bec5ecdd-2246-58eb-a636-b794bb509aa8",
+      "source": "gmail",
+      "domain": "remote_work_policy",
+      "raw_transcript": "Subject: Re: Remote work policy finalization\n\nKai: Following up from the leadership sync -- we're going with fully remote-first, no mandatory office days, but each team can set their own optional in-person cadence.\nRenee: Agreed, that matches what we told candidates during recruiting this quarter. Finalizing the handbook language today.",
+      "decisions": [
+        {
+          "decision_id": "99eca7f8-8604-5674-9560-685a52136622",
+          "tenant_id": "bec5ecdd-2246-58eb-a636-b794bb509aa8",
+          "record_type": "decision",
+          "status": "decided",
+          "decision_statement": "Adopt a remote-first policy with no mandatory office days; teams may set optional in-person cadences.",
+          "rationale": "Matches recruiting commitments made to candidates this quarter.",
+          "source_permalink": "https://example-gmail.internal/remote_work_policy/driftwood",
+          "distractor_type": "none"
+        }
+      ]
+    },
+    {
+      "id": "sp-017",
+      "tenant_id": "d00712fa-3af1-5e17-ad55-729d7e2a78c4",
+      "source": "gmail",
+      "domain": "hiring_bar_raiser",
+      "raw_transcript": "Subject: Bar raiser process for engineering hires\n\nFarah: proposing every engineering offer needs sign-off from an independent bar-raiser outside the hiring team, similar to what worked at my last company.\nNoah: makes sense given the two mis-hires last quarter, let's adopt it starting with the next req.",
+      "decisions": [
+        {
+          "decision_id": "28ba5e8e-2086-5827-88b4-12a44e816714",
+          "tenant_id": "d00712fa-3af1-5e17-ad55-729d7e2a78c4",
+          "record_type": "decision",
+          "status": "decided",
+          "decision_statement": "Require independent bar-raiser sign-off, outside the hiring team, on every engineering offer.",
+          "rationale": "Introduced after two mis-hires last quarter.",
+          "source_permalink": "https://example-gmail.internal/hiring_bar_raiser/cobalt",
+          "distractor_type": "none"
+        }
+      ]
+    },
+    {
+      "id": "sp-018",
+      "tenant_id": "20f0a8ca-afad-5b50-bdd6-c794c0199862",
+      "source": "gmail",
+      "domain": "hiring_bar_raiser",
+      "raw_transcript": "Subject: Bar raiser process for engineering hires\n\nSam: proposing every engineering offer needs sign-off from an independent bar-raiser outside the hiring team, similar to what worked at my last company.\nPriya: makes sense given the two mis-hires last quarter, let's adopt it starting with the next req.",
+      "decisions": [
+        {
+          "decision_id": "cdd6a9ee-39db-52fc-b39c-9af1b627d7b4",
+          "tenant_id": "20f0a8ca-afad-5b50-bdd6-c794c0199862",
+          "record_type": "decision",
+          "status": "decided",
+          "decision_statement": "Require independent bar-raiser sign-off, outside the hiring team, on every engineering offer.",
+          "rationale": "Introduced after two mis-hires last quarter.",
+          "source_permalink": "https://example-gmail.internal/hiring_bar_raiser/aurora",
+          "distractor_type": "none"
+        }
+      ]
+    },
+    {
+      "id": "sp-019",
+      "tenant_id": "bec5ecdd-2246-58eb-a636-b794bb509aa8",
+      "source": "notion",
+      "domain": "incident_postmortem_process",
+      "raw_transcript": "## Postmortem Process\n\nDecision: every SEV1/SEV2 incident gets a blameless postmortem doc within 3 business days, reviewed in the weekly eng sync. Action items get owners and due dates tracked in the same doc.\nRationale: several SEV2s in Q4 had no follow-up documented and recurred within weeks.",
+      "decisions": [
+        {
+          "decision_id": "fcfcef2d-ebae-589f-aef3-3faff4a49441",
+          "tenant_id": "bec5ecdd-2246-58eb-a636-b794bb509aa8",
+          "record_type": "decision",
+          "status": "decided",
+          "decision_statement": "Require a blameless postmortem within 3 business days for every SEV1/SEV2 incident.",
+          "rationale": "Several undocumented Q4 SEV2s recurred within weeks with no follow-up.",
+          "source_permalink": "https://example-notion.internal/incident_postmortem_process/driftwood",
+          "distractor_type": "none"
+        }
+      ]
+    },
+    {
+      "id": "sp-020",
+      "tenant_id": "d00712fa-3af1-5e17-ad55-729d7e2a78c4",
+      "source": "notion",
+      "domain": "incident_postmortem_process",
+      "raw_transcript": "## Postmortem Process\n\nDecision: every SEV1/SEV2 incident gets a blameless postmortem doc within 3 business days, reviewed in the weekly eng sync. Action items get owners and due dates tracked in the same doc.\nRationale: several SEV2s in Q4 had no follow-up documented and recurred within weeks.",
+      "decisions": [
+        {
+          "decision_id": "8eabfe66-7818-5b2c-bbc4-8f68d912b418",
+          "tenant_id": "d00712fa-3af1-5e17-ad55-729d7e2a78c4",
+          "record_type": "decision",
+          "status": "decided",
+          "decision_statement": "Require a blameless postmortem within 3 business days for every SEV1/SEV2 incident.",
+          "rationale": "Several undocumented Q4 SEV2s recurred within weeks with no follow-up.",
+          "source_permalink": "https://example-notion.internal/incident_postmortem_process/cobalt",
+          "distractor_type": "none"
+        }
+      ]
+    },
+    {
+      "id": "sp-021",
+      "tenant_id": "20f0a8ca-afad-5b50-bdd6-c794c0199862",
+      "source": "slack",
+      "domain": "feature_flag_rollout",
+      "raw_transcript": "Priya: new features ship behind a flag now, 5% -> 25% -> 100% over a week unless something breaks\nSam: what's the rollback trigger\nPriya: error rate over 2x baseline for 10 min auto-pages the on-call and we roll back the flag\nSam: love it, let's make that the default process for all new features",
+      "decisions": [
+        {
+          "decision_id": "7a434f0f-b4f0-5c2d-9d87-2be8a52609ec",
+          "tenant_id": "20f0a8ca-afad-5b50-bdd6-c794c0199862",
+          "record_type": "decision",
+          "status": "decided",
+          "decision_statement": "Roll out new features behind flags at 5% -> 25% -> 100% over a week, with auto-rollback on 2x error rate for 10 minutes.",
+          "rationale": "Gives a controlled rollout with an automatic, objective rollback trigger.",
+          "source_permalink": "https://example-slack.internal/feature_flag_rollout/aurora",
+          "distractor_type": "none"
+        }
+      ]
+    },
+    {
+      "id": "sp-022",
+      "tenant_id": "bec5ecdd-2246-58eb-a636-b794bb509aa8",
+      "source": "slack",
+      "domain": "feature_flag_rollout",
+      "raw_transcript": "Kai: new features ship behind a flag now, 5% -> 25% -> 100% over a week unless something breaks\nRenee: what's the rollback trigger\nKai: error rate over 2x baseline for 10 min auto-pages the on-call and we roll back the flag\nRenee: love it, let's make that the default process for all new features",
+      "decisions": [
+        {
+          "decision_id": "51cf5869-1982-5acb-a0b5-daf87031a1d2",
+          "tenant_id": "bec5ecdd-2246-58eb-a636-b794bb509aa8",
+          "record_type": "decision",
+          "status": "decided",
+          "decision_statement": "Roll out new features behind flags at 5% -> 25% -> 100% over a week, with auto-rollback on 2x error rate for 10 minutes.",
+          "rationale": "Gives a controlled rollout with an automatic, objective rollback trigger.",
+          "source_permalink": "https://example-slack.internal/feature_flag_rollout/driftwood",
+          "distractor_type": "none"
+        }
+      ]
+    },
+    {
+      "id": "sp-023",
+      "tenant_id": "ec14b5fc-4191-5d4a-af46-c1a5099a3db4",
+      "source": "gmail",
+      "domain": "customer_refund_policy",
+      "raw_transcript": "Subject: Refund policy for support team\n\nLena: support needs clear authority here -- proposing full refunds within 14 days no questions asked, and support leads can approve up to $500 beyond that without escalating.\nDiego: yes, let's lock that in so support stops pinging me for every case.",
+      "decisions": [
+        {
+          "decision_id": "4682b2e5-39ac-5e04-9c75-1025da238235",
+          "tenant_id": "ec14b5fc-4191-5d4a-af46-c1a5099a3db4",
+          "record_type": "decision",
+          "status": "decided",
+          "decision_statement": "Support may issue full refunds within 14 days with no questions asked; support leads can approve up to $500 beyond that without escalation.",
+          "rationale": "Reduces unnecessary escalations to leadership for routine refund cases.",
+          "source_permalink": "https://example-gmail.internal/customer_refund_policy/bramble",
+          "distractor_type": "none"
+        }
+      ]
+    },
+    {
+      "id": "sp-024",
+      "tenant_id": "d00712fa-3af1-5e17-ad55-729d7e2a78c4",
+      "source": "gmail",
+      "domain": "customer_refund_policy",
+      "raw_transcript": "Subject: Refund policy for support team\n\nFarah: support needs clear authority here -- proposing full refunds within 14 days no questions asked, and support leads can approve up to $500 beyond that without escalating.\nNoah: yes, let's lock that in so support stops pinging me for every case.",
+      "decisions": [
+        {
+          "decision_id": "11c39d22-7c20-5d25-a8be-f90fb5084b22",
+          "tenant_id": "d00712fa-3af1-5e17-ad55-729d7e2a78c4",
+          "record_type": "decision",
+          "status": "decided",
+          "decision_statement": "Support may issue full refunds within 14 days with no questions asked; support leads can approve up to $500 beyond that without escalation.",
+          "rationale": "Reduces unnecessary escalations to leadership for routine refund cases.",
+          "source_permalink": "https://example-gmail.internal/customer_refund_policy/cobalt",
+          "distractor_type": "none"
+        }
+      ]
+    },
+    {
+      "id": "sp-025",
+      "tenant_id": "ec14b5fc-4191-5d4a-af46-c1a5099a3db4",
+      "source": "slack",
+      "domain": "marketing_campaign_budget",
+      "raw_transcript": "Diego: Q2 campaign budget -- last quarter's paid social spend had a rough CAC, want to shift more toward the content/SEO side\nLena: agreed, proposing 60/40 split content vs paid, flipped from last quarter's 30/70\nDiego: let's do it, locking 60% content / 40% paid for Q2",
+      "decisions": [
+        {
+          "decision_id": "82257dd0-6873-51af-8499-88006eb7a1a7",
+          "tenant_id": "ec14b5fc-4191-5d4a-af46-c1a5099a3db4",
+          "record_type": "decision",
+          "status": "decided",
+          "decision_statement": "Shift Q2 marketing budget split to 60% content/SEO, 40% paid social.",
+          "rationale": "Last quarter's paid social spend had a weak CAC; content channel performed better per dollar.",
+          "source_permalink": "https://example-slack.internal/marketing_campaign_budget/bramble",
+          "distractor_type": "none"
+        }
+      ]
+    },
+    {
+      "id": "sp-026",
+      "tenant_id": "bec5ecdd-2246-58eb-a636-b794bb509aa8",
+      "source": "slack",
+      "domain": "marketing_campaign_budget",
+      "raw_transcript": "Kai: Q2 campaign budget -- last quarter's paid social spend had a rough CAC, want to shift more toward the content/SEO side\nRenee: agreed, proposing 60/40 split content vs paid, flipped from last quarter's 30/70\nKai: let's do it, locking 60% content / 40% paid for Q2",
+      "decisions": [
+        {
+          "decision_id": "201d15c1-9e60-5d6b-9d3f-8aa1e5ab4ef4",
+          "tenant_id": "bec5ecdd-2246-58eb-a636-b794bb509aa8",
+          "record_type": "decision",
+          "status": "decided",
+          "decision_statement": "Shift Q2 marketing budget split to 60% content/SEO, 40% paid social.",
+          "rationale": "Last quarter's paid social spend had a weak CAC; content channel performed better per dollar.",
+          "source_permalink": "https://example-slack.internal/marketing_campaign_budget/driftwood",
+          "distractor_type": "none"
+        }
+      ]
+    },
+    {
+      "id": "sp-027",
+      "tenant_id": "d00712fa-3af1-5e17-ad55-729d7e2a78c4",
+      "source": "slack",
+      "domain": "code_review_requirement",
+      "raw_transcript": "Farah: we had a prod incident from a self-merged PR last week, no second reviewer\nNoah: let's require at least 1 approval from someone outside the PR author's immediate team for anything touching payments or auth code\nFarah: +1, everything else stays 1 approval from anyone",
+      "decisions": [
+        {
+          "decision_id": "8828e780-a0c4-5fe4-98d4-a85c70098359",
+          "tenant_id": "d00712fa-3af1-5e17-ad55-729d7e2a78c4",
+          "record_type": "decision",
+          "status": "decided",
+          "decision_statement": "Require at least one approval from outside the author's immediate team for changes to payments or auth code.",
+          "rationale": "A self-merged PR with no second reviewer caused a production incident.",
+          "source_permalink": "https://example-slack.internal/code_review_requirement/cobalt",
+          "distractor_type": "none"
+        }
+      ]
+    },
+    {
+      "id": "sp-028",
+      "tenant_id": "20f0a8ca-afad-5b50-bdd6-c794c0199862",
+      "source": "slack",
+      "domain": "code_review_requirement",
+      "raw_transcript": "Sam: we had a prod incident from a self-merged PR last week, no second reviewer\nPriya: let's require at least 1 approval from someone outside the PR author's immediate team for anything touching payments or auth code\nSam: +1, everything else stays 1 approval from anyone",
+      "decisions": [
+        {
+          "decision_id": "0757cecb-41fd-51cd-9321-56ff4a4de02c",
+          "tenant_id": "20f0a8ca-afad-5b50-bdd6-c794c0199862",
+          "record_type": "decision",
+          "status": "decided",
+          "decision_statement": "Require at least one approval from outside the author's immediate team for changes to payments or auth code.",
+          "rationale": "A self-merged PR with no second reviewer caused a production incident.",
+          "source_permalink": "https://example-slack.internal/code_review_requirement/aurora",
+          "distractor_type": "none"
+        }
+      ]
+    },
+    {
+      "id": "sp-029",
+      "tenant_id": "bec5ecdd-2246-58eb-a636-b794bb509aa8",
+      "source": "gmail",
+      "domain": "security_mfa_policy",
+      "raw_transcript": "Subject: MFA rollout decision\n\nKai: given the phishing attempt last month, proposing MFA becomes mandatory for all internal tools within 30 days, no exceptions for contractors either.\nRenee: agreed, security team will handle contractor enrollment.",
+      "decisions": [
+        {
+          "decision_id": "89c2e663-0179-5477-a077-fe057fb4d6bf",
+          "tenant_id": "bec5ecdd-2246-58eb-a636-b794bb509aa8",
+          "record_type": "decision",
+          "status": "decided",
+          "decision_statement": "Make MFA mandatory for all internal tools within 30 days, including contractors, with no exceptions.",
+          "rationale": "Prompted by a phishing attempt the prior month.",
+          "source_permalink": "https://example-gmail.internal/security_mfa_policy/driftwood",
+          "distractor_type": "none"
+        }
+      ]
+    },
+    {
+      "id": "sp-030",
+      "tenant_id": "ec14b5fc-4191-5d4a-af46-c1a5099a3db4",
+      "source": "gmail",
+      "domain": "security_mfa_policy",
+      "raw_transcript": "Subject: MFA rollout decision\n\nDiego: given the phishing attempt last month, proposing MFA becomes mandatory for all internal tools within 30 days, no exceptions for contractors either.\nLena: agreed, security team will handle contractor enrollment.",
+      "decisions": [
+        {
+          "decision_id": "6b7fb84b-71ca-5d9a-a191-1b6647fcb534",
+          "tenant_id": "ec14b5fc-4191-5d4a-af46-c1a5099a3db4",
+          "record_type": "decision",
+          "status": "decided",
+          "decision_statement": "Make MFA mandatory for all internal tools within 30 days, including contractors, with no exceptions.",
+          "rationale": "Prompted by a phishing attempt the prior month.",
+          "source_permalink": "https://example-gmail.internal/security_mfa_policy/bramble",
+          "distractor_type": "none"
+        }
+      ]
+    },
+    {
+      "id": "sp-031",
+      "tenant_id": "20f0a8ca-afad-5b50-bdd6-c794c0199862",
+      "source": "slack",
+      "domain": "meeting_cadence",
+      "raw_transcript": "Priya: the daily standup is basically a status report nobody reads, want to cut to 3x/week\nSam: fine by me, Mon/Wed/Fri, async update in the channel the other 2 days\nPriya: let's do that starting next week",
+      "decisions": [
+        {
+          "decision_id": "00e0bca4-bded-5194-9c8b-7d35585de1ec",
+          "tenant_id": "20f0a8ca-afad-5b50-bdd6-c794c0199862",
+          "record_type": "decision",
+          "status": "decided",
+          "decision_statement": "Cut daily standups to 3x/week (Mon/Wed/Fri), with async updates the other two days.",
+          "rationale": "Daily standups had become a low-value status report format.",
+          "source_permalink": "https://example-slack.internal/meeting_cadence/aurora",
+          "distractor_type": "none"
+        }
+      ]
+    },
+    {
+      "id": "sp-032",
+      "tenant_id": "d00712fa-3af1-5e17-ad55-729d7e2a78c4",
+      "source": "slack",
+      "domain": "meeting_cadence",
+      "raw_transcript": "Noah: the daily standup is basically a status report nobody reads, want to cut to 3x/week\nFarah: fine by me, Mon/Wed/Fri, async update in the channel the other 2 days\nNoah: let's do that starting next week",
+      "decisions": [
+        {
+          "decision_id": "9f520fbc-36c7-5f42-a435-a32afdf4ffcc",
+          "tenant_id": "d00712fa-3af1-5e17-ad55-729d7e2a78c4",
+          "record_type": "decision",
+          "status": "decided",
+          "decision_statement": "Cut daily standups to 3x/week (Mon/Wed/Fri), with async updates the other two days.",
+          "rationale": "Daily standups had become a low-value status report format.",
+          "source_permalink": "https://example-slack.internal/meeting_cadence/cobalt",
+          "distractor_type": "none"
+        }
+      ]
+    }
+  ]
+}

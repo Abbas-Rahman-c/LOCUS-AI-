@@ -1,0 +1,54 @@
+# Local dev stack: Postgres+pgvector (schema in docker/init-local-schema.sql,
+# see that file's header for why it's not the real Supabase migrations) plus
+# the FastAPI backend. NOT used in production -- production runs against
+# Supabase directly (backend/.env's DATABASE_URL points at Supabase, not
+# at the `db` service below).
+#
+# Usage:
+#   cp backend/.env.example backend/.env   # fill in VOYAGE_API_KEY / ANTHROPIC_API_KEY
+#   docker compose up --build
+#   # API at http://localhost:8000, docs at http://localhost:8000/docs
+#
+# Run the RAG eval against this local stack (after seeding some decisions +
+# embeddings -- see docs/rag_pipeline.md):
+#   docker compose exec backend python ../scripts/run_rag_eval.py --pipeline real
+
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: locus
+      POSTGRES_PASSWORD: locus_dev_password
+      POSTGRES_DB: locus_dev
+    ports:
+      - "5432:5432"
+    volumes:
+      - locus_pgdata:/var/lib/postgresql/data
+      - ./docker/init-local-schema.sql:/docker-entrypoint-initdb.d/init-local-schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U locus -d locus_dev"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.backend
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file:
+      - backend/.env
+    environment:
+      # Overrides backend/.env's DATABASE_URL to point at the compose `db`
+      # service instead of Supabase -- everything else (VOYAGE_API_KEY,
+      # ANTHROPIC_API_KEY, ANTHROPIC_MODEL) still comes from backend/.env.
+      DATABASE_URL: postgresql://locus:locus_dev_password@db:5432/locus_dev
+    ports:
+      - "8000:8000"
+
+volumes:
+  locus_pgdata:

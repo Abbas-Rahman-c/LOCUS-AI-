@@ -1,0 +1,50 @@
+{
+  "_purpose": "Reference template for what a real Gmail ingestion event looks like end to end -- raw provider payload, then the canonical EventEnvelope it normalizes into (see modules/ingestion/envelope/schemas.py), then the decision record a golden-set example is built from. Same purpose as slack_event_template.json: ground the golden dataset's synthetic examples against a realistic source payload instead of an arbitrary guess.",
+
+  "raw_provider_payload": {
+    "_comment": "Gmail API users.messages.get response shape, trimmed to the fields Locus actually uses. threadId groups a reply chain the same way Slack's thread_ts does.",
+    "id": "18f2a9b4c3d1e5f6",
+    "threadId": "18f2a9b4c3d1e5f6",
+    "labelIds": ["INBOX"],
+    "snippet": "Confirming: background check vendor stays as Checkr for the SOC2 renewal cycle, no change from last year's vendor review.",
+    "payload": {
+      "headers": [
+        { "name": "From", "value": "sam@locusai-example.com" },
+        { "name": "To", "value": "hr-ops@locusai-example.com" },
+        { "name": "Subject", "value": "Re: SOC2 renewal -- background check vendor" },
+        { "name": "Date", "value": "Thu, 17 Jul 2026 14:32:00 -0700" }
+      ],
+      "body": {
+        "data": "Confirming: background check vendor stays as Checkr for the SOC2 renewal cycle, no change from last year's vendor review."
+      }
+    },
+    "internalDate": "1752787920000"
+  },
+
+  "normalized_event_envelope": {
+    "_comment": "What normalizer.py should produce from the payload above, matching modules/ingestion/envelope/schemas.py::EventEnvelope exactly.",
+    "tenant_id": "20f0a8ca-afad-5b50-bdd6-c794c0199862",
+    "source": "gmail",
+    "source_id": "18f2a9b4c3d1e5f6",
+    "actor": "sam@locusai-example.com",
+    "thread_ref": "18f2a9b4c3d1e5f6",
+    "permission_scope": "hr-ops@locusai-example.com",
+    "raw_content": "Confirming: background check vendor stays as Checkr for the SOC2 renewal cycle, no change from last year's vendor review.",
+    "received_at": "2026-07-17T21:32:00Z"
+  },
+
+  "real_permalink_format": {
+    "_comment": "Gmail's actual web permalink format -- what source_permalink should look like once ingestion is real.",
+    "pattern": "https://mail.google.com/mail/u/0/#inbox/<message_id>",
+    "example": "https://mail.google.com/mail/u/0/#inbox/18f2a9b4c3d1e5f6"
+  },
+
+  "resulting_decision_record": {
+    "_comment": "Illustrative decision this thread would produce. Note this is the OPPOSITE case from the Slack template: this is exactly the kind of real decision that ge-075 (the negative/background-check example) deliberately does NOT include in its tenant's candidate pool, to test that the pipeline doesn't fabricate an answer when no matching decision exists for that specific tenant.",
+    "decision_id": "b1e2c3d4-0000-5000-9000-000000000075",
+    "tenant_id": "20f0a8ca-afad-5b50-bdd6-c794c0199862",
+    "decision_statement": "Retain Checkr as the background check vendor for the SOC2 renewal cycle.",
+    "rationale": "No change from last year's vendor review; renewal cycle does not require re-evaluating vendors.",
+    "source_permalink": "https://mail.google.com/mail/u/0/#inbox/18f2a9b4c3d1e5f6"
+  }
+}

@@ -1,0 +1,2299 @@
+{
+  "report": {
+    "pipeline_name": "MockRAGPipeline",
+    "top_k": 10,
+    "n_examples": 86,
+    "recall_at_5": 0.9324324324324325,
+    "recall_at_10": 0.9324324324324325,
+    "hit_rate_at_5": 0.9324324324324325,
+    "hit_rate_at_10": 0.9324324324324325,
+    "mrr": 0.8524774774774774,
+    "negative_hit_rate": 0.4166666666666667,
+    "groundedness": null,
+    "correctness": null,
+    "citation_precision": 0.7631578947368421,
+    "citation_recall": 0.7702702702702703,
+    "mean_retrieval_latency_ms": 0.25942387208958684,
+    "p95_retrieval_latency_ms": 0.5873130000964011,
+    "category_coverage": {
+      "single_hop": 34,
+      "paraphrase": 32,
+      "temporal": 2,
+      "multi_hop": 2,
+      "ambiguous_entity": 4,
+      "negative": 12
+    },
+    "n_errors": 0,
+    "generated_at": "2026-07-17T21:57:06.231528+00:00"
+  },
+  "examples": [
+    {
+      "example_id": "ge-001",
+      "category": "single_hop",
+      "question": "What did we decide about the pricing tiers?",
+      "recall_at_5": 1.0,
+      "recall_at_10": 1.0,
+      "hit_at_5": true,
+      "hit_at_10": true,
+      "reciprocal_rank": 0.5,
+      "negative_false_positive": null,
+      "groundedness": null,
+      "correctness": null,
+      "citation_precision": 0.0,
+      "citation_recall": 0.0,
+      "retrieval_latency_ms": 0.2307290000089779,
+      "retrieved_decision_ids": [
+        "4b8d1cb9-f88d-5dc7-be65-bc677ff0de09",
+        "17f4533f-7a50-5081-aa78-bd2838b681bc"
+      ],
+      "cited_decision_ids": [
+        "4b8d1cb9-f88d-5dc7-be65-bc677ff0de09"
+      ],
+      "answer_text": "Launch with 5 pricing tiers: Free, Starter, Growth, Business, Enterprise. Original plan to capture more price points across customer segments.",
+      "judge_rationale": null,
+      "error": null,
+      "judge_error": "judge call failed: JudgeError: Sonnet judge call failed: AuthenticationError: Unauthorized"
+    },
+    {
+      "example_id": "ge-002",
+      "category": "paraphrase",
+      "question": "How many pricing plans do we offer customers now?",
+      "recall_at_5": 1.0,
+      "recall_at_10": 1.0,
+      "hit_at_5": true,
+      "hit_at_10": true,
+      "reciprocal_rank": 0.3333333333333333,
+      "negative_false_positive": null,
+      "groundedness": null,
+      "correctness": null,
+      "citation_precision": 0.0,
+      "citation_recall": 0.0,
+      "retrieval_latency_ms": 0.14780499998323648,
+      "retrieved_decision_ids": [
+        "4b8d1cb9-f88d-5dc7-be65-bc677ff0de09",
+        "cdd6a9ee-39db-52fc-b39c-9af1b627d7b4",
+        "17f4533f-7a50-5081-aa78-bd2838b681bc"
+      ],
+      "cited_decision_ids": [
+        "4b8d1cb9-f88d-5dc7-be65-bc677ff0de09"
+      ],
+      "answer_text": "Launch with 5 pricing tiers: Free, Starter, Growth, Business, Enterprise. Original plan to capture more price points across customer segments.",
+      "judge_rationale": null,
+      "error": null,
+      "judge_error": "judge call failed: JudgeError: Sonnet judge call failed: AuthenticationError: Unauthorized"
+    },
+    {
+      "example_id": "ge-003",
+      "category": "temporal",
+      "question": "What did we originally decide about pricing tiers, before the current approach?",
+      "recall_at_5": 1.0,
+      "recall_at_10": 1.0,
+      "hit_at_5": true,
+      "hit_at_10": true,
+      "reciprocal_rank": 1.0,
+      "negative_false_positive": null,
+      "groundedness": null,
+      "correctness": null,
+      "citation_precision": 1.0,
+      "citation_recall": 1.0,
+      "retrieval_latency_ms": 0.1524440000366667,
+      "retrieved_decision_ids": [
+        "4b8d1cb9-f88d-5dc7-be65-bc677ff0de09",
+        "17f4533f-7a50-5081-aa78-bd2838b681bc",
+        "8250bd78-95f9-5b8f-ba08-5575d1043243"
+      ],
+      "cited_decision_ids": [
+        "4b8d1cb9-f88d-5dc7-be65-bc677ff0de09"
+      ],
+      "answer_text": "Launch with 5 pricing tiers: Free, Starter, Growth, Business, Enterprise. Original plan to capture more price points across customer segments.",
+      "judge_rationale": null,
+      "error": null,
+      "judge_error": "judge call failed: JudgeError: Sonnet judge call failed: AuthenticationError: Unauthorized"
+    },
+    {
+      "example_id": "ge-004",
+      "category": "multi_hop",
+      "question": "What's the current decision on pricing tiers and how did we get there?",
+      "recall_at_5": 1.0,
+      "recall_at_10": 1.0,
+      "hit_at_5": true,
+      "hit_at_10": true,
+      "reciprocal_rank": 1.0,
+      "negative_false_positive": null,
+      "groundedness": null,
+      "correctness": null,
+      "citation_precision": 1.0,
+      "citation_recall": 0.5,
+      "retrieval_latency_ms": 0.12087499999324791,
+      "retrieved_decision_ids": [
+        "4b8d1cb9-f88d-5dc7-be65-bc677ff0de09",
+        "17f4533f-7a50-5081-aa78-bd2838b681bc"
+      ],
+      "cited_decision_ids": [
+        "4b8d1cb9-f88d-5dc7-be65-bc677ff0de09"
+      ],
+      "answer_text": "Launch with 5 pricing tiers: Free, Starter, Growth, Business, Enterprise. Original plan to capture more price points across customer segments.",
+      "judge_rationale": null,
+      "error": null,
+      "judge_error": "judge call failed: JudgeError: Sonnet judge call failed: AuthenticationError: Unauthorized"
+    },
+    {
+      "example_id": "ge-005",
+      "category": "single_hop",
+      "question": "What did we decide about the pricing tiers?",
+      "recall_at_5": 1.0,
+      "recall_at_10": 1.0,
+      "hit_at_5": true,
+      "hit_at_10": true,
+      "reciprocal_rank": 0.5,
+      "negative_false_positive": null,
+      "groundedness": null,
+      "correctness": null,
+      "citation_precision": 0.0,
+      "citation_recall": 0.0,
+      "retrieval_latency_ms": 0.09620900004847499,
+      "retrieved_decision_ids": [
+        "24172dc8-f418-584e-bd24-b814d8a59dc0",
+        "1427e05d-9454-5d1d-a602-967ce4f44e8d"
+      ],
+      "cited_decision_ids": [
+        "24172dc8-f418-584e-bd24-b814d8a59dc0"
+      ],
+      "answer_text": "Launch with 5 pricing tiers: Free, Starter, Growth, Business, Enterprise. Original plan to capture more price points across customer segments.",
+      "judge_rationale": null,
+      "error": null,
+      "judge_error": "judge call failed: JudgeError: Sonnet judge call failed: AuthenticationError: Unauthorized"
+    },
+    {
+      "example_id": "ge-006",
+      "category": "paraphrase",
+      "question": "How many pricing plans do we offer customers now?",
+      "recall_at_5": 1.0,
+      "recall_at_10": 1.0,
+      "hit_at_5": true,
+      "hit_at_10": true,
+      "reciprocal_rank": 0.5,
+      "negative_false_positive": null,
+      "groundedness": null,
+      "correctness": null,
+      "citation_precision": 0.0,
+      "citation_recall": 0.0,
+      "retrieval_latency_ms": 0.1703959999304061,
+      "retrieved_decision_ids": [
+        "24172dc8-f418-584e-bd24-b814d8a59dc0",
+        "1427e05d-9454-5d1d-a602-967ce4f44e8d"
+      ],
+      "cited_decision_ids": [
+        "24172dc8-f418-584e-bd24-b814d8a59dc0"
+      ],
+      "answer_text": "Launch with 5 pricing tiers: Free, Starter, Growth, Business, Enterprise. Original plan to capture more price points across customer segments.",
+      "judge_rationale": null,
+      "error": null,
+      "judge_error": "judge call failed: JudgeError: Sonnet judge call failed: AuthenticationError: Unauthorized"
+    },
+    {
+      "example_id": "ge-007",
+      "category": "temporal",
+      "question": "What did we originally decide about pricing tiers, before the current approach?",
+      "recall_at_5": 1.0,
+      "recall_at_10": 1.0,
+      "hit_at_5": true,
+      "hit_at_10": true,
+      "reciprocal_rank": 1.0,
+      "negative_false_positive": null,
+      "groundedness": null,
+      "correctness": null,
+      "citation_precision": 1.0,
+      "citation_recall": 1.0,
+      "retrieval_latency_ms": 0.275632000011683,
+      "retrieved_decision_ids": [
+        "24172dc8-f418-584e-bd24-b814d8a59dc0",
+        "1427e05d-9454-5d1d-a602-967ce4f44e8d",
+        "41ef0a6e-ff8a-51ce-a8a6-40600974bada"
+      ],
+      "cited_decision_ids": [
+        "24172dc8-f418-584e-bd24-b814d8a59dc0"
+      ],
+      "answer_text": "Launch with 5 pricing tiers: Free, Starter, Growth, Business, Enterprise. Original plan to capture more price points across customer segments.",
+      "judge_rationale": null,
+      "error": null,
+      "judge_error": "judge call failed: JudgeError: Sonnet judge call failed: AuthenticationError: Unauthorized"
+    },
+    {
+      "example_id": "ge-008",
+      "category": "multi_hop",
+      "question": "What's the current decision on pricing tiers and how did we get there?",
+      "recall_at_5": 1.0,
+      "recall_at_10": 1.0,
+      "hit_at_5": true,
+      "hit_at_10": true,
+      "reciprocal_rank": 1.0,
+      "negative_false_positive": null,
+      "groundedness": null,
+      "correctness": null,
+      "citation_precision": 1.0,
+      "citation_recall": 0.5,
+      "retrieval_latency_ms": 0.1739640000550935,
+      "retrieved_decision_ids": [
+        "24172dc8-f418-584e-bd24-b814d8a59dc0",
+        "1427e05d-9454-5d1d-a602-967ce4f44e8d"
+      ],
+      "cited_decision_ids": [
+        "24172dc8-f418-584e-bd24-b814d8a59dc0"
+      ],
+      "answer_text": "Launch with 5 pricing tiers: Free, Starter, Growth, Business, Enterprise. Original plan to capture more price points across customer segments.",
+      "judge_rationale": null,
+      "error": null,
+      "judge_error": "judge call failed: JudgeError: Sonnet judge call failed: AuthenticationError: Unauthorized"
+    },
+    {
+      "example_id": "ge-009",
+      "category": "single_hop",
+      "question": "Which vendor did we choose for background checks?",
+      "recall_at_5": 1.0,
+      "recall_at_10": 1.0,
+      "hit_at_5": true,
+      "hit_at_10": true,
+      "reciprocal_rank": 1.0,
+      "negative_false_positive": null,
+      "groundedness": null,
+      "correctness": null,
+      "citation_precision": 1.0,
+      "citation_recall": 1.0,
+      "retrieval_latency_ms": 0.19177700005457154,
+      "retrieved_decision_ids": [
+        "d3d1754f-8389-5828-97a4-7273bf67dc1a"
+      ],
+      "cited_decision_ids": [
+        "d3d1754f-8389-5828-97a4-7273bf67dc1a"
+      ],
+      "answer_text": "Selected Checkr as the background check vendor. Checkr's under-24h turnaround beat Sterling's ~3 days; cost was comparable.",
+      "judge_rationale": null,
+      "error": null,
+      "judge_error": "judge call failed: JudgeError: Sonnet judge call failed: AuthenticationError: Unauthorized"
+    },
+    {
+      "example_id": "ge-010",
+      "category": "paraphrase",
+      "question": "Who's running our candidate screening these days?",
+      "recall_at_5": 1.0,
+      "recall_at_10": 1.0,
+      "hit_at_5": true,
+      "hit_at_10": true,
+      "reciprocal_rank": 1.0,
+      "negative_false_positive": null,
+      "groundedness": null,
+      "correctness": null,
+      "citation_precision": 1.0,
+      "citation_recall": 1.0,
+      "retrieval_latency_ms": 0.1873280000381783,
+      "retrieved_decision_ids": [
+        "d3d1754f-8389-5828-97a4-7273bf67dc1a",
+        "41ef0a6e-ff8a-51ce-a8a6-40600974bada",
+        "64f34bc7-0998-5912-be7a-f31b637eb11c",
+        "6b7fb84b-71ca-5d9a-a191-1b6647fcb534",
+        "391079c8-1efe-5d02-8632-4983dbf02f74",
+        "4682b2e5-39ac-5e04-9c75-1025da238235"
+      ],
+      "cited_decision_ids": [
+        "d3d1754f-8389-5828-97a4-7273bf67dc1a"
+      ],
+      "answer_text": "Selected Checkr as the background check vendor. Checkr's under-24h turnaround beat Sterling's ~3 days; cost was comparable.",
+      "judge_rationale": null,
+      "error": null,
+      "judge_error": "judge call failed: JudgeError: Sonnet judge call failed: AuthenticationError: Unauthorized"
+    },
+    {
+      "example_id": "ge-011",
+      "category": "single_hop",
+      "question": "Which vendor did we choose for background checks?",
+      "recall_at_5": 1.0,
+      "recall_at_10": 1.0,
+      "hit_at_5": true,
+      "hit_at_10": true,
+      "reciprocal_rank": 1.0,
+      "negative_false_positive": null,
+      "groundedness": null,
+      "correctness": null,
+      "citation_precision": 1.0,
+      "citation_recall": 1.0,
+      "retrieval_latency_ms": 1.7660329999671376,
+      "retrieved_decision_ids": [
+        "f5c4b9c4-bf19-55e0-8ef0-b182bdcad28b"
+      ],
+      "cited_decision_ids": [
+        "f5c4b9c4-bf19-55e0-8ef0-b182bdcad28b"
+      ],
+      "answer_text": "Selected Checkr as the background check vendor. Checkr's under-24h turnaround beat Sterling's ~3 days; cost was comparable.",
+      "judge_rationale": null,
+      "error": null,
+      "judge_error": "judge call failed: JudgeError: Sonnet judge call failed: AuthenticationError: Unauthorized"
+    },
+    {
+      "example_id": "ge-012",
+      "category": "paraphrase",
+      "question": "Who's running our candidate screening these days?",
+      "recall_at_5": 1.0,
+      "recall_at_10": 1.0,
+      "hit_at_5": true,
+      "hit_at_10": true,
+      "reciprocal_rank": 1.0,
+      "negative_false_positive": null,
+      "groundedness": null,
+      "correctness": null,
+      "citation_precision": 1.0,
+      "citation_recall": 1.0,
+      "retrieval_latency_ms": 0.2487020000216944,
+      "retrieved_decision_ids": [
+        "f5c4b9c4-bf19-55e0-8ef0-b182bdcad28b",
+        "8eabfe66-7818-5b2c-bbc4-8f68d912b418",
+        "9f520fbc-36c7-5f42-a435-a32afdf4ffcc",
+        "11c39d22-7c20-5d25-a8be-f90fb5084b22"
+      ],
+      "cited_decision_ids": [
+        "f5c4b9c4-bf19-55e0-8ef0-b182bdcad28b"
+      ],
+      "answer_text": "Selected Checkr as the background check vendor. Checkr's under-24h turnaround beat Sterling's ~3 days; cost was comparable.",
+      "judge_rationale": null,
+      "error": null,
+      "judge_error": "judge call failed: JudgeError: Sonnet judge call failed: AuthenticationError: Unauthorized"
+    },
+    {
+      "example_id": "ge-013",
+      "category": "single_hop",
+      "question": "What's our on-call rotation policy?",
+      "recall_at_5": 1.0,
+      "recall_at_10": 1.0,
+      "hit_at_5": true,
+      "hit_at_10": true,
+      "reciprocal_rank": 1.0,
+      "negative_false_positive": null,
+      "groundedness": null,
+      "correctness": null,
+      "citation_precision": 1.0,
+      "citation_recall": 1.0,
+      "retrieval_latency_ms": 0.22810400002981623,
+      "retrieved_decision_ids": [
+        "d58f8310-71d8-5f18-b82a-50bfb616a432"
+      ],
+      "cited_decision_ids": [
+        "d58f8310-71d8-5f18-b82a-50bfb616a432"
+      ],
+      "answer_text": "Adopt a weekly on-call rotation across the backend team with a secondary escalation on-call. The March outage went unacknowledged 40 minutes under a single on-call; a secondary catches missed acks.",
+      "judge_rationale": null,
+      "error": null,
+      "judge_error": "judge call failed: JudgeError: Sonnet judge call failed: AuthenticationError: Unauthorized"
+    },
+    {
+      "example_id": "ge-014",
+      "category": "paraphrase",
+      "question": "If the primary on-call doesn't respond, who gets paged next?",
+      "recall_at_5": 1.0,
+      "recall_at_10": 1.0,
+      "hit_at_5": true,
+      "hit_at_10": true,
+      "reciprocal_rank": 0.5,
+      "negative_false_positive": null,
+      "groundedness": null,
+      "correctness": null,
+      "citation_precision": 0.0,
+      "citation_recall": 0.0,
+      "retrieval_latency_ms": 0.33758799997940514,
+      "retrieved_decision_ids": [
+        "f0ab8759-3118-5562-a139-5c97c355a7b3",
+        "d58f8310-71d8-5f18-b82a-50bfb616a432"
+      ],
+      "cited_decision_ids": [
+        "f0ab8759-3118-5562-a139-5c97c355a7b3"
+      ],
+      "answer_text": "Use Postgres as the primary datastore for the new service. Needed real multi-table transactional guarantees; Mongo's transaction model was a weaker fit.",
+      "judge_rationale": null,
+      "error": null,
+      "judge_error": "judge call failed: JudgeError: Sonnet judge call failed: AuthenticationError: Unauthorized"
+    },
+    {
+      "example_id": "ge-015",
+      "category": "single_hop",
+      "question": "What's our on-call rotation policy?",
+      "recall_at_5": 1.0,
+      "recall_at_10": 1.0,
+      "hit_at_5": true,
+      "hit_at_10": true,
+      "reciprocal_rank": 1.0,
+      "negative_false_positive": null,
+      "groundedness": null,
+      "correctness": null,
+      "citation_precision": 1.0,
+      "citation_recall": 1.0,
+      "retrieval_latency_ms": 0.09983600000396109,
+      "retrieved_decision_ids": [
+        "259a5e95-63c4-57f9-8cbb-8950c68d28e5",
+        "99eca7f8-8604-5674-9560-685a52136622"
+      ],
+      "cited_decision_ids": [
+        "259a5e95-63c4-57f9-8cbb-8950c68d28e5"
+      ],
+      "answer_text": "Adopt a weekly on-call rotation across the backend team with a secondary escalation on-call. The March outage went unacknowledged 40 minutes under a single on-call; a secondary catches missed acks.",
+      "judge_rationale": null,
+      "error": null,
+      "judge_error": "judge call failed: JudgeError: Sonnet judge call failed: AuthenticationError: Unauthorized"
+    },
+    {
+      "example_id": "ge-016",
+      "category": "paraphrase",
+      "question": "If the primary on-call doesn't respond, who gets paged next?",
+      "recall_at_5": 1.0,
+      "recall_at_10": 1.0,
+      "hit_at_5": true,
+      "hit_at_10": true,
+      "reciprocal_rank": 1.0,
+      "negative_false_positive": null,
+      "groundedness": null,
+      "correctness": null,
+      "citation_precision": 1.0,
+      "citation_recall": 1.0,
+      "retrieval_latency_ms": 0.1586149999184272,
+      "retrieved_decision_ids": [
+        "259a5e95-63c4-57f9-8cbb-8950c68d28e5"
+      ],
+      "cited_decision_ids": [
+        "259a5e95-63c4-57f9-8cbb-8950c68d28e5"
+      ],
+      "answer_text": "Adopt a weekly on-call rotation across the backend team with a secondary escalation on-call. The March outage went unacknowledged 40 minutes under a single on-call; a secondary catches missed acks.",
+      "judge_rationale": null,
+      "error": null,
+      "judge_error": "judge call failed: JudgeError: Sonnet judge call failed: AuthenticationError: Unauthorized"
+    },
+    {
+      "example_id": "ge-017",
+      "category": "single_hop",
+      "question": "Is there a deploy freeze before releases?",
+      "recall_at_5": 1.0,
+      "recall_at_10": 1.0,
+      "hit_at_5": true,
+      "hit_at_10": true,
+      "reciprocal_rank": 1.0,
+      "negative_false_positive": null,
+      "groundedness": null,
+      "correctness": null,
+      "citation_precision": 1.0,
+      "citation_recall": 1.0,
+      "retrieval_latency_ms": 0.23053800009620318,
+      "retrieved_decision_ids": [
+        "7544462a-8fec-59e2-8059-122da7473a16"
+      ],
+      "cited_decision_ids": [
+        "7544462a-8fec-59e2-8059-122da7473a16"
+      ],
+      "answer_text": "Enforce a 48-hour deploy freeze window before any tagged release. Two consecutive Friday deploys caused weekend incidents; exceptions require director sign-off.",
+      "judge_rationale": null,
+      "error": null,
+      "judge_error": "judge call failed: JudgeError: Sonnet judge call failed: AuthenticationError: Unauthorized"
+    },
+    {
+      "example_id": "ge-018",
+      "category": "paraphrase",
+      "question": "Can I ship code right before a big release goes out?",
+      "recall_at_5": 1.0,
+      "recall_at_10": 1.0,
+      "hit_at_5": true,
+      "hit_at_10": true,
+      "reciprocal_rank": 1.0,
+      "negative_false_positive": null,
+      "groundedness": null,
+      "correctness": null,
+      "citation_precision": 1.0,
+      "citation_recall": 1.0,
+      "retrieval_latency_ms": 0.18656700001429272,
+      "retrieved_decision_ids": [
+        "7544462a-8fec-59e2-8059-122da7473a16",
+        "8828e780-a0c4-5fe4-98d4-a85c70098359",
+        "11c39d22-7c20-5d25-a8be-f90fb5084b22"
+      ],
+      "cited_decision_ids": [
+        "7544462a-8fec-59e2-8059-122da7473a16"
+      ],
+      "answer_text": "Enforce a 48-hour deploy freeze window before any tagged release. Two consecutive Friday deploys caused weekend incidents; exceptions require director sign-off.",
+      "judge_rationale": null,
+      "error": null,
+      "judge_error": "judge call failed: JudgeError: Sonnet judge call failed: AuthenticationError: Unauthorized"
+    },
+    {
+      "example_id": "ge-019",
+      "category": "single_hop",
+      "question": "Is there a deploy freeze before releases?",
+      "recall_at_5": 1.0,
+      "recall_at_10": 1.0,
+      "hit_at_5": true,
+      "hit_at_10": true,
+      "reciprocal_rank": 1.0,
+      "negative_false_positive": null,
+      "groundedness": null,
+      "correctness": null,
+      "citation_precision": 1.0,
+      "citation_recall": 1.0,
+      "retrieval_latency_ms": 0.16985599995678058,
+      "retrieved_decision_ids": [
+        "28fe5907-827f-5d88-bfb3-100ce4e82245"
+      ],
+      "cited_decision_ids": [
+        "28fe5907-827f-5d88-bfb3-100ce4e82245"
+      ],
+      "answer_text": "Enforce a 48-hour deploy freeze window before any tagged release. Two consecutive Friday deploys caused weekend incidents; exceptions require director sign-off.",
+      "judge_rationale": null,
+      "error": null,
+      "judge_error": "judge call failed: JudgeError: Sonnet judge call failed: AuthenticationError: Unauthorized"
+    },
+    {
+      "example_id": "ge-020",
+      "category": "paraphrase",
+      "question": "Can I ship code right before a big release goes out?",
+      "recall_at_5": 1.0,
+      "recall_at_10": 1.0,
+      "hit_at_5": true,
+      "hit_at_10": true,
+      "reciprocal_rank": 1.0,
+      "negative_false_positive": null,
+      "groundedness": null,
+      "correctness": null,
+      "citation_precision": 1.0,
+      "citation_recall": 1.0,
+      "retrieval_latency_ms": 0.5205180000302789,
+      "retrieved_decision_ids": [
+        "28fe5907-827f-5d88-bfb3-100ce4e82245",
+        "51cf5869-1982-5acb-a0b5-daf87031a1d2"
+      ],
+      "cited_decision_ids": [
+        "28fe5907-827f-5d88-bfb3-100ce4e82245"
+      ],
+      "answer_text": "Enforce a 48-hour deploy freeze window before any tagged release. Two consecutive Friday deploys caused weekend incidents; exceptions require director sign-off.",
+      "judge_rationale": null,
+      "error": null,
+      "judge_error": "judge call failed: JudgeError: Sonnet judge call failed: AuthenticationError: Unauthorized"
+    },
+    {
+      "example_id": "ge-021",
+      "category": "single_hop",
+      "question": "What database are we using for the new service?",
+      "recall_at_5": 1.0,
+      "recall_at_10": 1.0,
+      "hit_at_5": true,
+      "hit_at_10": true,
+      "reciprocal_rank": 0.5,
+      "negative_false_positive": null,
+      "groundedness": null,
+      "correctness": null,
+      "citation_precision": 0.0,
+      "citation_recall": 0.0,
+      "retrieval_latency_ms": 0.17030699996212206,
+      "retrieved_decision_ids": [
+        "6106a591-1393-51fb-9610-af744f072135",
+        "f0ab8759-3118-5562-a139-5c97c355a7b3",
+        "7a434f0f-b4f0-5c2d-9d87-2be8a52609ec"
+      ],
+      "cited_decision_ids": [
+        "6106a591-1393-51fb-9610-af744f072135"
+      ],
+      "answer_text": "Considered Mongo as the datastore for the new service. Rejected -- multi-document transaction support felt bolted-on for this access pattern.",
+      "judge_rationale": null,
+      "error": null,
+      "judge_error": "judge call failed: JudgeError: Sonnet judge call failed: AuthenticationError: Unauthorized"
+    },
+    {
+      "example_id": "ge-022",
+      "category": "paraphrase",
+      "question": "Postgres or Mongo -- what did we land on for the backend?",
+      "recall_at_5": 1.0,
+      "recall_at_10": 1.0,
+      "hit_at_5": true,
+      "hit_at_10": true,
+      "reciprocal_rank": 1.0,
+      "negative_false_positive": null,
+      "groundedness": null,
+      "correctness": null,
+      "citation_precision": 1.0,
+      "citation_recall": 1.0,
+      "retrieval_latency_ms": 0.23477699994600698,
+      "retrieved_decision_ids": [
+        "f0ab8759-3118-5562-a139-5c97c355a7b3",
+        "6106a591-1393-51fb-9610-af744f072135",
+        "d58f8310-71d8-5f18-b82a-50bfb616a432"
+      ],
+      "cited_decision_ids": [
+        "f0ab8759-3118-5562-a139-5c97c355a7b3"
+      ],
+      "answer_text": "Use Postgres as the primary datastore for the new service. Needed real multi-table transactional guarantees; Mongo's transaction model was a weaker fit.",
+      "judge_rationale": null,
+      "error": null,
+      "judge_error": "judge call failed: JudgeError: Sonnet judge call failed: AuthenticationError: Unauthorized"
+    },
+    {
+      "example_id": "ge-023",
+      "category": "ambiguous_entity",
+      "question": "Between Postgres and Mongo, which one did we actually pick?",
+      "recall_at_5": 1.0,
+      "recall_at_10": 1.0,
+      "hit_at_5": true,
+      "hit_at_10": true,
+      "reciprocal_rank": 1.0,
+      "negative_false_positive": null,
+      "groundedness": null,
+      "correctness": null,
+      "citation_precision": 1.0,
+      "citation_recall": 1.0,
+      "retrieval_latency_ms": 0.28454900007091055,
+      "retrieved_decision_ids": [
+        "f0ab8759-3118-5562-a139-5c97c355a7b3",
+        "6106a591-1393-51fb-9610-af744f072135",
+        "0757cecb-41fd-51cd-9321-56ff4a4de02c"
+      ],
+      "cited_decision_ids": [
+        "f0ab8759-3118-5562-a139-5c97c355a7b3"
+      ],
+      "answer_text": "Use Postgres as the primary datastore for the new service. Needed real multi-table transactional guarantees; Mongo's transaction model was a weaker fit.",
+      "judge_rationale": null,
+      "error": null,
+      "judge_error": "judge call failed: JudgeError: Sonnet judge call failed: AuthenticationError: Unauthorized"
+    },
+    {
+      "example_id": "ge-024",
+      "category": "single_hop",
+      "question": "What database are we using for the new service?",
+      "recall_at_5": 1.0,
+      "recall_at_10": 1.0,
+      "hit_at_5": true,
+      "hit_at_10": true,
+      "reciprocal_rank": 0.5,
+      "negative_false_positive": null,
+      "groundedness": null,
+      "correctness": null,
+      "citation_precision": 0.0,
+      "citation_recall": 0.0,
+      "retrieval_latency_ms": 0.32169799999337556,
+      "retrieved_decision_ids": [
+        "51daed2e-f872-52c0-8c17-edd37fddd65b",
+        "caa44e05-e032-5baf-979c-d90579c1b44e"
+      ],
+      "cited_decision_ids": [
+        "51daed2e-f872-52c0-8c17-edd37fddd65b"
+      ],
+      "answer_text": "Considered Mongo as the datastore for the new service. Rejected -- multi-document transaction support felt bolted-on for this access pattern.",
+      "judge_rationale": null,
+      "error": null,
+      "judge_error": "judge call failed: JudgeError: Sonnet judge call failed: AuthenticationError: Unauthorized"
+    },
+    {
+      "example_id": "ge-025",
+      "category": "paraphrase",
+      "question": "Postgres or Mongo -- what did we land on for the backend?",
+      "recall_at_5": 1.0,
+      "recall_at_10": 1.0,
+      "hit_at_5": true,
+      "hit_at_10": true,
+      "reciprocal_rank": 1.0,
+      "negative_false_positive": null,
+      "groundedness": null,
+      "correctness": null,
+      "citation_precision": 1.0,
+      "citation_recall": 1.0,
+      "retrieval_latency_ms": 0.34036300007755926,
+      "retrieved_decision_ids": [
+        "caa44e05-e032-5baf-979c-d90579c1b44e",
+        "51daed2e-f872-52c0-8c17-edd37fddd65b"
+      ],
+      "cited_decision_ids": [
+        "caa44e05-e032-5baf-979c-d90579c1b44e"
+      ],
+      "answer_text": "Use Postgres as the primary datastore for the new service. Needed real multi-table transactional guarantees; Mongo's transaction model was a weaker fit.",
+      "judge_rationale": null,
+      "error": null,
+      "judge_error": "judge call failed: JudgeError: Sonnet judge call failed: AuthenticationError: Unauthorized"
+    },
+    {
+      "example_id": "ge-026",
+      "category": "ambiguous_entity",
+      "question": "Between Postgres and Mongo, which one did we actually pick?",
+      "recall_at_5": 1.0,
+      "recall_at_10": 1.0,
+      "hit_at_5": true,
+      "hit_at_10": true,
+      "reciprocal_rank": 1.0,
+      "negative_false_positive": null,
+      "groundedness": null,
+      "correctness": null,
+      "citation_precision": 1.0,
+      "citation_recall": 1.0,
+      "retrieval_latency_ms": 0.32646700003624574,
+      "retrieved_decision_ids": [
+        "caa44e05-e032-5baf-979c-d90579c1b44e",
+        "51daed2e-f872-52c0-8c17-edd37fddd65b",
+        "8828e780-a0c4-5fe4-98d4-a85c70098359"
+      ],
+      "cited_decision_ids": [
+        "caa44e05-e032-5baf-979c-d90579c1b44e"
+      ],
+      "answer_text": "Use Postgres as the primary datastore for the new service. Needed real multi-table transactional guarantees; Mongo's transaction model was a weaker fit.",
+      "judge_rationale": null,
+      "error": null,
+      "judge_error": "judge call failed: JudgeError: Sonnet judge call failed: AuthenticationError: Unauthorized"
+    },
+    {
+      "example_id": "ge-027",
+      "category": "single_hop",
+      "question": "How long do we keep raw ingested events before deleting them?",
+      "recall_at_5": 1.0,
+      "recall_at_10": 1.0,
+      "hit_at_5": true,
+      "hit_at_10": true,
+      "reciprocal_rank": 1.0,
+      "negative_false_positive": null,
+      "groundedness": null,
+      "correctness": null,
+      "citation_precision": 1.0,
+      "citation_recall": 1.0,
+      "retrieval_latency_ms": 0.22130199999992328,
+      "retrieved_decision_ids": [
+        "8250bd78-95f9-5b8f-ba08-5575d1043243"
+      ],
+      "cited_decision_ids": [
+        "8250bd78-95f9-5b8f-ba08-5575d1043243"
+      ],
+      "answer_text": "Retain raw ingested events for 30 days before deletion. Balances debugging/replay needs against storage cost and data minimization.",
+      "judge_rationale": null,
+      "error": null,
+      "judge_error": "judge call failed: JudgeError: Sonnet judge call failed: AuthenticationError: Unauthorized"
+    },
+    {
+      "example_id": "ge-028",
+      "category": "paraphrase",
+      "question": "What's the TTL on the unprocessed event data?",
+      "recall_at_5": 1.0,
+      "recall_at_10": 1.0,
+      "hit_at_5": true,
+      "hit_at_10": true,
+      "reciprocal_rank": 1.0,
+      "negative_false_positive": null,
+      "groundedness": null,
+      "correctness": null,
+      "citation_precision": 1.0,
+      "citation_recall": 1.0,
+      "retrieval_latency_ms": 0.17312199997832067,
+      "retrieved_decision_ids": [
+        "8250bd78-95f9-5b8f-ba08-5575d1043243"
+      ],
+      "cited_decision_ids": [
+        "8250bd78-95f9-5b8f-ba08-5575d1043243"
+      ],
+      "answer_text": "Retain raw ingested events for 30 days before deletion. Balances debugging/replay needs against storage cost and data minimization.",
+      "judge_rationale": null,
+      "error": null,
+      "judge_error": "judge call failed: JudgeError: Sonnet judge call failed: AuthenticationError: Unauthorized"
+    },
+    {
+      "example_id": "ge-029",
+      "category": "single_hop",
+      "question": "How long do we keep raw ingested events before deleting them?",
+      "recall_at_5": 1.0,
+      "recall_at_10": 1.0,
+      "hit_at_5": true,
+      "hit_at_10": true,
+      "reciprocal_rank": 1.0,
+      "negative_false_positive": null,
+      "groundedness": null,
+      "correctness": null,
+      "citation_precision": 1.0,
+      "citation_recall": 1.0,
+      "retrieval_latency_ms": 0.3451519999089214,
+      "retrieved_decision_ids": [
+        "41ef0a6e-ff8a-51ce-a8a6-40600974bada"
+      ],
+      "cited_decision_ids": [
+        "41ef0a6e-ff8a-51ce-a8a6-40600974bada"
+      ],
+      "answer_text": "Retain raw ingested events for 30 days before deletion. Balances debugging/replay needs against storage cost and data minimization.",
+      "judge_rationale": null,
+      "error": null,
+      "judge_error": "judge call failed: JudgeError: Sonnet judge call failed: AuthenticationError: Unauthorized"
+    },
+    {
+      "example_id": "ge-030",
+      "category": "paraphrase",
+      "question": "What's the TTL on the unprocessed event data?",
+      "recall_at_5": 1.0,
+      "recall_at_10": 1.0,
+      "hit_at_5": true,
+      "hit_at_10": true,
+      "reciprocal_rank": 1.0,
+      "negative_false_positive": null,
+      "groundedness": null,
+      "correctness": null,
+      "citation_precision": 1.0,
+      "citation_recall": 1.0,
+      "retrieval_latency_ms": 0.30724199996257084,
+      "retrieved_decision_ids": [
+        "41ef0a6e-ff8a-51ce-a8a6-40600974bada"
+      ],
+      "cited_decision_ids": [
+        "41ef0a6e-ff8a-51ce-a8a6-40600974bada"
+      ],
+      "answer_text": "Retain raw ingested events for 30 days before deletion. Balances debugging/replay needs against storage cost and data minimization.",
+      "judge_rationale": null,
+      "error": null,
+      "judge_error": "judge call failed: JudgeError: Sonnet judge call failed: AuthenticationError: Unauthorized"
+    },
+    {
+      "example_id": "ge-031",
+      "category": "single_hop",
+      "question": "How long are application logs kept?",
+      "recall_at_5": 1.0,
+      "recall_at_10": 1.0,
+      "hit_at_5": true,
+      "hit_at_10": true,
+      "reciprocal_rank": 1.0,
+      "negative_false_positive": null,
+      "groundedness": null,
+      "correctness": null,
+      "citation_precision": 1.0,
+      "citation_recall": 1.0,
+      "retrieval_latency_ms": 0.2772959999219893,
+      "retrieved_decision_ids": [
+        "dbcd2ffb-2959-50ca-8fa0-01bb37ab3657"
+      ],
+      "cited_decision_ids": [
+        "dbcd2ffb-2959-50ca-8fa0-01bb37ab3657"
+      ],
+      "answer_text": "Retain application logs for 90 days hot, then 1 year in cold storage. 90 days covers typical post-mortem windows; cold storage covers audit needs.",
+      "judge_rationale": null,
+      "error": null,
+      "judge_error": "judge call failed: JudgeError: Sonnet judge call failed: AuthenticationError: Unauthorized"
+    },
+    {
+      "example_id": "ge-032",
+      "category": "paraphrase",
+      "question": "What's our log archival window?",
+      "recall_at_5": 0.0,
+      "recall_at_10": 0.0,
+      "hit_at_5": false,
+      "hit_at_10": false,
+      "reciprocal_rank": 0.0,
+      "negative_false_positive": null,
+      "groundedness": null,
+      "correctness": null,
+      "citation_precision": null,
+      "citation_recall": 0.0,
+      "retrieval_latency_ms": 0.2424010000368071,
+      "retrieved_decision_ids": [],
+      "cited_decision_ids": [],
+      "answer_text": "There's no recorded decision that answers this question.",
+      "judge_rationale": null,
+      "error": null,
+      "judge_error": "judge call failed: JudgeError: Sonnet judge call failed: AuthenticationError: Unauthorized"
+    },
+    {
+      "example_id": "ge-033",
+      "category": "single_hop",
+      "question": "How long are application logs kept?",
+      "recall_at_5": 1.0,
+      "recall_at_10": 1.0,
+      "hit_at_5": true,
+      "hit_at_10": true,
+      "reciprocal_rank": 1.0,
+      "negative_false_positive": null,
+      "groundedness": null,
+      "correctness": null,
+      "citation_precision": 1.0,
+      "citation_recall": 1.0,
+      "retrieval_latency_ms": 0.22702199999002914,
+      "retrieved_decision_ids": [
+        "64f34bc7-0998-5912-be7a-f31b637eb11c"
+      ],
+      "cited_decision_ids": [
+        "64f34bc7-0998-5912-be7a-f31b637eb11c"
+      ],
+      "answer_text": "Retain application logs for 90 days hot, then 1 year in cold storage. 90 days covers typical post-mortem windows; cold storage covers audit needs.",
+      "judge_rationale": null,
+      "error": null,
+      "judge_error": "judge call failed: JudgeError: Sonnet judge call failed: AuthenticationError: Unauthorized"
+    },
+    {
+      "example_id": "ge-034",
+      "category": "paraphrase",
+      "question": "What's our log archival window?",
+      "recall_at_5": 0.0,
+      "recall_at_10": 0.0,
+      "hit_at_5": false,
+      "hit_at_10": false,
+      "reciprocal_rank": 0.0,
+      "negative_false_positive": null,
+      "groundedness": null,
+      "correctness": null,
+      "citation_precision": null,
+      "citation_recall": 0.0,
+      "retrieval_latency_ms": 0.1646959999561659,
+      "retrieved_decision_ids": [],
+      "cited_decision_ids": [],
+      "answer_text": "There's no recorded decision that answers this question.",
+      "judge_rationale": null,
+      "error": null,
+      "judge_error": "judge call failed: JudgeError: Sonnet judge call failed: AuthenticationError: Unauthorized"
+    },
+    {
+      "example_id": "ge-035",
+      "category": "single_hop",
+      "question": "What's our remote work policy?",
+      "recall_at_5": 1.0,
+      "recall_at_10": 1.0,
+      "hit_at_5": true,
+      "hit_at_10": true,
+      "reciprocal_rank": 1.0,
+      "negative_false_positive": null,
+      "groundedness": null,
+      "correctness": null,
+      "citation_precision": 1.0,
+      "citation_recall": 1.0,
+      "retrieval_latency_ms": 0.26159599997299665,
+      "retrieved_decision_ids": [
+        "391079c8-1efe-5d02-8632-4983dbf02f74"
+      ],
+      "cited_decision_ids": [
+        "391079c8-1efe-5d02-8632-4983dbf02f74"
+      ],
+      "answer_text": "Adopt a remote-first policy with no mandatory office days; teams may set optional in-person cadences. Matches recruiting commitments made to candidates this quarter.",
+      "judge_rationale": null,
+      "error": null,
+      "judge_error": "judge call failed: JudgeError: Sonnet judge call failed: AuthenticationError: Unauthorized"
+    },
+    {
+      "example_id": "ge-036",
+      "category": "paraphrase",
+      "question": "Do I have to come into the office on any specific days?",
+      "recall_at_5": 1.0,
+      "recall_at_10": 1.0,
+      "hit_at_5": true,
+      "hit_at_10": true,
+      "reciprocal_rank": 1.0,
+      "negative_false_positive": null,
+      "groundedness": null,
+      "correctness": null,
+      "citation_precision": 1.0,
+      "citation_recall": 1.0,
+      "retrieval_latency_ms": 0.21676299991213455,
+      "retrieved_decision_ids": [
+        "391079c8-1efe-5d02-8632-4983dbf02f74",
+        "d3d1754f-8389-5828-97a4-7273bf67dc1a",
+        "41ef0a6e-ff8a-51ce-a8a6-40600974bada",
+        "64f34bc7-0998-5912-be7a-f31b637eb11c",
+        "6b7fb84b-71ca-5d9a-a191-1b6647fcb534",
+        "4682b2e5-39ac-5e04-9c75-1025da238235"
+      ],
+      "cited_decision_ids": [
+        "391079c8-1efe-5d02-8632-4983dbf02f74"
+      ],
+      "answer_text": "Adopt a remote-first policy with no mandatory office days; teams may set optional in-person cadences. Matches recruiting commitments made to candidates this quarter.",
+      "judge_rationale": null,
+      "error": null,
+      "judge_error": "judge call failed: JudgeError: Sonnet judge call failed: AuthenticationError: Unauthorized"
+    },
+    {
+      "example_id": "ge-037",
+      "category": "single_hop",
+      "question": "What's our remote work policy?",
+      "recall_at_5": 1.0,
+      "recall_at_10": 1.0,
+      "hit_at_5": true,
+      "hit_at_10": true,
+      "reciprocal_rank": 1.0,
+      "negative_false_positive": null,
+      "groundedness": null,
+      "correctness": null,
+      "citation_precision": 1.0,
+      "citation_recall": 1.0,
+      "retrieval_latency_ms": 0.1535849999072525,
+      "retrieved_decision_ids": [
+        "99eca7f8-8604-5674-9560-685a52136622"
+      ],
+      "cited_decision_ids": [
+        "99eca7f8-8604-5674-9560-685a52136622"
+      ],
+      "answer_text": "Adopt a remote-first policy with no mandatory office days; teams may set optional in-person cadences. Matches recruiting commitments made to candidates this quarter.",
+      "judge_rationale": null,
+      "error": null,
+      "judge_error": "judge call failed: JudgeError: Sonnet judge call failed: AuthenticationError: Unauthorized"
+    },
+    {
+      "example_id": "ge-038",
+      "category": "paraphrase",
+      "question": "Do I have to come into the office on any specific days?",
+      "recall_at_5": 1.0,
+      "recall_at_10": 1.0,
+      "hit_at_5": true,
+      "hit_at_10": true,
+      "reciprocal_rank": 1.0,
+      "negative_false_positive": null,
+      "groundedness": null,
+      "correctness": null,
+      "citation_precision": 1.0,
+      "citation_recall": 1.0,
+      "retrieval_latency_ms": 0.39599200010798086,
+      "retrieved_decision_ids": [
+        "99eca7f8-8604-5674-9560-685a52136622",
+        "89c2e663-0179-5477-a077-fe057fb4d6bf",
+        "fcfcef2d-ebae-589f-aef3-3faff4a49441",
+        "28fe5907-827f-5d88-bfb3-100ce4e82245"
+      ],
+      "cited_decision_ids": [
+        "99eca7f8-8604-5674-9560-685a52136622"
+      ],
+      "answer_text": "Adopt a remote-first policy with no mandatory office days; teams may set optional in-person cadences. Matches recruiting commitments made to candidates this quarter.",
+      "judge_rationale": null,
+      "error": null,
+      "judge_error": "judge call failed: JudgeError: Sonnet judge call failed: AuthenticationError: Unauthorized"
+    },
+    {
+      "example_id": "ge-039",
+      "category": "single_hop",
+      "question": "Do we require a bar-raiser for engineering hires?",
+      "recall_at_5": 1.0,
+      "recall_at_10": 1.0,
+      "hit_at_5": true,
+      "hit_at_10": true,
+      "reciprocal_rank": 1.0,
+      "negative_false_positive": null,
+      "groundedness": null,
+      "correctness": null,
+      "citation_precision": 1.0,
+      "citation_recall": 1.0,
+      "retrieval_latency_ms": 0.5873130000964011,
+      "retrieved_decision_ids": [
+        "28ba5e8e-2086-5827-88b4-12a44e816714",
+        "8eabfe66-7818-5b2c-bbc4-8f68d912b418",
+        "7544462a-8fec-59e2-8059-122da7473a16",
+        "8828e780-a0c4-5fe4-98d4-a85c70098359"
+      ],
+      "cited_decision_ids": [
+        "28ba5e8e-2086-5827-88b4-12a44e816714"
+      ],
+      "answer_text": "Require independent bar-raiser sign-off, outside the hiring team, on every engineering offer. Introduced after two mis-hires last quarter.",
+      "judge_rationale": null,
+      "error": null,
+      "judge_error": "judge call failed: JudgeError: Sonnet judge call failed: AuthenticationError: Unauthorized"
+    },
+    {
+      "example_id": "ge-040",
+      "category": "paraphrase",
+      "question": "Who has to approve an engineering offer besides the hiring manager?",
+      "recall_at_5": 1.0,
+      "recall_at_10": 1.0,
+      "hit_at_5": true,
+      "hit_at_10": true,
+      "reciprocal_rank": 1.0,
+      "negative_false_positive": null,
+      "groundedness": null,
+      "correctness": null,
+      "citation_precision": 1.0,
+      "citation_recall": 1.0,
+      "retrieval_latency_ms": 0.3505419999783044,
+      "retrieved_decision_ids": [
+        "28ba5e8e-2086-5827-88b4-12a44e816714",
+        "11c39d22-7c20-5d25-a8be-f90fb5084b22"
+      ],
+      "cited_decision_ids": [
+        "28ba5e8e-2086-5827-88b4-12a44e816714"
+      ],
+      "answer_text": "Require independent bar-raiser sign-off, outside the hiring team, on every engineering offer. Introduced after two mis-hires last quarter.",
+      "judge_rationale": null,
+      "error": null,
+      "judge_error": "judge call failed: JudgeError: Sonnet judge call failed: AuthenticationError: Unauthorized"
+    },
+    {
+      "example_id": "ge-041",
+      "category": "single_hop",
+      "question": "Do we require a bar-raiser for engineering hires?",
+      "recall_at_5": 1.0,
+      "recall_at_10": 1.0,
+      "hit_at_5": true,
+      "hit_at_10": true,
+      "reciprocal_rank": 1.0,
+      "negative_false_positive": null,
+      "groundedness": null,
+      "correctness": null,
+      "citation_precision": 1.0,
+      "citation_recall": 1.0,
+      "retrieval_latency_ms": 0.20573300002979522,
+      "retrieved_decision_ids": [
+        "cdd6a9ee-39db-52fc-b39c-9af1b627d7b4",
+        "0757cecb-41fd-51cd-9321-56ff4a4de02c"
+      ],
+      "cited_decision_ids": [
+        "cdd6a9ee-39db-52fc-b39c-9af1b627d7b4"
+      ],
+      "answer_text": "Require independent bar-raiser sign-off, outside the hiring team, on every engineering offer. Introduced after two mis-hires last quarter.",
+      "judge_rationale": null,
+      "error": null,
+      "judge_error": "judge call failed: JudgeError: Sonnet judge call failed: AuthenticationError: Unauthorized"
+    },
+    {
+      "example_id": "ge-042",
+      "category": "paraphrase",
+      "question": "Who has to approve an engineering offer besides the hiring manager?",
+      "recall_at_5": 1.0,
+      "recall_at_10": 1.0,
+      "hit_at_5": true,
+      "hit_at_10": true,
+      "reciprocal_rank": 1.0,
+      "negative_false_positive": null,
+      "groundedness": null,
+      "correctness": null,
+      "citation_precision": 1.0,
+      "citation_recall": 1.0,
+      "retrieval_latency_ms": 0.20001199993657792,
+      "retrieved_decision_ids": [
+        "cdd6a9ee-39db-52fc-b39c-9af1b627d7b4"
+      ],
+      "cited_decision_ids": [
+        "cdd6a9ee-39db-52fc-b39c-9af1b627d7b4"
+      ],
+      "answer_text": "Require independent bar-raiser sign-off, outside the hiring team, on every engineering offer. Introduced after two mis-hires last quarter.",
+      "judge_rationale": null,
+      "error": null,
+      "judge_error": "judge call failed: JudgeError: Sonnet judge call failed: AuthenticationError: Unauthorized"
+    },
+    {
+      "example_id": "ge-043",
+      "category": "single_hop",
+      "question": "What's our process after a major incident?",
+      "recall_at_5": 1.0,
+      "recall_at_10": 1.0,
+      "hit_at_5": true,
+      "hit_at_10": true,
+      "reciprocal_rank": 1.0,
+      "negative_false_positive": null,
+      "groundedness": null,
+      "correctness": null,
+      "citation_precision": 1.0,
+      "citation_recall": 1.0,
+      "retrieval_latency_ms": 0.15509800005020224,
+      "retrieved_decision_ids": [
+        "fcfcef2d-ebae-589f-aef3-3faff4a49441"
+      ],
+      "cited_decision_ids": [
+        "fcfcef2d-ebae-589f-aef3-3faff4a49441"
+      ],
+      "answer_text": "Require a blameless postmortem within 3 business days for every SEV1/SEV2 incident. Several undocumented Q4 SEV2s recurred within weeks with no follow-up.",
+      "judge_rationale": null,
+      "error": null,
+      "judge_error": "judge call failed: JudgeError: Sonnet judge call failed: AuthenticationError: Unauthorized"
+    },
+    {
+      "example_id": "ge-044",
+      "category": "paraphrase",
+      "question": "Do we write anything up after a SEV1?",
+      "recall_at_5": 1.0,
+      "recall_at_10": 1.0,
+      "hit_at_5": true,
+      "hit_at_10": true,
+      "reciprocal_rank": 1.0,
+      "negative_false_positive": null,
+      "groundedness": null,
+      "correctness": null,
+      "citation_precision": 1.0,
+      "citation_recall": 1.0,
+      "retrieval_latency_ms": 0.08520800008682272,
+      "retrieved_decision_ids": [
+        "fcfcef2d-ebae-589f-aef3-3faff4a49441"
+      ],
+      "cited_decision_ids": [
+        "fcfcef2d-ebae-589f-aef3-3faff4a49441"
+      ],
+      "answer_text": "Require a blameless postmortem within 3 business days for every SEV1/SEV2 incident. Several undocumented Q4 SEV2s recurred within weeks with no follow-up.",
+      "judge_rationale": null,
+      "error": null,
+      "judge_error": "judge call failed: JudgeError: Sonnet judge call failed: AuthenticationError: Unauthorized"
+    },
+    {
+      "example_id": "ge-045",
+      "category": "single_hop",
+      "question": "What's our process after a major incident?",
+      "recall_at_5": 1.0,
+      "recall_at_10": 1.0,
+      "hit_at_5": true,
+      "hit_at_10": true,
+      "reciprocal_rank": 0.5,
+      "negative_false_positive": null,
+      "groundedness": null,
+      "correctness": null,
+      "citation_precision": 0.0,
+      "citation_recall": 0.0,
+      "retrieval_latency_ms": 0.23473699991427566,
+      "retrieved_decision_ids": [
+        "28ba5e8e-2086-5827-88b4-12a44e816714",
+        "8eabfe66-7818-5b2c-bbc4-8f68d912b418",
+        "8828e780-a0c4-5fe4-98d4-a85c70098359"
+      ],
+      "cited_decision_ids": [
+        "28ba5e8e-2086-5827-88b4-12a44e816714"
+      ],
+      "answer_text": "Require independent bar-raiser sign-off, outside the hiring team, on every engineering offer. Introduced after two mis-hires last quarter.",
+      "judge_rationale": null,
+      "error": null,
+      "judge_error": "judge call failed: JudgeError: Sonnet judge call failed: AuthenticationError: Unauthorized"
+    },
+    {
+      "example_id": "ge-046",
+      "category": "paraphrase",
+      "question": "Do we write anything up after a SEV1?",
+      "recall_at_5": 1.0,
+      "recall_at_10": 1.0,
+      "hit_at_5": true,
+      "hit_at_10": true,
+      "reciprocal_rank": 1.0,
+      "negative_false_positive": null,
+      "groundedness": null,
+      "correctness": null,
+      "citation_precision": 1.0,
+      "citation_recall": 1.0,
+      "retrieval_latency_ms": 0.22101100000782026,
+      "retrieved_decision_ids": [
+        "8eabfe66-7818-5b2c-bbc4-8f68d912b418",
+        "28ba5e8e-2086-5827-88b4-12a44e816714",
+        "11c39d22-7c20-5d25-a8be-f90fb5084b22"
+      ],
+      "cited_decision_ids": [
+        "8eabfe66-7818-5b2c-bbc4-8f68d912b418"
+      ],
+      "answer_text": "Require a blameless postmortem within 3 business days for every SEV1/SEV2 incident. Several undocumented Q4 SEV2s recurred within weeks with no follow-up.",
+      "judge_rationale": null,
+      "error": null,
+      "judge_error": "judge call failed: JudgeError: Sonnet judge call failed: AuthenticationError: Unauthorized"
+    },
+    {
+      "example_id": "ge-047",
+      "category": "single_hop",
+      "question": "How do we roll out new features?",
+      "recall_at_5": 1.0,
+      "recall_at_10": 1.0,
+      "hit_at_5": true,
+      "hit_at_10": true,
+      "reciprocal_rank": 1.0,
+      "negative_false_positive": null,
+      "groundedness": null,
+      "correctness": null,
+      "citation_precision": 1.0,
+      "citation_recall": 1.0,
+      "retrieval_latency_ms": 0.19478199999412027,
+      "retrieved_decision_ids": [
+        "7a434f0f-b4f0-5c2d-9d87-2be8a52609ec",
+        "6106a591-1393-51fb-9610-af744f072135",
+        "f0ab8759-3118-5562-a139-5c97c355a7b3"
+      ],
+      "cited_decision_ids": [
+        "7a434f0f-b4f0-5c2d-9d87-2be8a52609ec"
+      ],
+      "answer_text": "Roll out new features behind flags at 5% -> 25% -> 100% over a week, with auto-rollback on 2x error rate for 10 minutes. Gives a controlled rollout with an automatic, objective rollback trigger.",
+      "judge_rationale": null,
+      "error": null,
+      "judge_error": "judge call failed: JudgeError: Sonnet judge call failed: AuthenticationError: Unauthorized"
+    },
+    {
+      "example_id": "ge-048",
+      "category": "paraphrase",
+      "question": "What percentage of users see a brand-new feature on day one?",
+      "recall_at_5": 1.0,
+      "recall_at_10": 1.0,
+      "hit_at_5": true,
+      "hit_at_10": true,
+      "reciprocal_rank": 0.25,
+      "negative_false_positive": null,
+      "groundedness": null,
+      "correctness": null,
+      "citation_precision": 0.0,
+      "citation_recall": 0.0,
+      "retrieval_latency_ms": 0.2515380000431833,
+      "retrieved_decision_ids": [
+        "6106a591-1393-51fb-9610-af744f072135",
+        "f0ab8759-3118-5562-a139-5c97c355a7b3",
+        "0757cecb-41fd-51cd-9321-56ff4a4de02c",
+        "7a434f0f-b4f0-5c2d-9d87-2be8a52609ec"
+      ],
+      "cited_decision_ids": [
+        "6106a591-1393-51fb-9610-af744f072135"
+      ],
+      "answer_text": "Considered Mongo as the datastore for the new service. Rejected -- multi-document transaction support felt bolted-on for this access pattern.",
+      "judge_rationale": null,
+      "error": null,
+      "judge_error": "judge call failed: JudgeError: Sonnet judge call failed: AuthenticationError: Unauthorized"
+    },
+    {
+      "example_id": "ge-049",
+      "category": "single_hop",
+      "question": "How do we roll out new features?",
+      "recall_at_5": 1.0,
+      "recall_at_10": 1.0,
+      "hit_at_5": true,
+      "hit_at_10": true,
+      "reciprocal_rank": 1.0,
+      "negative_false_positive": null,
+      "groundedness": null,
+      "correctness": null,
+      "citation_precision": 1.0,
+      "citation_recall": 1.0,
+      "retrieval_latency_ms": 0.1464719999830777,
+      "retrieved_decision_ids": [
+        "51cf5869-1982-5acb-a0b5-daf87031a1d2"
+      ],
+      "cited_decision_ids": [
+        "51cf5869-1982-5acb-a0b5-daf87031a1d2"
+      ],
+      "answer_text": "Roll out new features behind flags at 5% -> 25% -> 100% over a week, with auto-rollback on 2x error rate for 10 minutes. Gives a controlled rollout with an automatic, objective rollback trigger.",
+      "judge_rationale": null,
+      "error": null,
+      "judge_error": "judge call failed: JudgeError: Sonnet judge call failed: AuthenticationError: Unauthorized"
+    },
+    {
+      "example_id": "ge-050",
+      "category": "paraphrase",
+      "question": "What percentage of users see a brand-new feature on day one?",
+      "recall_at_5": 1.0,
+      "recall_at_10": 1.0,
+      "hit_at_5": true,
+      "hit_at_10": true,
+      "reciprocal_rank": 1.0,
+      "negative_false_positive": null,
+      "groundedness": null,
+      "correctness": null,
+      "citation_precision": 1.0,
+      "citation_recall": 1.0,
+      "retrieval_latency_ms": 0.16640000001189037,
+      "retrieved_decision_ids": [
+        "51cf5869-1982-5acb-a0b5-daf87031a1d2"
+      ],
+      "cited_decision_ids": [
+        "51cf5869-1982-5acb-a0b5-daf87031a1d2"
+      ],
+      "answer_text": "Roll out new features behind flags at 5% -> 25% -> 100% over a week, with auto-rollback on 2x error rate for 10 minutes. Gives a controlled rollout with an automatic, objective rollback trigger.",
+      "judge_rationale": null,
+      "error": null,
+      "judge_error": "judge call failed: JudgeError: Sonnet judge call failed: AuthenticationError: Unauthorized"
+    },
+    {
+      "example_id": "ge-051",
+      "category": "single_hop",
+      "question": "What's our refund policy for customers?",
+      "recall_at_5": 1.0,
+      "recall_at_10": 1.0,
+      "hit_at_5": true,
+      "hit_at_10": true,
+      "reciprocal_rank": 0.5,
+      "negative_false_positive": null,
+      "groundedness": null,
+      "correctness": null,
+      "citation_precision": 0.0,
+      "citation_recall": 0.0,
+      "retrieval_latency_ms": 0.1748150000366877,
+      "retrieved_decision_ids": [
+        "391079c8-1efe-5d02-8632-4983dbf02f74",
+        "4682b2e5-39ac-5e04-9c75-1025da238235"
+      ],
+      "cited_decision_ids": [
+        "391079c8-1efe-5d02-8632-4983dbf02f74"
+      ],
+      "answer_text": "Adopt a remote-first policy with no mandatory office days; teams may set optional in-person cadences. Matches recruiting commitments made to candidates this quarter.",
+      "judge_rationale": null,
+      "error": null,
+      "judge_error": "judge call failed: JudgeError: Sonnet judge call failed: AuthenticationError: Unauthorized"
+    },
+    {
+      "example_id": "ge-052",
+      "category": "paraphrase",
+      "question": "Can support just refund someone without asking a manager?",
+      "recall_at_5": 1.0,
+      "recall_at_10": 1.0,
+      "hit_at_5": true,
+      "hit_at_10": true,
+      "reciprocal_rank": 1.0,
+      "negative_false_positive": null,
+      "groundedness": null,
+      "correctness": null,
+      "citation_precision": 1.0,
+      "citation_recall": 1.0,
+      "retrieval_latency_ms": 0.2546430000620603,
+      "retrieved_decision_ids": [
+        "4682b2e5-39ac-5e04-9c75-1025da238235"
+      ],
+      "cited_decision_ids": [
+        "4682b2e5-39ac-5e04-9c75-1025da238235"
+      ],
+      "answer_text": "Support may issue full refunds within 14 days with no questions asked; support leads can approve up to $500 beyond that without escalation. Reduces unnecessary escalations to leadership for routine refund cases.",
+      "judge_rationale": null,
+      "error": null,
+      "judge_error": "judge call failed: JudgeError: Sonnet judge call failed: AuthenticationError: Unauthorized"
+    },
+    {
+      "example_id": "ge-053",
+      "category": "single_hop",
+      "question": "What's our refund policy for customers?",
+      "recall_at_5": 1.0,
+      "recall_at_10": 1.0,
+      "hit_at_5": true,
+      "hit_at_10": true,
+      "reciprocal_rank": 1.0,
+      "negative_false_positive": null,
+      "groundedness": null,
+      "correctness": null,
+      "citation_precision": 1.0,
+      "citation_recall": 1.0,
+      "retrieval_latency_ms": 0.182309000024361,
+      "retrieved_decision_ids": [
+        "11c39d22-7c20-5d25-a8be-f90fb5084b22"
+      ],
+      "cited_decision_ids": [
+        "11c39d22-7c20-5d25-a8be-f90fb5084b22"
+      ],
+      "answer_text": "Support may issue full refunds within 14 days with no questions asked; support leads can approve up to $500 beyond that without escalation. Reduces unnecessary escalations to leadership for routine refund cases.",
+      "judge_rationale": null,
+      "error": null,
+      "judge_error": "judge call failed: JudgeError: Sonnet judge call failed: AuthenticationError: Unauthorized"
+    },
+    {
+      "example_id": "ge-054",
+      "category": "paraphrase",
+      "question": "Can support just refund someone without asking a manager?",
+      "recall_at_5": 1.0,
+      "recall_at_10": 1.0,
+      "hit_at_5": true,
+      "hit_at_10": true,
+      "reciprocal_rank": 1.0,
+      "negative_false_positive": null,
+      "groundedness": null,
+      "correctness": null,
+      "citation_precision": 1.0,
+      "citation_recall": 1.0,
+      "retrieval_latency_ms": 0.1696559999118108,
+      "retrieved_decision_ids": [
+        "11c39d22-7c20-5d25-a8be-f90fb5084b22",
+        "51daed2e-f872-52c0-8c17-edd37fddd65b"
+      ],
+      "cited_decision_ids": [
+        "11c39d22-7c20-5d25-a8be-f90fb5084b22"
+      ],
+      "answer_text": "Support may issue full refunds within 14 days with no questions asked; support leads can approve up to $500 beyond that without escalation. Reduces unnecessary escalations to leadership for routine refund cases.",
+      "judge_rationale": null,
+      "error": null,
+      "judge_error": "judge call failed: JudgeError: Sonnet judge call failed: AuthenticationError: Unauthorized"
+    },
+    {
+      "example_id": "ge-055",
+      "category": "single_hop",
+      "question": "How is the marketing budget split this quarter?",
+      "recall_at_5": 1.0,
+      "recall_at_10": 1.0,
+      "hit_at_5": true,
+      "hit_at_10": true,
+      "reciprocal_rank": 1.0,
+      "negative_false_positive": null,
+      "groundedness": null,
+      "correctness": null,
+      "citation_precision": 1.0,
+      "citation_recall": 1.0,
+      "retrieval_latency_ms": 0.21734400002060283,
+      "retrieved_decision_ids": [
+        "82257dd0-6873-51af-8499-88006eb7a1a7",
+        "391079c8-1efe-5d02-8632-4983dbf02f74"
+      ],
+      "cited_decision_ids": [
+        "82257dd0-6873-51af-8499-88006eb7a1a7"
+      ],
+      "answer_text": "Shift Q2 marketing budget split to 60% content/SEO, 40% paid social. Last quarter's paid social spend had a weak CAC; content channel performed better per dollar.",
+      "judge_rationale": null,
+      "error": null,
+      "judge_error": "judge call failed: JudgeError: Sonnet judge call failed: AuthenticationError: Unauthorized"
+    },
+    {
+      "example_id": "ge-056",
+      "category": "paraphrase",
+      "question": "Are we spending more on content or paid ads right now?",
+      "recall_at_5": 1.0,
+      "recall_at_10": 1.0,
+      "hit_at_5": true,
+      "hit_at_10": true,
+      "reciprocal_rank": 1.0,
+      "negative_false_positive": null,
+      "groundedness": null,
+      "correctness": null,
+      "citation_precision": 1.0,
+      "citation_recall": 1.0,
+      "retrieval_latency_ms": 0.844309999934012,
+      "retrieved_decision_ids": [
+        "82257dd0-6873-51af-8499-88006eb7a1a7",
+        "24172dc8-f418-584e-bd24-b814d8a59dc0"
+      ],
+      "cited_decision_ids": [
+        "82257dd0-6873-51af-8499-88006eb7a1a7"
+      ],
+      "answer_text": "Shift Q2 marketing budget split to 60% content/SEO, 40% paid social. Last quarter's paid social spend had a weak CAC; content channel performed better per dollar.",
+      "judge_rationale": null,
+      "error": null,
+      "judge_error": "judge call failed: JudgeError: Sonnet judge call failed: AuthenticationError: Unauthorized"
+    },
+    {
+      "example_id": "ge-057",
+      "category": "single_hop",
+      "question": "How is the marketing budget split this quarter?",
+      "recall_at_5": 1.0,
+      "recall_at_10": 1.0,
+      "hit_at_5": true,
+      "hit_at_10": true,
+      "reciprocal_rank": 1.0,
+      "negative_false_positive": null,
+      "groundedness": null,
+      "correctness": null,
+      "citation_precision": 1.0,
+      "citation_recall": 1.0,
+      "retrieval_latency_ms": 0.24924299998474453,
+      "retrieved_decision_ids": [
+        "201d15c1-9e60-5d6b-9d3f-8aa1e5ab4ef4",
+        "99eca7f8-8604-5674-9560-685a52136622"
+      ],
+      "cited_decision_ids": [
+        "201d15c1-9e60-5d6b-9d3f-8aa1e5ab4ef4"
+      ],
+      "answer_text": "Shift Q2 marketing budget split to 60% content/SEO, 40% paid social. Last quarter's paid social spend had a weak CAC; content channel performed better per dollar.",
+      "judge_rationale": null,
+      "error": null,
+      "judge_error": "judge call failed: JudgeError: Sonnet judge call failed: AuthenticationError: Unauthorized"
+    },
+    {
+      "example_id": "ge-058",
+      "category": "paraphrase",
+      "question": "Are we spending more on content or paid ads right now?",
+      "recall_at_5": 1.0,
+      "recall_at_10": 1.0,
+      "hit_at_5": true,
+      "hit_at_10": true,
+      "reciprocal_rank": 1.0,
+      "negative_false_positive": null,
+      "groundedness": null,
+      "correctness": null,
+      "citation_precision": 1.0,
+      "citation_recall": 1.0,
+      "retrieval_latency_ms": 0.1567320000503969,
+      "retrieved_decision_ids": [
+        "201d15c1-9e60-5d6b-9d3f-8aa1e5ab4ef4"
+      ],
+      "cited_decision_ids": [
+        "201d15c1-9e60-5d6b-9d3f-8aa1e5ab4ef4"
+      ],
+      "answer_text": "Shift Q2 marketing budget split to 60% content/SEO, 40% paid social. Last quarter's paid social spend had a weak CAC; content channel performed better per dollar.",
+      "judge_rationale": null,
+      "error": null,
+      "judge_error": "judge call failed: JudgeError: Sonnet judge call failed: AuthenticationError: Unauthorized"
+    },
+    {
+      "example_id": "ge-059",
+      "category": "single_hop",
+      "question": "What are the code review requirements for payments code?",
+      "recall_at_5": 1.0,
+      "recall_at_10": 1.0,
+      "hit_at_5": true,
+      "hit_at_10": true,
+      "reciprocal_rank": 1.0,
+      "negative_false_positive": null,
+      "groundedness": null,
+      "correctness": null,
+      "citation_precision": 1.0,
+      "citation_recall": 1.0,
+      "retrieval_latency_ms": 0.19786799998655624,
+      "retrieved_decision_ids": [
+        "8828e780-a0c4-5fe4-98d4-a85c70098359"
+      ],
+      "cited_decision_ids": [
+        "8828e780-a0c4-5fe4-98d4-a85c70098359"
+      ],
+      "answer_text": "Require at least one approval from outside the author's immediate team for changes to payments or auth code. A self-merged PR with no second reviewer caused a production incident.",
+      "judge_rationale": null,
+      "error": null,
+      "judge_error": "judge call failed: JudgeError: Sonnet judge call failed: AuthenticationError: Unauthorized"
+    },
+    {
+      "example_id": "ge-060",
+      "category": "paraphrase",
+      "question": "Can someone on my own team approve my auth-related PR?",
+      "recall_at_5": 1.0,
+      "recall_at_10": 1.0,
+      "hit_at_5": true,
+      "hit_at_10": true,
+      "reciprocal_rank": 1.0,
+      "negative_false_positive": null,
+      "groundedness": null,
+      "correctness": null,
+      "citation_precision": 1.0,
+      "citation_recall": 1.0,
+      "retrieval_latency_ms": 0.2247480000505675,
+      "retrieved_decision_ids": [
+        "8828e780-a0c4-5fe4-98d4-a85c70098359",
+        "11c39d22-7c20-5d25-a8be-f90fb5084b22",
+        "28ba5e8e-2086-5827-88b4-12a44e816714"
+      ],
+      "cited_decision_ids": [
+        "8828e780-a0c4-5fe4-98d4-a85c70098359"
+      ],
+      "answer_text": "Require at least one approval from outside the author's immediate team for changes to payments or auth code. A self-merged PR with no second reviewer caused a production incident.",
+      "judge_rationale": null,
+      "error": null,
+      "judge_error": "judge call failed: JudgeError: Sonnet judge call failed: AuthenticationError: Unauthorized"
+    },
+    {
+      "example_id": "ge-061",
+      "category": "single_hop",
+      "question": "What are the code review requirements for payments code?",
+      "recall_at_5": 1.0,
+      "recall_at_10": 1.0,
+      "hit_at_5": true,
+      "hit_at_10": true,
+      "reciprocal_rank": 1.0,
+      "negative_false_positive": null,
+      "groundedness": null,
+      "correctness": null,
+      "citation_precision": 1.0,
+      "citation_recall": 1.0,
+      "retrieval_latency_ms": 0.20459100005609798,
+      "retrieved_decision_ids": [
+        "0757cecb-41fd-51cd-9321-56ff4a4de02c"
+      ],
+      "cited_decision_ids": [
+        "0757cecb-41fd-51cd-9321-56ff4a4de02c"
+      ],
+      "answer_text": "Require at least one approval from outside the author's immediate team for changes to payments or auth code. A self-merged PR with no second reviewer caused a production incident.",
+      "judge_rationale": null,
+      "error": null,
+      "judge_error": "judge call failed: JudgeError: Sonnet judge call failed: AuthenticationError: Unauthorized"
+    },
+    {
+      "example_id": "ge-062",
+      "category": "paraphrase",
+      "question": "Can someone on my own team approve my auth-related PR?",
+      "recall_at_5": 1.0,
+      "recall_at_10": 1.0,
+      "hit_at_5": true,
+      "hit_at_10": true,
+      "reciprocal_rank": 1.0,
+      "negative_false_positive": null,
+      "groundedness": null,
+      "correctness": null,
+      "citation_precision": 1.0,
+      "citation_recall": 1.0,
+      "retrieval_latency_ms": 0.20213599998442078,
+      "retrieved_decision_ids": [
+        "0757cecb-41fd-51cd-9321-56ff4a4de02c",
+        "cdd6a9ee-39db-52fc-b39c-9af1b627d7b4",
+        "d58f8310-71d8-5f18-b82a-50bfb616a432"
+      ],
+      "cited_decision_ids": [
+        "0757cecb-41fd-51cd-9321-56ff4a4de02c"
+      ],
+      "answer_text": "Require at least one approval from outside the author's immediate team for changes to payments or auth code. A self-merged PR with no second reviewer caused a production incident.",
+      "judge_rationale": null,
+      "error": null,
+      "judge_error": "judge call failed: JudgeError: Sonnet judge call failed: AuthenticationError: Unauthorized"
+    },
+    {
+      "example_id": "ge-063",
+      "category": "single_hop",
+      "question": "Is MFA required for internal tools?",
+      "recall_at_5": 1.0,
+      "recall_at_10": 1.0,
+      "hit_at_5": true,
+      "hit_at_10": true,
+      "reciprocal_rank": 1.0,
+      "negative_false_positive": null,
+      "groundedness": null,
+      "correctness": null,
+      "citation_precision": 1.0,
+      "citation_recall": 1.0,
+      "retrieval_latency_ms": 0.1310630000261881,
+      "retrieved_decision_ids": [
+        "89c2e663-0179-5477-a077-fe057fb4d6bf"
+      ],
+      "cited_decision_ids": [
+        "89c2e663-0179-5477-a077-fe057fb4d6bf"
+      ],
+      "answer_text": "Make MFA mandatory for all internal tools within 30 days, including contractors, with no exceptions. Prompted by a phishing attempt the prior month.",
+      "judge_rationale": null,
+      "error": null,
+      "judge_error": "judge call failed: JudgeError: Sonnet judge call failed: AuthenticationError: Unauthorized"
+    },
+    {
+      "example_id": "ge-064",
+      "category": "paraphrase",
+      "question": "Do contractors also need two-factor auth on our systems?",
+      "recall_at_5": 1.0,
+      "recall_at_10": 1.0,
+      "hit_at_5": true,
+      "hit_at_10": true,
+      "reciprocal_rank": 1.0,
+      "negative_false_positive": null,
+      "groundedness": null,
+      "correctness": null,
+      "citation_precision": 1.0,
+      "citation_recall": 1.0,
+      "retrieval_latency_ms": 0.23463599995920958,
+      "retrieved_decision_ids": [
+        "89c2e663-0179-5477-a077-fe057fb4d6bf",
+        "28fe5907-827f-5d88-bfb3-100ce4e82245"
+      ],
+      "cited_decision_ids": [
+        "89c2e663-0179-5477-a077-fe057fb4d6bf"
+      ],
+      "answer_text": "Make MFA mandatory for all internal tools within 30 days, including contractors, with no exceptions. Prompted by a phishing attempt the prior month.",
+      "judge_rationale": null,
+      "error": null,
+      "judge_error": "judge call failed: JudgeError: Sonnet judge call failed: AuthenticationError: Unauthorized"
+    },
+    {
+      "example_id": "ge-065",
+      "category": "single_hop",
+      "question": "Is MFA required for internal tools?",
+      "recall_at_5": 1.0,
+      "recall_at_10": 1.0,
+      "hit_at_5": true,
+      "hit_at_10": true,
+      "reciprocal_rank": 1.0,
+      "negative_false_positive": null,
+      "groundedness": null,
+      "correctness": null,
+      "citation_precision": 1.0,
+      "citation_recall": 1.0,
+      "retrieval_latency_ms": 0.1786120000133451,
+      "retrieved_decision_ids": [
+        "6b7fb84b-71ca-5d9a-a191-1b6647fcb534"
+      ],
+      "cited_decision_ids": [
+        "6b7fb84b-71ca-5d9a-a191-1b6647fcb534"
+      ],
+      "answer_text": "Make MFA mandatory for all internal tools within 30 days, including contractors, with no exceptions. Prompted by a phishing attempt the prior month.",
+      "judge_rationale": null,
+      "error": null,
+      "judge_error": "judge call failed: JudgeError: Sonnet judge call failed: AuthenticationError: Unauthorized"
+    },
+    {
+      "example_id": "ge-066",
+      "category": "paraphrase",
+      "question": "Do contractors also need two-factor auth on our systems?",
+      "recall_at_5": 1.0,
+      "recall_at_10": 1.0,
+      "hit_at_5": true,
+      "hit_at_10": true,
+      "reciprocal_rank": 1.0,
+      "negative_false_positive": null,
+      "groundedness": null,
+      "correctness": null,
+      "citation_precision": 1.0,
+      "citation_recall": 1.0,
+      "retrieval_latency_ms": 0.2649329999258043,
+      "retrieved_decision_ids": [
+        "6b7fb84b-71ca-5d9a-a191-1b6647fcb534"
+      ],
+      "cited_decision_ids": [
+        "6b7fb84b-71ca-5d9a-a191-1b6647fcb534"
+      ],
+      "answer_text": "Make MFA mandatory for all internal tools within 30 days, including contractors, with no exceptions. Prompted by a phishing attempt the prior month.",
+      "judge_rationale": null,
+      "error": null,
+      "judge_error": "judge call failed: JudgeError: Sonnet judge call failed: AuthenticationError: Unauthorized"
+    },
+    {
+      "example_id": "ge-067",
+      "category": "single_hop",
+      "question": "How often does the team have standup now?",
+      "recall_at_5": 0.0,
+      "recall_at_10": 0.0,
+      "hit_at_5": false,
+      "hit_at_10": false,
+      "reciprocal_rank": 0.0,
+      "negative_false_positive": null,
+      "groundedness": null,
+      "correctness": null,
+      "citation_precision": 0.0,
+      "citation_recall": 0.0,
+      "retrieval_latency_ms": 0.3750179999997272,
+      "retrieved_decision_ids": [
+        "cdd6a9ee-39db-52fc-b39c-9af1b627d7b4",
+        "d58f8310-71d8-5f18-b82a-50bfb616a432",
+        "0757cecb-41fd-51cd-9321-56ff4a4de02c"
+      ],
+      "cited_decision_ids": [
+        "cdd6a9ee-39db-52fc-b39c-9af1b627d7b4"
+      ],
+      "answer_text": "Require independent bar-raiser sign-off, outside the hiring team, on every engineering offer. Introduced after two mis-hires last quarter.",
+      "judge_rationale": null,
+      "error": null,
+      "judge_error": "judge call failed: JudgeError: Sonnet judge call failed: AuthenticationError: Unauthorized"
+    },
+    {
+      "example_id": "ge-068",
+      "category": "paraphrase",
+      "question": "Is standup a daily thing or not anymore?",
+      "recall_at_5": 1.0,
+      "recall_at_10": 1.0,
+      "hit_at_5": true,
+      "hit_at_10": true,
+      "reciprocal_rank": 1.0,
+      "negative_false_positive": null,
+      "groundedness": null,
+      "correctness": null,
+      "citation_precision": 1.0,
+      "citation_recall": 1.0,
+      "retrieval_latency_ms": 0.2988360000699686,
+      "retrieved_decision_ids": [
+        "00e0bca4-bded-5194-9c8b-7d35585de1ec"
+      ],
+      "cited_decision_ids": [
+        "00e0bca4-bded-5194-9c8b-7d35585de1ec"
+      ],
+      "answer_text": "Cut daily standups to 3x/week (Mon/Wed/Fri), with async updates the other two days. Daily standups had become a low-value status report format.",
+      "judge_rationale": null,
+      "error": null,
+      "judge_error": "judge call failed: JudgeError: Sonnet judge call failed: AuthenticationError: Unauthorized"
+    },
+    {
+      "example_id": "ge-069",
+      "category": "single_hop",
+      "question": "How often does the team have standup now?",
+      "recall_at_5": 0.0,
+      "recall_at_10": 0.0,
+      "hit_at_5": false,
+      "hit_at_10": false,
+      "reciprocal_rank": 0.0,
+      "negative_false_positive": null,
+      "groundedness": null,
+      "correctness": null,
+      "citation_precision": 0.0,
+      "citation_recall": 0.0,
+      "retrieval_latency_ms": 0.19837799993638328,
+      "retrieved_decision_ids": [
+        "28ba5e8e-2086-5827-88b4-12a44e816714",
+        "8828e780-a0c4-5fe4-98d4-a85c70098359"
+      ],
+      "cited_decision_ids": [
+        "28ba5e8e-2086-5827-88b4-12a44e816714"
+      ],
+      "answer_text": "Require independent bar-raiser sign-off, outside the hiring team, on every engineering offer. Introduced after two mis-hires last quarter.",
+      "judge_rationale": null,
+      "error": null,
+      "judge_error": "judge call failed: JudgeError: Sonnet judge call failed: AuthenticationError: Unauthorized"
+    },
+    {
+      "example_id": "ge-070",
+      "category": "paraphrase",
+      "question": "Is standup a daily thing or not anymore?",
+      "recall_at_5": 1.0,
+      "recall_at_10": 1.0,
+      "hit_at_5": true,
+      "hit_at_10": true,
+      "reciprocal_rank": 1.0,
+      "negative_false_positive": null,
+      "groundedness": null,
+      "correctness": null,
+      "citation_precision": 1.0,
+      "citation_recall": 1.0,
+      "retrieval_latency_ms": 0.1604990000032558,
+      "retrieved_decision_ids": [
+        "9f520fbc-36c7-5f42-a435-a32afdf4ffcc"
+      ],
+      "cited_decision_ids": [
+        "9f520fbc-36c7-5f42-a435-a32afdf4ffcc"
+      ],
+      "answer_text": "Cut daily standups to 3x/week (Mon/Wed/Fri), with async updates the other two days. Daily standups had become a low-value status report format.",
+      "judge_rationale": null,
+      "error": null,
+      "judge_error": "judge call failed: JudgeError: Sonnet judge call failed: AuthenticationError: Unauthorized"
+    },
+    {
+      "example_id": "ge-071",
+      "category": "ambiguous_entity",
+      "question": "How long do we retain data before deleting or archiving it?",
+      "recall_at_5": 1.0,
+      "recall_at_10": 1.0,
+      "hit_at_5": true,
+      "hit_at_10": true,
+      "reciprocal_rank": 1.0,
+      "negative_false_positive": null,
+      "groundedness": null,
+      "correctness": null,
+      "citation_precision": 1.0,
+      "citation_recall": 1.0,
+      "retrieval_latency_ms": 0.20885799995085108,
+      "retrieved_decision_ids": [
+        "8250bd78-95f9-5b8f-ba08-5575d1043243",
+        "dbcd2ffb-2959-50ca-8fa0-01bb37ab3657"
+      ],
+      "cited_decision_ids": [
+        "8250bd78-95f9-5b8f-ba08-5575d1043243"
+      ],
+      "answer_text": "Retain raw ingested events for 30 days before deletion. Balances debugging/replay needs against storage cost and data minimization.",
+      "judge_rationale": null,
+      "error": null,
+      "judge_error": "judge call failed: JudgeError: Sonnet judge call failed: AuthenticationError: Unauthorized"
+    },
+    {
+      "example_id": "ge-072",
+      "category": "ambiguous_entity",
+      "question": "How long do we retain data before deleting or archiving it?",
+      "recall_at_5": 1.0,
+      "recall_at_10": 1.0,
+      "hit_at_5": true,
+      "hit_at_10": true,
+      "reciprocal_rank": 1.0,
+      "negative_false_positive": null,
+      "groundedness": null,
+      "correctness": null,
+      "citation_precision": 1.0,
+      "citation_recall": 1.0,
+      "retrieval_latency_ms": 0.23350399999344518,
+      "retrieved_decision_ids": [
+        "41ef0a6e-ff8a-51ce-a8a6-40600974bada",
+        "64f34bc7-0998-5912-be7a-f31b637eb11c"
+      ],
+      "cited_decision_ids": [
+        "41ef0a6e-ff8a-51ce-a8a6-40600974bada"
+      ],
+      "answer_text": "Retain raw ingested events for 30 days before deletion. Balances debugging/replay needs against storage cost and data minimization.",
+      "judge_rationale": null,
+      "error": null,
+      "judge_error": "judge call failed: JudgeError: Sonnet judge call failed: AuthenticationError: Unauthorized"
+    },
+    {
+      "example_id": "ge-073",
+      "category": "single_hop",
+      "question": "What database did Aurora Robotics pick for the warehouse arm firmware?",
+      "recall_at_5": 0.0,
+      "recall_at_10": 0.0,
+      "hit_at_5": false,
+      "hit_at_10": false,
+      "reciprocal_rank": 0.0,
+      "negative_false_positive": null,
+      "groundedness": null,
+      "correctness": null,
+      "citation_precision": null,
+      "citation_recall": 0.0,
+      "retrieval_latency_ms": 0.20276699990517955,
+      "retrieved_decision_ids": [],
+      "cited_decision_ids": [],
+      "answer_text": "There's no recorded decision that answers this question.",
+      "judge_rationale": null,
+      "error": null,
+      "judge_error": "judge call failed: JudgeError: Sonnet judge call failed: AuthenticationError: Unauthorized"
+    },
+    {
+      "example_id": "ge-074",
+      "category": "single_hop",
+      "question": "What database did Cobalt Analytics pick for the reporting service?",
+      "recall_at_5": 1.0,
+      "recall_at_10": 1.0,
+      "hit_at_5": true,
+      "hit_at_10": true,
+      "reciprocal_rank": 0.5,
+      "negative_false_positive": null,
+      "groundedness": null,
+      "correctness": null,
+      "citation_precision": 0.0,
+      "citation_recall": 0.0,
+      "retrieval_latency_ms": 0.7598729999926945,
+      "retrieved_decision_ids": [
+        "51daed2e-f872-52c0-8c17-edd37fddd65b",
+        "caa44e05-e032-5baf-979c-d90579c1b44e"
+      ],
+      "cited_decision_ids": [
+        "51daed2e-f872-52c0-8c17-edd37fddd65b"
+      ],
+      "answer_text": "Considered Mongo as the datastore for the new service. Rejected -- multi-document transaction support felt bolted-on for this access pattern.",
+      "judge_rationale": null,
+      "error": null,
+      "judge_error": "judge call failed: JudgeError: Sonnet judge call failed: AuthenticationError: Unauthorized"
+    },
+    {
+      "example_id": "ge-075",
+      "category": "negative",
+      "question": "Which vendor did we choose for background checks?",
+      "recall_at_5": null,
+      "recall_at_10": null,
+      "hit_at_5": null,
+      "hit_at_10": null,
+      "reciprocal_rank": null,
+      "negative_false_positive": false,
+      "groundedness": null,
+      "correctness": null,
+      "citation_precision": null,
+      "citation_recall": null,
+      "retrieval_latency_ms": 0.27816699991944915,
+      "retrieved_decision_ids": [],
+      "cited_decision_ids": [],
+      "answer_text": "There's no recorded decision that answers this question.",
+      "judge_rationale": null,
+      "error": null,
+      "judge_error": "judge call failed: JudgeError: Sonnet judge call failed: AuthenticationError: Unauthorized"
+    },
+    {
+      "example_id": "ge-076",
+      "category": "negative",
+      "question": "Is there a deploy freeze before releases?",
+      "recall_at_5": null,
+      "recall_at_10": null,
+      "hit_at_5": null,
+      "hit_at_10": null,
+      "reciprocal_rank": null,
+      "negative_false_positive": true,
+      "groundedness": null,
+      "correctness": null,
+      "citation_precision": 0.0,
+      "citation_recall": null,
+      "retrieval_latency_ms": 0.20055299989962805,
+      "retrieved_decision_ids": [
+        "8250bd78-95f9-5b8f-ba08-5575d1043243"
+      ],
+      "cited_decision_ids": [
+        "8250bd78-95f9-5b8f-ba08-5575d1043243"
+      ],
+      "answer_text": "Retain raw ingested events for 30 days before deletion. Balances debugging/replay needs against storage cost and data minimization.",
+      "judge_rationale": null,
+      "error": null,
+      "judge_error": "judge call failed: JudgeError: Sonnet judge call failed: AuthenticationError: Unauthorized"
+    },
+    {
+      "example_id": "ge-077",
+      "category": "negative",
+      "question": "What's our remote work policy?",
+      "recall_at_5": null,
+      "recall_at_10": null,
+      "hit_at_5": null,
+      "hit_at_10": null,
+      "reciprocal_rank": null,
+      "negative_false_positive": false,
+      "groundedness": null,
+      "correctness": null,
+      "citation_precision": null,
+      "citation_recall": null,
+      "retrieval_latency_ms": 0.1492869999992763,
+      "retrieved_decision_ids": [],
+      "cited_decision_ids": [],
+      "answer_text": "There's no recorded decision that answers this question.",
+      "judge_rationale": null,
+      "error": null,
+      "judge_error": "judge call failed: JudgeError: Sonnet judge call failed: AuthenticationError: Unauthorized"
+    },
+    {
+      "example_id": "ge-078",
+      "category": "negative",
+      "question": "What's our on-call rotation policy?",
+      "recall_at_5": null,
+      "recall_at_10": null,
+      "hit_at_5": null,
+      "hit_at_10": null,
+      "reciprocal_rank": null,
+      "negative_false_positive": true,
+      "groundedness": null,
+      "correctness": null,
+      "citation_precision": 0.0,
+      "citation_recall": null,
+      "retrieval_latency_ms": 0.34278700002232654,
+      "retrieved_decision_ids": [
+        "391079c8-1efe-5d02-8632-4983dbf02f74"
+      ],
+      "cited_decision_ids": [
+        "391079c8-1efe-5d02-8632-4983dbf02f74"
+      ],
+      "answer_text": "Adopt a remote-first policy with no mandatory office days; teams may set optional in-person cadences. Matches recruiting commitments made to candidates this quarter.",
+      "judge_rationale": null,
+      "error": null,
+      "judge_error": "judge call failed: JudgeError: Sonnet judge call failed: AuthenticationError: Unauthorized"
+    },
+    {
+      "example_id": "ge-079",
+      "category": "negative",
+      "question": "Is there a deploy freeze before releases?",
+      "recall_at_5": null,
+      "recall_at_10": null,
+      "hit_at_5": null,
+      "hit_at_10": null,
+      "reciprocal_rank": null,
+      "negative_false_positive": true,
+      "groundedness": null,
+      "correctness": null,
+      "citation_precision": 0.0,
+      "citation_recall": null,
+      "retrieval_latency_ms": 0.7979540000633278,
+      "retrieved_decision_ids": [
+        "41ef0a6e-ff8a-51ce-a8a6-40600974bada"
+      ],
+      "cited_decision_ids": [
+        "41ef0a6e-ff8a-51ce-a8a6-40600974bada"
+      ],
+      "answer_text": "Retain raw ingested events for 30 days before deletion. Balances debugging/replay needs against storage cost and data minimization.",
+      "judge_rationale": null,
+      "error": null,
+      "judge_error": "judge call failed: JudgeError: Sonnet judge call failed: AuthenticationError: Unauthorized"
+    },
+    {
+      "example_id": "ge-080",
+      "category": "negative",
+      "question": "What database are we using for the new service?",
+      "recall_at_5": null,
+      "recall_at_10": null,
+      "hit_at_5": null,
+      "hit_at_10": null,
+      "reciprocal_rank": null,
+      "negative_false_positive": false,
+      "groundedness": null,
+      "correctness": null,
+      "citation_precision": null,
+      "citation_recall": null,
+      "retrieval_latency_ms": 0.1243909999857351,
+      "retrieved_decision_ids": [],
+      "cited_decision_ids": [],
+      "answer_text": "There's no recorded decision that answers this question.",
+      "judge_rationale": null,
+      "error": null,
+      "judge_error": "judge call failed: JudgeError: Sonnet judge call failed: AuthenticationError: Unauthorized"
+    },
+    {
+      "example_id": "ge-081",
+      "category": "negative",
+      "question": "What did we decide about the pricing tiers?",
+      "recall_at_5": null,
+      "recall_at_10": null,
+      "hit_at_5": null,
+      "hit_at_10": null,
+      "reciprocal_rank": null,
+      "negative_false_positive": false,
+      "groundedness": null,
+      "correctness": null,
+      "citation_precision": null,
+      "citation_recall": null,
+      "retrieval_latency_ms": 0.08031999993818317,
+      "retrieved_decision_ids": [],
+      "cited_decision_ids": [],
+      "answer_text": "There's no recorded decision that answers this question.",
+      "judge_rationale": null,
+      "error": null,
+      "judge_error": "judge call failed: JudgeError: Sonnet judge call failed: AuthenticationError: Unauthorized"
+    },
+    {
+      "example_id": "ge-082",
+      "category": "negative",
+      "question": "What's our on-call rotation policy?",
+      "recall_at_5": null,
+      "recall_at_10": null,
+      "hit_at_5": null,
+      "hit_at_10": null,
+      "reciprocal_rank": null,
+      "negative_false_positive": false,
+      "groundedness": null,
+      "correctness": null,
+      "citation_precision": null,
+      "citation_recall": null,
+      "retrieval_latency_ms": 0.1714690000653718,
+      "retrieved_decision_ids": [],
+      "cited_decision_ids": [],
+      "answer_text": "There's no recorded decision that answers this question.",
+      "judge_rationale": null,
+      "error": null,
+      "judge_error": "judge call failed: JudgeError: Sonnet judge call failed: AuthenticationError: Unauthorized"
+    },
+    {
+      "example_id": "ge-083",
+      "category": "negative",
+      "question": "How long do we keep raw ingested events before deleting them?",
+      "recall_at_5": null,
+      "recall_at_10": null,
+      "hit_at_5": null,
+      "hit_at_10": null,
+      "reciprocal_rank": null,
+      "negative_false_positive": true,
+      "groundedness": null,
+      "correctness": null,
+      "citation_precision": 0.0,
+      "citation_recall": null,
+      "retrieval_latency_ms": 0.16083899993191153,
+      "retrieved_decision_ids": [
+        "7544462a-8fec-59e2-8059-122da7473a16"
+      ],
+      "cited_decision_ids": [
+        "7544462a-8fec-59e2-8059-122da7473a16"
+      ],
+      "answer_text": "Enforce a 48-hour deploy freeze window before any tagged release. Two consecutive Friday deploys caused weekend incidents; exceptions require director sign-off.",
+      "judge_rationale": null,
+      "error": null,
+      "judge_error": "judge call failed: JudgeError: Sonnet judge call failed: AuthenticationError: Unauthorized"
+    },
+    {
+      "example_id": "ge-084",
+      "category": "negative",
+      "question": "What did we decide about the pricing tiers?",
+      "recall_at_5": null,
+      "recall_at_10": null,
+      "hit_at_5": null,
+      "hit_at_10": null,
+      "reciprocal_rank": null,
+      "negative_false_positive": false,
+      "groundedness": null,
+      "correctness": null,
+      "citation_precision": null,
+      "citation_recall": null,
+      "retrieval_latency_ms": 0.11906099996394914,
+      "retrieved_decision_ids": [],
+      "cited_decision_ids": [],
+      "answer_text": "There's no recorded decision that answers this question.",
+      "judge_rationale": null,
+      "error": null,
+      "judge_error": "judge call failed: JudgeError: Sonnet judge call failed: AuthenticationError: Unauthorized"
+    },
+    {
+      "example_id": "ge-085",
+      "category": "negative",
+      "question": "Which vendor did we choose for background checks?",
+      "recall_at_5": null,
+      "recall_at_10": null,
+      "hit_at_5": null,
+      "hit_at_10": null,
+      "reciprocal_rank": null,
+      "negative_false_positive": false,
+      "groundedness": null,
+      "correctness": null,
+      "citation_precision": null,
+      "citation_recall": null,
+      "retrieval_latency_ms": 0.22761399998216802,
+      "retrieved_decision_ids": [],
+      "cited_decision_ids": [],
+      "answer_text": "There's no recorded decision that answers this question.",
+      "judge_rationale": null,
+      "error": null,
+      "judge_error": "judge call failed: JudgeError: Sonnet judge call failed: AuthenticationError: Unauthorized"
+    },
+    {
+      "example_id": "ge-086",
+      "category": "negative",
+      "question": "What database are we using for the new service?",
+      "recall_at_5": null,
+      "recall_at_10": null,
+      "hit_at_5": null,
+      "hit_at_10": null,
+      "reciprocal_rank": null,
+      "negative_false_positive": true,
+      "groundedness": null,
+      "correctness": null,
+      "citation_precision": 0.0,
+      "citation_recall": null,
+      "retrieval_latency_ms": 0.17594700000245211,
+      "retrieved_decision_ids": [
+        "51cf5869-1982-5acb-a0b5-daf87031a1d2"
+      ],
+      "cited_decision_ids": [
+        "51cf5869-1982-5acb-a0b5-daf87031a1d2"
+      ],
+      "answer_text": "Roll out new features behind flags at 5% -> 25% -> 100% over a week, with auto-rollback on 2x error rate for 10 minutes. Gives a controlled rollout with an automatic, objective rollback trigger.",
+      "judge_rationale": null,
+      "error": null,
+      "judge_error": "judge call failed: JudgeError: Sonnet judge call failed: AuthenticationError: Unauthorized"
+    }
+  ]
+}

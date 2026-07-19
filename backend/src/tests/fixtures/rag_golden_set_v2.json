@@ -1,0 +1,2088 @@
+{
+  "examples": [
+    {
+      "id": "ge-001",
+      "question": "What did we decide about the pricing tiers?",
+      "tenant_id": "20f0a8ca-afad-5b50-bdd6-c794c0199862",
+      "category": "single_hop",
+      "scenario_pack_ids": [
+        "sp-001"
+      ],
+      "expected_decision_ids": [
+        "17f4533f-7a50-5081-aa78-bd2838b681bc"
+      ],
+      "expected_citation_ids": [
+        "17f4533f-7a50-5081-aa78-bd2838b681bc"
+      ],
+      "reference_answer": "Move from 5 pricing tiers to a simplified 3-tier structure: Free, Pro, Enterprise. 7 of the last 12 lost deals cited tier confusion; simplifying should speed the sales cycle.",
+      "labeling": {
+        "labeler_a": "simulated-a",
+        "labeler_b": "simulated-b",
+        "simulated": true,
+        "agreed": true,
+        "adjudicator": null,
+        "adjudication_note": null
+      },
+      "notes": null
+    },
+    {
+      "id": "ge-002",
+      "question": "How many pricing plans do we offer customers now?",
+      "tenant_id": "20f0a8ca-afad-5b50-bdd6-c794c0199862",
+      "category": "paraphrase",
+      "scenario_pack_ids": [
+        "sp-001"
+      ],
+      "expected_decision_ids": [
+        "17f4533f-7a50-5081-aa78-bd2838b681bc"
+      ],
+      "expected_citation_ids": [
+        "17f4533f-7a50-5081-aa78-bd2838b681bc"
+      ],
+      "reference_answer": "Move from 5 pricing tiers to a simplified 3-tier structure: Free, Pro, Enterprise.",
+      "labeling": {
+        "labeler_a": "simulated-a",
+        "labeler_b": "simulated-b",
+        "simulated": true,
+        "agreed": false,
+        "adjudicator": "simulated-adjudicator",
+        "adjudication_note": "Labeler A (keyword overlap) flagged []; Labeler B (domain/topic match) flagged ['17f4533f-7a50-5081-aa78-bd2838b681bc', '4b8d1cb9-f88d-5dc7-be65-bc677ff0de09']. Adjudicated to author-intended ground truth ['17f4533f-7a50-5081-aa78-bd2838b681bc'] -- keyword overlap is a known-weak signal for paraphrased or entity-ambiguous questions (see AUTHORING_GUIDE.md); real human review should re-check this case."
+      },
+      "notes": "Phrased away from the source transcript's wording to test embedding recall over exact keyword match."
+    },
+    {
+      "id": "ge-003",
+      "question": "What did we originally decide about pricing tiers, before the current approach?",
+      "tenant_id": "20f0a8ca-afad-5b50-bdd6-c794c0199862",
+      "category": "temporal",
+      "scenario_pack_ids": [
+        "sp-001"
+      ],
+      "expected_decision_ids": [
+        "4b8d1cb9-f88d-5dc7-be65-bc677ff0de09"
+      ],
+      "expected_citation_ids": [
+        "4b8d1cb9-f88d-5dc7-be65-bc677ff0de09"
+      ],
+      "reference_answer": "Launch with 5 pricing tiers: Free, Starter, Growth, Business, Enterprise.",
+      "labeling": {
+        "labeler_a": "simulated-a",
+        "labeler_b": "simulated-b",
+        "simulated": true,
+        "agreed": true,
+        "adjudicator": null,
+        "adjudication_note": null
+      },
+      "notes": "Tests that the superseded record is still individually retrievable, not just its replacement."
+    },
+    {
+      "id": "ge-004",
+      "question": "What's the current decision on pricing tiers and how did we get there?",
+      "tenant_id": "20f0a8ca-afad-5b50-bdd6-c794c0199862",
+      "category": "multi_hop",
+      "scenario_pack_ids": [
+        "sp-001"
+      ],
+      "expected_decision_ids": [
+        "17f4533f-7a50-5081-aa78-bd2838b681bc",
+        "4b8d1cb9-f88d-5dc7-be65-bc677ff0de09"
+      ],
+      "expected_citation_ids": [
+        "17f4533f-7a50-5081-aa78-bd2838b681bc",
+        "4b8d1cb9-f88d-5dc7-be65-bc677ff0de09"
+      ],
+      "reference_answer": "Move from 5 pricing tiers to a simplified 3-tier structure: Free, Pro, Enterprise. Previously: Launch with 5 pricing tiers: Free, Starter, Growth, Business, Enterprise.",
+      "labeling": {
+        "labeler_a": "simulated-a",
+        "labeler_b": "simulated-b",
+        "simulated": true,
+        "agreed": true,
+        "adjudicator": null,
+        "adjudication_note": null
+      },
+      "notes": "Requires citing both the current and superseded decision."
+    },
+    {
+      "id": "ge-005",
+      "question": "What did we decide about the pricing tiers?",
+      "tenant_id": "ec14b5fc-4191-5d4a-af46-c1a5099a3db4",
+      "category": "single_hop",
+      "scenario_pack_ids": [
+        "sp-002"
+      ],
+      "expected_decision_ids": [
+        "1427e05d-9454-5d1d-a602-967ce4f44e8d"
+      ],
+      "expected_citation_ids": [
+        "1427e05d-9454-5d1d-a602-967ce4f44e8d"
+      ],
+      "reference_answer": "Move from 5 pricing tiers to a simplified 3-tier structure: Free, Pro, Enterprise. 7 of the last 12 lost deals cited tier confusion; simplifying should speed the sales cycle.",
+      "labeling": {
+        "labeler_a": "simulated-a",
+        "labeler_b": "simulated-b",
+        "simulated": true,
+        "agreed": true,
+        "adjudicator": null,
+        "adjudication_note": null
+      },
+      "notes": null
+    },
+    {
+      "id": "ge-006",
+      "question": "How many pricing plans do we offer customers now?",
+      "tenant_id": "ec14b5fc-4191-5d4a-af46-c1a5099a3db4",
+      "category": "paraphrase",
+      "scenario_pack_ids": [
+        "sp-002"
+      ],
+      "expected_decision_ids": [
+        "1427e05d-9454-5d1d-a602-967ce4f44e8d"
+      ],
+      "expected_citation_ids": [
+        "1427e05d-9454-5d1d-a602-967ce4f44e8d"
+      ],
+      "reference_answer": "Move from 5 pricing tiers to a simplified 3-tier structure: Free, Pro, Enterprise.",
+      "labeling": {
+        "labeler_a": "simulated-a",
+        "labeler_b": "simulated-b",
+        "simulated": true,
+        "agreed": false,
+        "adjudicator": "simulated-adjudicator",
+        "adjudication_note": "Labeler A (keyword overlap) flagged []; Labeler B (domain/topic match) flagged ['1427e05d-9454-5d1d-a602-967ce4f44e8d', '24172dc8-f418-584e-bd24-b814d8a59dc0']. Adjudicated to author-intended ground truth ['1427e05d-9454-5d1d-a602-967ce4f44e8d'] -- keyword overlap is a known-weak signal for paraphrased or entity-ambiguous questions (see AUTHORING_GUIDE.md); real human review should re-check this case."
+      },
+      "notes": "Phrased away from the source transcript's wording to test embedding recall over exact keyword match."
+    },
+    {
+      "id": "ge-007",
+      "question": "What did we originally decide about pricing tiers, before the current approach?",
+      "tenant_id": "ec14b5fc-4191-5d4a-af46-c1a5099a3db4",
+      "category": "temporal",
+      "scenario_pack_ids": [
+        "sp-002"
+      ],
+      "expected_decision_ids": [
+        "24172dc8-f418-584e-bd24-b814d8a59dc0"
+      ],
+      "expected_citation_ids": [
+        "24172dc8-f418-584e-bd24-b814d8a59dc0"
+      ],
+      "reference_answer": "Launch with 5 pricing tiers: Free, Starter, Growth, Business, Enterprise.",
+      "labeling": {
+        "labeler_a": "simulated-a",
+        "labeler_b": "simulated-b",
+        "simulated": true,
+        "agreed": true,
+        "adjudicator": null,
+        "adjudication_note": null
+      },
+      "notes": "Tests that the superseded record is still individually retrievable, not just its replacement."
+    },
+    {
+      "id": "ge-008",
+      "question": "What's the current decision on pricing tiers and how did we get there?",
+      "tenant_id": "ec14b5fc-4191-5d4a-af46-c1a5099a3db4",
+      "category": "multi_hop",
+      "scenario_pack_ids": [
+        "sp-002"
+      ],
+      "expected_decision_ids": [
+        "1427e05d-9454-5d1d-a602-967ce4f44e8d",
+        "24172dc8-f418-584e-bd24-b814d8a59dc0"
+      ],
+      "expected_citation_ids": [
+        "1427e05d-9454-5d1d-a602-967ce4f44e8d",
+        "24172dc8-f418-584e-bd24-b814d8a59dc0"
+      ],
+      "reference_answer": "Move from 5 pricing tiers to a simplified 3-tier structure: Free, Pro, Enterprise. Previously: Launch with 5 pricing tiers: Free, Starter, Growth, Business, Enterprise.",
+      "labeling": {
+        "labeler_a": "simulated-a",
+        "labeler_b": "simulated-b",
+        "simulated": true,
+        "agreed": true,
+        "adjudicator": null,
+        "adjudication_note": null
+      },
+      "notes": "Requires citing both the current and superseded decision."
+    },
+    {
+      "id": "ge-009",
+      "question": "Which vendor did we choose for background checks?",
+      "tenant_id": "ec14b5fc-4191-5d4a-af46-c1a5099a3db4",
+      "category": "single_hop",
+      "scenario_pack_ids": [
+        "sp-003"
+      ],
+      "expected_decision_ids": [
+        "d3d1754f-8389-5828-97a4-7273bf67dc1a"
+      ],
+      "expected_citation_ids": [
+        "d3d1754f-8389-5828-97a4-7273bf67dc1a"
+      ],
+      "reference_answer": "Selected Checkr as the background check vendor. Checkr's under-24h turnaround beat Sterling's ~3 days; cost was comparable.",
+      "labeling": {
+        "labeler_a": "simulated-a",
+        "labeler_b": "simulated-b",
+        "simulated": true,
+        "agreed": true,
+        "adjudicator": null,
+        "adjudication_note": null
+      },
+      "notes": null
+    },
+    {
+      "id": "ge-010",
+      "question": "Who's running our candidate screening these days?",
+      "tenant_id": "ec14b5fc-4191-5d4a-af46-c1a5099a3db4",
+      "category": "paraphrase",
+      "scenario_pack_ids": [
+        "sp-003"
+      ],
+      "expected_decision_ids": [
+        "d3d1754f-8389-5828-97a4-7273bf67dc1a"
+      ],
+      "expected_citation_ids": [
+        "d3d1754f-8389-5828-97a4-7273bf67dc1a"
+      ],
+      "reference_answer": "Selected Checkr as the background check vendor.",
+      "labeling": {
+        "labeler_a": "simulated-a",
+        "labeler_b": "simulated-b",
+        "simulated": true,
+        "agreed": false,
+        "adjudicator": "simulated-adjudicator",
+        "adjudication_note": "Labeler A (keyword overlap) flagged []; Labeler B (domain/topic match) flagged ['d3d1754f-8389-5828-97a4-7273bf67dc1a']. Adjudicated to author-intended ground truth ['d3d1754f-8389-5828-97a4-7273bf67dc1a'] -- keyword overlap is a known-weak signal for paraphrased or entity-ambiguous questions (see AUTHORING_GUIDE.md); real human review should re-check this case."
+      },
+      "notes": "Phrased away from the source transcript's wording to test embedding recall over exact keyword match."
+    },
+    {
+      "id": "ge-011",
+      "question": "Which vendor did we choose for background checks?",
+      "tenant_id": "d00712fa-3af1-5e17-ad55-729d7e2a78c4",
+      "category": "single_hop",
+      "scenario_pack_ids": [
+        "sp-004"
+      ],
+      "expected_decision_ids": [
+        "f5c4b9c4-bf19-55e0-8ef0-b182bdcad28b"
+      ],
+      "expected_citation_ids": [
+        "f5c4b9c4-bf19-55e0-8ef0-b182bdcad28b"
+      ],
+      "reference_answer": "Selected Checkr as the background check vendor. Checkr's under-24h turnaround beat Sterling's ~3 days; cost was comparable.",
+      "labeling": {
+        "labeler_a": "simulated-a",
+        "labeler_b": "simulated-b",
+        "simulated": true,
+        "agreed": true,
+        "adjudicator": null,
+        "adjudication_note": null
+      },
+      "notes": null
+    },
+    {
+      "id": "ge-012",
+      "question": "Who's running our candidate screening these days?",
+      "tenant_id": "d00712fa-3af1-5e17-ad55-729d7e2a78c4",
+      "category": "paraphrase",
+      "scenario_pack_ids": [
+        "sp-004"
+      ],
+      "expected_decision_ids": [
+        "f5c4b9c4-bf19-55e0-8ef0-b182bdcad28b"
+      ],
+      "expected_citation_ids": [
+        "f5c4b9c4-bf19-55e0-8ef0-b182bdcad28b"
+      ],
+      "reference_answer": "Selected Checkr as the background check vendor.",
+      "labeling": {
+        "labeler_a": "simulated-a",
+        "labeler_b": "simulated-b",
+        "simulated": true,
+        "agreed": false,
+        "adjudicator": "simulated-adjudicator",
+        "adjudication_note": "Labeler A (keyword overlap) flagged []; Labeler B (domain/topic match) flagged ['f5c4b9c4-bf19-55e0-8ef0-b182bdcad28b']. Adjudicated to author-intended ground truth ['f5c4b9c4-bf19-55e0-8ef0-b182bdcad28b'] -- keyword overlap is a known-weak signal for paraphrased or entity-ambiguous questions (see AUTHORING_GUIDE.md); real human review should re-check this case."
+      },
+      "notes": "Phrased away from the source transcript's wording to test embedding recall over exact keyword match."
+    },
+    {
+      "id": "ge-013",
+      "question": "What's our on-call rotation policy?",
+      "tenant_id": "20f0a8ca-afad-5b50-bdd6-c794c0199862",
+      "category": "single_hop",
+      "scenario_pack_ids": [
+        "sp-005"
+      ],
+      "expected_decision_ids": [
+        "d58f8310-71d8-5f18-b82a-50bfb616a432"
+      ],
+      "expected_citation_ids": [
+        "d58f8310-71d8-5f18-b82a-50bfb616a432"
+      ],
+      "reference_answer": "Adopt a weekly on-call rotation across the backend team with a secondary escalation on-call. The March outage went unacknowledged 40 minutes under a single on-call; a secondary catches missed acks.",
+      "labeling": {
+        "labeler_a": "simulated-a",
+        "labeler_b": "simulated-b",
+        "simulated": true,
+        "agreed": true,
+        "adjudicator": null,
+        "adjudication_note": null
+      },
+      "notes": null
+    },
+    {
+      "id": "ge-014",
+      "question": "If the primary on-call doesn't respond, who gets paged next?",
+      "tenant_id": "20f0a8ca-afad-5b50-bdd6-c794c0199862",
+      "category": "paraphrase",
+      "scenario_pack_ids": [
+        "sp-005"
+      ],
+      "expected_decision_ids": [
+        "d58f8310-71d8-5f18-b82a-50bfb616a432"
+      ],
+      "expected_citation_ids": [
+        "d58f8310-71d8-5f18-b82a-50bfb616a432"
+      ],
+      "reference_answer": "Adopt a weekly on-call rotation across the backend team with a secondary escalation on-call.",
+      "labeling": {
+        "labeler_a": "simulated-a",
+        "labeler_b": "simulated-b",
+        "simulated": true,
+        "agreed": false,
+        "adjudicator": "simulated-adjudicator",
+        "adjudication_note": "Labeler A (keyword overlap) flagged []; Labeler B (domain/topic match) flagged ['d58f8310-71d8-5f18-b82a-50bfb616a432']. Adjudicated to author-intended ground truth ['d58f8310-71d8-5f18-b82a-50bfb616a432'] -- keyword overlap is a known-weak signal for paraphrased or entity-ambiguous questions (see AUTHORING_GUIDE.md); real human review should re-check this case."
+      },
+      "notes": "Phrased away from the source transcript's wording to test embedding recall over exact keyword match."
+    },
+    {
+      "id": "ge-015",
+      "question": "What's our on-call rotation policy?",
+      "tenant_id": "bec5ecdd-2246-58eb-a636-b794bb509aa8",
+      "category": "single_hop",
+      "scenario_pack_ids": [
+        "sp-006"
+      ],
+      "expected_decision_ids": [
+        "259a5e95-63c4-57f9-8cbb-8950c68d28e5"
+      ],
+      "expected_citation_ids": [
+        "259a5e95-63c4-57f9-8cbb-8950c68d28e5"
+      ],
+      "reference_answer": "Adopt a weekly on-call rotation across the backend team with a secondary escalation on-call. The March outage went unacknowledged 40 minutes under a single on-call; a secondary catches missed acks.",
+      "labeling": {
+        "labeler_a": "simulated-a",
+        "labeler_b": "simulated-b",
+        "simulated": true,
+        "agreed": true,
+        "adjudicator": null,
+        "adjudication_note": null
+      },
+      "notes": null
+    },
+    {
+      "id": "ge-016",
+      "question": "If the primary on-call doesn't respond, who gets paged next?",
+      "tenant_id": "bec5ecdd-2246-58eb-a636-b794bb509aa8",
+      "category": "paraphrase",
+      "scenario_pack_ids": [
+        "sp-006"
+      ],
+      "expected_decision_ids": [
+        "259a5e95-63c4-57f9-8cbb-8950c68d28e5"
+      ],
+      "expected_citation_ids": [
+        "259a5e95-63c4-57f9-8cbb-8950c68d28e5"
+      ],
+      "reference_answer": "Adopt a weekly on-call rotation across the backend team with a secondary escalation on-call.",
+      "labeling": {
+        "labeler_a": "simulated-a",
+        "labeler_b": "simulated-b",
+        "simulated": true,
+        "agreed": false,
+        "adjudicator": "simulated-adjudicator",
+        "adjudication_note": "Labeler A (keyword overlap) flagged []; Labeler B (domain/topic match) flagged ['259a5e95-63c4-57f9-8cbb-8950c68d28e5']. Adjudicated to author-intended ground truth ['259a5e95-63c4-57f9-8cbb-8950c68d28e5'] -- keyword overlap is a known-weak signal for paraphrased or entity-ambiguous questions (see AUTHORING_GUIDE.md); real human review should re-check this case."
+      },
+      "notes": "Phrased away from the source transcript's wording to test embedding recall over exact keyword match."
+    },
+    {
+      "id": "ge-017",
+      "question": "Is there a deploy freeze before releases?",
+      "tenant_id": "d00712fa-3af1-5e17-ad55-729d7e2a78c4",
+      "category": "single_hop",
+      "scenario_pack_ids": [
+        "sp-007"
+      ],
+      "expected_decision_ids": [
+        "7544462a-8fec-59e2-8059-122da7473a16"
+      ],
+      "expected_citation_ids": [
+        "7544462a-8fec-59e2-8059-122da7473a16"
+      ],
+      "reference_answer": "Enforce a 48-hour deploy freeze window before any tagged release. Two consecutive Friday deploys caused weekend incidents; exceptions require director sign-off.",
+      "labeling": {
+        "labeler_a": "simulated-a",
+        "labeler_b": "simulated-b",
+        "simulated": true,
+        "agreed": true,
+        "adjudicator": null,
+        "adjudication_note": null
+      },
+      "notes": null
+    },
+    {
+      "id": "ge-018",
+      "question": "Can I ship code right before a big release goes out?",
+      "tenant_id": "d00712fa-3af1-5e17-ad55-729d7e2a78c4",
+      "category": "paraphrase",
+      "scenario_pack_ids": [
+        "sp-007"
+      ],
+      "expected_decision_ids": [
+        "7544462a-8fec-59e2-8059-122da7473a16"
+      ],
+      "expected_citation_ids": [
+        "7544462a-8fec-59e2-8059-122da7473a16"
+      ],
+      "reference_answer": "Enforce a 48-hour deploy freeze window before any tagged release.",
+      "labeling": {
+        "labeler_a": "simulated-a",
+        "labeler_b": "simulated-b",
+        "simulated": true,
+        "agreed": false,
+        "adjudicator": "simulated-adjudicator",
+        "adjudication_note": "Labeler A (keyword overlap) flagged []; Labeler B (domain/topic match) flagged ['7544462a-8fec-59e2-8059-122da7473a16']. Adjudicated to author-intended ground truth ['7544462a-8fec-59e2-8059-122da7473a16'] -- keyword overlap is a known-weak signal for paraphrased or entity-ambiguous questions (see AUTHORING_GUIDE.md); real human review should re-check this case."
+      },
+      "notes": "Phrased away from the source transcript's wording to test embedding recall over exact keyword match."
+    },
+    {
+      "id": "ge-019",
+      "question": "Is there a deploy freeze before releases?",
+      "tenant_id": "bec5ecdd-2246-58eb-a636-b794bb509aa8",
+      "category": "single_hop",
+      "scenario_pack_ids": [
+        "sp-008"
+      ],
+      "expected_decision_ids": [
+        "28fe5907-827f-5d88-bfb3-100ce4e82245"
+      ],
+      "expected_citation_ids": [
+        "28fe5907-827f-5d88-bfb3-100ce4e82245"
+      ],
+      "reference_answer": "Enforce a 48-hour deploy freeze window before any tagged release. Two consecutive Friday deploys caused weekend incidents; exceptions require director sign-off.",
+      "labeling": {
+        "labeler_a": "simulated-a",
+        "labeler_b": "simulated-b",
+        "simulated": true,
+        "agreed": true,
+        "adjudicator": null,
+        "adjudication_note": null
+      },
+      "notes": null
+    },
+    {
+      "id": "ge-020",
+      "question": "Can I ship code right before a big release goes out?",
+      "tenant_id": "bec5ecdd-2246-58eb-a636-b794bb509aa8",
+      "category": "paraphrase",
+      "scenario_pack_ids": [
+        "sp-008"
+      ],
+      "expected_decision_ids": [
+        "28fe5907-827f-5d88-bfb3-100ce4e82245"
+      ],
+      "expected_citation_ids": [
+        "28fe5907-827f-5d88-bfb3-100ce4e82245"
+      ],
+      "reference_answer": "Enforce a 48-hour deploy freeze window before any tagged release.",
+      "labeling": {
+        "labeler_a": "simulated-a",
+        "labeler_b": "simulated-b",
+        "simulated": true,
+        "agreed": false,
+        "adjudicator": "simulated-adjudicator",
+        "adjudication_note": "Labeler A (keyword overlap) flagged []; Labeler B (domain/topic match) flagged ['28fe5907-827f-5d88-bfb3-100ce4e82245']. Adjudicated to author-intended ground truth ['28fe5907-827f-5d88-bfb3-100ce4e82245'] -- keyword overlap is a known-weak signal for paraphrased or entity-ambiguous questions (see AUTHORING_GUIDE.md); real human review should re-check this case."
+      },
+      "notes": "Phrased away from the source transcript's wording to test embedding recall over exact keyword match."
+    },
+    {
+      "id": "ge-021",
+      "question": "What database are we using for the new service?",
+      "tenant_id": "20f0a8ca-afad-5b50-bdd6-c794c0199862",
+      "category": "single_hop",
+      "scenario_pack_ids": [
+        "sp-009"
+      ],
+      "expected_decision_ids": [
+        "f0ab8759-3118-5562-a139-5c97c355a7b3"
+      ],
+      "expected_citation_ids": [
+        "f0ab8759-3118-5562-a139-5c97c355a7b3"
+      ],
+      "reference_answer": "Use Postgres as the primary datastore for the new service. Needed real multi-table transactional guarantees; Mongo's transaction model was a weaker fit.",
+      "labeling": {
+        "labeler_a": "simulated-a",
+        "labeler_b": "simulated-b",
+        "simulated": true,
+        "agreed": true,
+        "adjudicator": null,
+        "adjudication_note": null
+      },
+      "notes": null
+    },
+    {
+      "id": "ge-022",
+      "question": "Postgres or Mongo -- what did we land on for the backend?",
+      "tenant_id": "20f0a8ca-afad-5b50-bdd6-c794c0199862",
+      "category": "paraphrase",
+      "scenario_pack_ids": [
+        "sp-009"
+      ],
+      "expected_decision_ids": [
+        "f0ab8759-3118-5562-a139-5c97c355a7b3"
+      ],
+      "expected_citation_ids": [
+        "f0ab8759-3118-5562-a139-5c97c355a7b3"
+      ],
+      "reference_answer": "Use Postgres as the primary datastore for the new service.",
+      "labeling": {
+        "labeler_a": "simulated-a",
+        "labeler_b": "simulated-b",
+        "simulated": true,
+        "agreed": false,
+        "adjudicator": "simulated-adjudicator",
+        "adjudication_note": "Labeler A (keyword overlap) flagged ['f0ab8759-3118-5562-a139-5c97c355a7b3']; Labeler B (domain/topic match) flagged ['6106a591-1393-51fb-9610-af744f072135', 'f0ab8759-3118-5562-a139-5c97c355a7b3']. Adjudicated to author-intended ground truth ['f0ab8759-3118-5562-a139-5c97c355a7b3'] -- keyword overlap is a known-weak signal for paraphrased or entity-ambiguous questions (see AUTHORING_GUIDE.md); real human review should re-check this case."
+      },
+      "notes": "Phrased away from the source transcript's wording to test embedding recall over exact keyword match."
+    },
+    {
+      "id": "ge-023",
+      "question": "Between Postgres and Mongo, which one did we actually pick?",
+      "tenant_id": "20f0a8ca-afad-5b50-bdd6-c794c0199862",
+      "category": "ambiguous_entity",
+      "scenario_pack_ids": [
+        "sp-009"
+      ],
+      "expected_decision_ids": [
+        "f0ab8759-3118-5562-a139-5c97c355a7b3"
+      ],
+      "expected_citation_ids": [
+        "f0ab8759-3118-5562-a139-5c97c355a7b3"
+      ],
+      "reference_answer": "Use Postgres as the primary datastore for the new service.",
+      "labeling": {
+        "labeler_a": "simulated-a",
+        "labeler_b": "simulated-b",
+        "simulated": true,
+        "agreed": false,
+        "adjudicator": "simulated-adjudicator",
+        "adjudication_note": "Labeler A (keyword overlap) flagged []; Labeler B (domain/topic match) flagged ['6106a591-1393-51fb-9610-af744f072135', 'f0ab8759-3118-5562-a139-5c97c355a7b3']. Adjudicated to author-intended ground truth ['f0ab8759-3118-5562-a139-5c97c355a7b3'] -- keyword overlap is a known-weak signal for paraphrased or entity-ambiguous questions (see AUTHORING_GUIDE.md); real human review should re-check this case."
+      },
+      "notes": "A rejected-alternative decision with similar wording exists in the same pool -- tests that it isn't retrieved as if it were the actual decision."
+    },
+    {
+      "id": "ge-024",
+      "question": "What database are we using for the new service?",
+      "tenant_id": "d00712fa-3af1-5e17-ad55-729d7e2a78c4",
+      "category": "single_hop",
+      "scenario_pack_ids": [
+        "sp-010"
+      ],
+      "expected_decision_ids": [
+        "caa44e05-e032-5baf-979c-d90579c1b44e"
+      ],
+      "expected_citation_ids": [
+        "caa44e05-e032-5baf-979c-d90579c1b44e"
+      ],
+      "reference_answer": "Use Postgres as the primary datastore for the new service. Needed real multi-table transactional guarantees; Mongo's transaction model was a weaker fit.",
+      "labeling": {
+        "labeler_a": "simulated-a",
+        "labeler_b": "simulated-b",
+        "simulated": true,
+        "agreed": true,
+        "adjudicator": null,
+        "adjudication_note": null
+      },
+      "notes": null
+    },
+    {
+      "id": "ge-025",
+      "question": "Postgres or Mongo -- what did we land on for the backend?",
+      "tenant_id": "d00712fa-3af1-5e17-ad55-729d7e2a78c4",
+      "category": "paraphrase",
+      "scenario_pack_ids": [
+        "sp-010"
+      ],
+      "expected_decision_ids": [
+        "caa44e05-e032-5baf-979c-d90579c1b44e"
+      ],
+      "expected_citation_ids": [
+        "caa44e05-e032-5baf-979c-d90579c1b44e"
+      ],
+      "reference_answer": "Use Postgres as the primary datastore for the new service.",
+      "labeling": {
+        "labeler_a": "simulated-a",
+        "labeler_b": "simulated-b",
+        "simulated": true,
+        "agreed": false,
+        "adjudicator": "simulated-adjudicator",
+        "adjudication_note": "Labeler A (keyword overlap) flagged ['caa44e05-e032-5baf-979c-d90579c1b44e']; Labeler B (domain/topic match) flagged ['51daed2e-f872-52c0-8c17-edd37fddd65b', 'caa44e05-e032-5baf-979c-d90579c1b44e']. Adjudicated to author-intended ground truth ['caa44e05-e032-5baf-979c-d90579c1b44e'] -- keyword overlap is a known-weak signal for paraphrased or entity-ambiguous questions (see AUTHORING_GUIDE.md); real human review should re-check this case."
+      },
+      "notes": "Phrased away from the source transcript's wording to test embedding recall over exact keyword match."
+    },
+    {
+      "id": "ge-026",
+      "question": "Between Postgres and Mongo, which one did we actually pick?",
+      "tenant_id": "d00712fa-3af1-5e17-ad55-729d7e2a78c4",
+      "category": "ambiguous_entity",
+      "scenario_pack_ids": [
+        "sp-010"
+      ],
+      "expected_decision_ids": [
+        "caa44e05-e032-5baf-979c-d90579c1b44e"
+      ],
+      "expected_citation_ids": [
+        "caa44e05-e032-5baf-979c-d90579c1b44e"
+      ],
+      "reference_answer": "Use Postgres as the primary datastore for the new service.",
+      "labeling": {
+        "labeler_a": "simulated-a",
+        "labeler_b": "simulated-b",
+        "simulated": true,
+        "agreed": false,
+        "adjudicator": "simulated-adjudicator",
+        "adjudication_note": "Labeler A (keyword overlap) flagged []; Labeler B (domain/topic match) flagged ['51daed2e-f872-52c0-8c17-edd37fddd65b', 'caa44e05-e032-5baf-979c-d90579c1b44e']. Adjudicated to author-intended ground truth ['caa44e05-e032-5baf-979c-d90579c1b44e'] -- keyword overlap is a known-weak signal for paraphrased or entity-ambiguous questions (see AUTHORING_GUIDE.md); real human review should re-check this case."
+      },
+      "notes": "A rejected-alternative decision with similar wording exists in the same pool -- tests that it isn't retrieved as if it were the actual decision."
+    },
+    {
+      "id": "ge-027",
+      "question": "How long do we keep raw ingested events before deleting them?",
+      "tenant_id": "20f0a8ca-afad-5b50-bdd6-c794c0199862",
+      "category": "single_hop",
+      "scenario_pack_ids": [
+        "sp-011"
+      ],
+      "expected_decision_ids": [
+        "8250bd78-95f9-5b8f-ba08-5575d1043243"
+      ],
+      "expected_citation_ids": [
+        "8250bd78-95f9-5b8f-ba08-5575d1043243"
+      ],
+      "reference_answer": "Retain raw ingested events for 30 days before deletion. Balances debugging/replay needs against storage cost and data minimization.",
+      "labeling": {
+        "labeler_a": "simulated-a",
+        "labeler_b": "simulated-b",
+        "simulated": true,
+        "agreed": true,
+        "adjudicator": null,
+        "adjudication_note": null
+      },
+      "notes": null
+    },
+    {
+      "id": "ge-028",
+      "question": "What's the TTL on the unprocessed event data?",
+      "tenant_id": "20f0a8ca-afad-5b50-bdd6-c794c0199862",
+      "category": "paraphrase",
+      "scenario_pack_ids": [
+        "sp-011"
+      ],
+      "expected_decision_ids": [
+        "8250bd78-95f9-5b8f-ba08-5575d1043243"
+      ],
+      "expected_citation_ids": [
+        "8250bd78-95f9-5b8f-ba08-5575d1043243"
+      ],
+      "reference_answer": "Retain raw ingested events for 30 days before deletion.",
+      "labeling": {
+        "labeler_a": "simulated-a",
+        "labeler_b": "simulated-b",
+        "simulated": true,
+        "agreed": false,
+        "adjudicator": "simulated-adjudicator",
+        "adjudication_note": "Labeler A (keyword overlap) flagged []; Labeler B (domain/topic match) flagged ['8250bd78-95f9-5b8f-ba08-5575d1043243']. Adjudicated to author-intended ground truth ['8250bd78-95f9-5b8f-ba08-5575d1043243'] -- keyword overlap is a known-weak signal for paraphrased or entity-ambiguous questions (see AUTHORING_GUIDE.md); real human review should re-check this case."
+      },
+      "notes": "Phrased away from the source transcript's wording to test embedding recall over exact keyword match."
+    },
+    {
+      "id": "ge-029",
+      "question": "How long do we keep raw ingested events before deleting them?",
+      "tenant_id": "ec14b5fc-4191-5d4a-af46-c1a5099a3db4",
+      "category": "single_hop",
+      "scenario_pack_ids": [
+        "sp-012"
+      ],
+      "expected_decision_ids": [
+        "41ef0a6e-ff8a-51ce-a8a6-40600974bada"
+      ],
+      "expected_citation_ids": [
+        "41ef0a6e-ff8a-51ce-a8a6-40600974bada"
+      ],
+      "reference_answer": "Retain raw ingested events for 30 days before deletion. Balances debugging/replay needs against storage cost and data minimization.",
+      "labeling": {
+        "labeler_a": "simulated-a",
+        "labeler_b": "simulated-b",
+        "simulated": true,
+        "agreed": true,
+        "adjudicator": null,
+        "adjudication_note": null
+      },
+      "notes": null
+    },
+    {
+      "id": "ge-030",
+      "question": "What's the TTL on the unprocessed event data?",
+      "tenant_id": "ec14b5fc-4191-5d4a-af46-c1a5099a3db4",
+      "category": "paraphrase",
+      "scenario_pack_ids": [
+        "sp-012"
+      ],
+      "expected_decision_ids": [
+        "41ef0a6e-ff8a-51ce-a8a6-40600974bada"
+      ],
+      "expected_citation_ids": [
+        "41ef0a6e-ff8a-51ce-a8a6-40600974bada"
+      ],
+      "reference_answer": "Retain raw ingested events for 30 days before deletion.",
+      "labeling": {
+        "labeler_a": "simulated-a",
+        "labeler_b": "simulated-b",
+        "simulated": true,
+        "agreed": false,
+        "adjudicator": "simulated-adjudicator",
+        "adjudication_note": "Labeler A (keyword overlap) flagged []; Labeler B (domain/topic match) flagged ['41ef0a6e-ff8a-51ce-a8a6-40600974bada']. Adjudicated to author-intended ground truth ['41ef0a6e-ff8a-51ce-a8a6-40600974bada'] -- keyword overlap is a known-weak signal for paraphrased or entity-ambiguous questions (see AUTHORING_GUIDE.md); real human review should re-check this case."
+      },
+      "notes": "Phrased away from the source transcript's wording to test embedding recall over exact keyword match."
+    },
+    {
+      "id": "ge-031",
+      "question": "How long are application logs kept?",
+      "tenant_id": "20f0a8ca-afad-5b50-bdd6-c794c0199862",
+      "category": "single_hop",
+      "scenario_pack_ids": [
+        "sp-013"
+      ],
+      "expected_decision_ids": [
+        "dbcd2ffb-2959-50ca-8fa0-01bb37ab3657"
+      ],
+      "expected_citation_ids": [
+        "dbcd2ffb-2959-50ca-8fa0-01bb37ab3657"
+      ],
+      "reference_answer": "Retain application logs for 90 days hot, then 1 year in cold storage. 90 days covers typical post-mortem windows; cold storage covers audit needs.",
+      "labeling": {
+        "labeler_a": "simulated-a",
+        "labeler_b": "simulated-b",
+        "simulated": true,
+        "agreed": true,
+        "adjudicator": null,
+        "adjudication_note": null
+      },
+      "notes": null
+    },
+    {
+      "id": "ge-032",
+      "question": "What's our log archival window?",
+      "tenant_id": "20f0a8ca-afad-5b50-bdd6-c794c0199862",
+      "category": "paraphrase",
+      "scenario_pack_ids": [
+        "sp-013"
+      ],
+      "expected_decision_ids": [
+        "dbcd2ffb-2959-50ca-8fa0-01bb37ab3657"
+      ],
+      "expected_citation_ids": [
+        "dbcd2ffb-2959-50ca-8fa0-01bb37ab3657"
+      ],
+      "reference_answer": "Retain application logs for 90 days hot, then 1 year in cold storage.",
+      "labeling": {
+        "labeler_a": "simulated-a",
+        "labeler_b": "simulated-b",
+        "simulated": true,
+        "agreed": false,
+        "adjudicator": "simulated-adjudicator",
+        "adjudication_note": "Labeler A (keyword overlap) flagged []; Labeler B (domain/topic match) flagged ['dbcd2ffb-2959-50ca-8fa0-01bb37ab3657']. Adjudicated to author-intended ground truth ['dbcd2ffb-2959-50ca-8fa0-01bb37ab3657'] -- keyword overlap is a known-weak signal for paraphrased or entity-ambiguous questions (see AUTHORING_GUIDE.md); real human review should re-check this case."
+      },
+      "notes": "Phrased away from the source transcript's wording to test embedding recall over exact keyword match."
+    },
+    {
+      "id": "ge-033",
+      "question": "How long are application logs kept?",
+      "tenant_id": "ec14b5fc-4191-5d4a-af46-c1a5099a3db4",
+      "category": "single_hop",
+      "scenario_pack_ids": [
+        "sp-014"
+      ],
+      "expected_decision_ids": [
+        "64f34bc7-0998-5912-be7a-f31b637eb11c"
+      ],
+      "expected_citation_ids": [
+        "64f34bc7-0998-5912-be7a-f31b637eb11c"
+      ],
+      "reference_answer": "Retain application logs for 90 days hot, then 1 year in cold storage. 90 days covers typical post-mortem windows; cold storage covers audit needs.",
+      "labeling": {
+        "labeler_a": "simulated-a",
+        "labeler_b": "simulated-b",
+        "simulated": true,
+        "agreed": true,
+        "adjudicator": null,
+        "adjudication_note": null
+      },
+      "notes": null
+    },
+    {
+      "id": "ge-034",
+      "question": "What's our log archival window?",
+      "tenant_id": "ec14b5fc-4191-5d4a-af46-c1a5099a3db4",
+      "category": "paraphrase",
+      "scenario_pack_ids": [
+        "sp-014"
+      ],
+      "expected_decision_ids": [
+        "64f34bc7-0998-5912-be7a-f31b637eb11c"
+      ],
+      "expected_citation_ids": [
+        "64f34bc7-0998-5912-be7a-f31b637eb11c"
+      ],
+      "reference_answer": "Retain application logs for 90 days hot, then 1 year in cold storage.",
+      "labeling": {
+        "labeler_a": "simulated-a",
+        "labeler_b": "simulated-b",
+        "simulated": true,
+        "agreed": false,
+        "adjudicator": "simulated-adjudicator",
+        "adjudication_note": "Labeler A (keyword overlap) flagged []; Labeler B (domain/topic match) flagged ['64f34bc7-0998-5912-be7a-f31b637eb11c']. Adjudicated to author-intended ground truth ['64f34bc7-0998-5912-be7a-f31b637eb11c'] -- keyword overlap is a known-weak signal for paraphrased or entity-ambiguous questions (see AUTHORING_GUIDE.md); real human review should re-check this case."
+      },
+      "notes": "Phrased away from the source transcript's wording to test embedding recall over exact keyword match."
+    },
+    {
+      "id": "ge-035",
+      "question": "What's our remote work policy?",
+      "tenant_id": "ec14b5fc-4191-5d4a-af46-c1a5099a3db4",
+      "category": "single_hop",
+      "scenario_pack_ids": [
+        "sp-015"
+      ],
+      "expected_decision_ids": [
+        "391079c8-1efe-5d02-8632-4983dbf02f74"
+      ],
+      "expected_citation_ids": [
+        "391079c8-1efe-5d02-8632-4983dbf02f74"
+      ],
+      "reference_answer": "Adopt a remote-first policy with no mandatory office days; teams may set optional in-person cadences. Matches recruiting commitments made to candidates this quarter.",
+      "labeling": {
+        "labeler_a": "simulated-a",
+        "labeler_b": "simulated-b",
+        "simulated": true,
+        "agreed": true,
+        "adjudicator": null,
+        "adjudication_note": null
+      },
+      "notes": null
+    },
+    {
+      "id": "ge-036",
+      "question": "Do I have to come into the office on any specific days?",
+      "tenant_id": "ec14b5fc-4191-5d4a-af46-c1a5099a3db4",
+      "category": "paraphrase",
+      "scenario_pack_ids": [
+        "sp-015"
+      ],
+      "expected_decision_ids": [
+        "391079c8-1efe-5d02-8632-4983dbf02f74"
+      ],
+      "expected_citation_ids": [
+        "391079c8-1efe-5d02-8632-4983dbf02f74"
+      ],
+      "reference_answer": "Adopt a remote-first policy with no mandatory office days; teams may set optional in-person cadences.",
+      "labeling": {
+        "labeler_a": "simulated-a",
+        "labeler_b": "simulated-b",
+        "simulated": true,
+        "agreed": true,
+        "adjudicator": null,
+        "adjudication_note": null
+      },
+      "notes": "Phrased away from the source transcript's wording to test embedding recall over exact keyword match."
+    },
+    {
+      "id": "ge-037",
+      "question": "What's our remote work policy?",
+      "tenant_id": "bec5ecdd-2246-58eb-a636-b794bb509aa8",
+      "category": "single_hop",
+      "scenario_pack_ids": [
+        "sp-016"
+      ],
+      "expected_decision_ids": [
+        "99eca7f8-8604-5674-9560-685a52136622"
+      ],
+      "expected_citation_ids": [
+        "99eca7f8-8604-5674-9560-685a52136622"
+      ],
+      "reference_answer": "Adopt a remote-first policy with no mandatory office days; teams may set optional in-person cadences. Matches recruiting commitments made to candidates this quarter.",
+      "labeling": {
+        "labeler_a": "simulated-a",
+        "labeler_b": "simulated-b",
+        "simulated": true,
+        "agreed": true,
+        "adjudicator": null,
+        "adjudication_note": null
+      },
+      "notes": null
+    },
+    {
+      "id": "ge-038",
+      "question": "Do I have to come into the office on any specific days?",
+      "tenant_id": "bec5ecdd-2246-58eb-a636-b794bb509aa8",
+      "category": "paraphrase",
+      "scenario_pack_ids": [
+        "sp-016"
+      ],
+      "expected_decision_ids": [
+        "99eca7f8-8604-5674-9560-685a52136622"
+      ],
+      "expected_citation_ids": [
+        "99eca7f8-8604-5674-9560-685a52136622"
+      ],
+      "reference_answer": "Adopt a remote-first policy with no mandatory office days; teams may set optional in-person cadences.",
+      "labeling": {
+        "labeler_a": "simulated-a",
+        "labeler_b": "simulated-b",
+        "simulated": true,
+        "agreed": true,
+        "adjudicator": null,
+        "adjudication_note": null
+      },
+      "notes": "Phrased away from the source transcript's wording to test embedding recall over exact keyword match."
+    },
+    {
+      "id": "ge-039",
+      "question": "Do we require a bar-raiser for engineering hires?",
+      "tenant_id": "d00712fa-3af1-5e17-ad55-729d7e2a78c4",
+      "category": "single_hop",
+      "scenario_pack_ids": [
+        "sp-017"
+      ],
+      "expected_decision_ids": [
+        "28ba5e8e-2086-5827-88b4-12a44e816714"
+      ],
+      "expected_citation_ids": [
+        "28ba5e8e-2086-5827-88b4-12a44e816714"
+      ],
+      "reference_answer": "Require independent bar-raiser sign-off, outside the hiring team, on every engineering offer. Introduced after two mis-hires last quarter.",
+      "labeling": {
+        "labeler_a": "simulated-a",
+        "labeler_b": "simulated-b",
+        "simulated": true,
+        "agreed": true,
+        "adjudicator": null,
+        "adjudication_note": null
+      },
+      "notes": null
+    },
+    {
+      "id": "ge-040",
+      "question": "Who has to approve an engineering offer besides the hiring manager?",
+      "tenant_id": "d00712fa-3af1-5e17-ad55-729d7e2a78c4",
+      "category": "paraphrase",
+      "scenario_pack_ids": [
+        "sp-017"
+      ],
+      "expected_decision_ids": [
+        "28ba5e8e-2086-5827-88b4-12a44e816714"
+      ],
+      "expected_citation_ids": [
+        "28ba5e8e-2086-5827-88b4-12a44e816714"
+      ],
+      "reference_answer": "Require independent bar-raiser sign-off, outside the hiring team, on every engineering offer.",
+      "labeling": {
+        "labeler_a": "simulated-a",
+        "labeler_b": "simulated-b",
+        "simulated": true,
+        "agreed": true,
+        "adjudicator": null,
+        "adjudication_note": null
+      },
+      "notes": "Phrased away from the source transcript's wording to test embedding recall over exact keyword match."
+    },
+    {
+      "id": "ge-041",
+      "question": "Do we require a bar-raiser for engineering hires?",
+      "tenant_id": "20f0a8ca-afad-5b50-bdd6-c794c0199862",
+      "category": "single_hop",
+      "scenario_pack_ids": [
+        "sp-018"
+      ],
+      "expected_decision_ids": [
+        "cdd6a9ee-39db-52fc-b39c-9af1b627d7b4"
+      ],
+      "expected_citation_ids": [
+        "cdd6a9ee-39db-52fc-b39c-9af1b627d7b4"
+      ],
+      "reference_answer": "Require independent bar-raiser sign-off, outside the hiring team, on every engineering offer. Introduced after two mis-hires last quarter.",
+      "labeling": {
+        "labeler_a": "simulated-a",
+        "labeler_b": "simulated-b",
+        "simulated": true,
+        "agreed": true,
+        "adjudicator": null,
+        "adjudication_note": null
+      },
+      "notes": null
+    },
+    {
+      "id": "ge-042",
+      "question": "Who has to approve an engineering offer besides the hiring manager?",
+      "tenant_id": "20f0a8ca-afad-5b50-bdd6-c794c0199862",
+      "category": "paraphrase",
+      "scenario_pack_ids": [
+        "sp-018"
+      ],
+      "expected_decision_ids": [
+        "cdd6a9ee-39db-52fc-b39c-9af1b627d7b4"
+      ],
+      "expected_citation_ids": [
+        "cdd6a9ee-39db-52fc-b39c-9af1b627d7b4"
+      ],
+      "reference_answer": "Require independent bar-raiser sign-off, outside the hiring team, on every engineering offer.",
+      "labeling": {
+        "labeler_a": "simulated-a",
+        "labeler_b": "simulated-b",
+        "simulated": true,
+        "agreed": true,
+        "adjudicator": null,
+        "adjudication_note": null
+      },
+      "notes": "Phrased away from the source transcript's wording to test embedding recall over exact keyword match."
+    },
+    {
+      "id": "ge-043",
+      "question": "What's our process after a major incident?",
+      "tenant_id": "bec5ecdd-2246-58eb-a636-b794bb509aa8",
+      "category": "single_hop",
+      "scenario_pack_ids": [
+        "sp-019"
+      ],
+      "expected_decision_ids": [
+        "fcfcef2d-ebae-589f-aef3-3faff4a49441"
+      ],
+      "expected_citation_ids": [
+        "fcfcef2d-ebae-589f-aef3-3faff4a49441"
+      ],
+      "reference_answer": "Require a blameless postmortem within 3 business days for every SEV1/SEV2 incident. Several undocumented Q4 SEV2s recurred within weeks with no follow-up.",
+      "labeling": {
+        "labeler_a": "simulated-a",
+        "labeler_b": "simulated-b",
+        "simulated": true,
+        "agreed": false,
+        "adjudicator": "simulated-adjudicator",
+        "adjudication_note": "Labeler A (keyword overlap) flagged []; Labeler B (domain/topic match) flagged ['fcfcef2d-ebae-589f-aef3-3faff4a49441']. Adjudicated to author-intended ground truth ['fcfcef2d-ebae-589f-aef3-3faff4a49441'] -- keyword overlap is a known-weak signal for paraphrased or entity-ambiguous questions (see AUTHORING_GUIDE.md); real human review should re-check this case."
+      },
+      "notes": null
+    },
+    {
+      "id": "ge-044",
+      "question": "Do we write anything up after a SEV1?",
+      "tenant_id": "bec5ecdd-2246-58eb-a636-b794bb509aa8",
+      "category": "paraphrase",
+      "scenario_pack_ids": [
+        "sp-019"
+      ],
+      "expected_decision_ids": [
+        "fcfcef2d-ebae-589f-aef3-3faff4a49441"
+      ],
+      "expected_citation_ids": [
+        "fcfcef2d-ebae-589f-aef3-3faff4a49441"
+      ],
+      "reference_answer": "Require a blameless postmortem within 3 business days for every SEV1/SEV2 incident.",
+      "labeling": {
+        "labeler_a": "simulated-a",
+        "labeler_b": "simulated-b",
+        "simulated": true,
+        "agreed": false,
+        "adjudicator": "simulated-adjudicator",
+        "adjudication_note": "Labeler A (keyword overlap) flagged []; Labeler B (domain/topic match) flagged ['fcfcef2d-ebae-589f-aef3-3faff4a49441']. Adjudicated to author-intended ground truth ['fcfcef2d-ebae-589f-aef3-3faff4a49441'] -- keyword overlap is a known-weak signal for paraphrased or entity-ambiguous questions (see AUTHORING_GUIDE.md); real human review should re-check this case."
+      },
+      "notes": "Phrased away from the source transcript's wording to test embedding recall over exact keyword match."
+    },
+    {
+      "id": "ge-045",
+      "question": "What's our process after a major incident?",
+      "tenant_id": "d00712fa-3af1-5e17-ad55-729d7e2a78c4",
+      "category": "single_hop",
+      "scenario_pack_ids": [
+        "sp-020"
+      ],
+      "expected_decision_ids": [
+        "8eabfe66-7818-5b2c-bbc4-8f68d912b418"
+      ],
+      "expected_citation_ids": [
+        "8eabfe66-7818-5b2c-bbc4-8f68d912b418"
+      ],
+      "reference_answer": "Require a blameless postmortem within 3 business days for every SEV1/SEV2 incident. Several undocumented Q4 SEV2s recurred within weeks with no follow-up.",
+      "labeling": {
+        "labeler_a": "simulated-a",
+        "labeler_b": "simulated-b",
+        "simulated": true,
+        "agreed": false,
+        "adjudicator": "simulated-adjudicator",
+        "adjudication_note": "Labeler A (keyword overlap) flagged []; Labeler B (domain/topic match) flagged ['8eabfe66-7818-5b2c-bbc4-8f68d912b418']. Adjudicated to author-intended ground truth ['8eabfe66-7818-5b2c-bbc4-8f68d912b418'] -- keyword overlap is a known-weak signal for paraphrased or entity-ambiguous questions (see AUTHORING_GUIDE.md); real human review should re-check this case."
+      },
+      "notes": null
+    },
+    {
+      "id": "ge-046",
+      "question": "Do we write anything up after a SEV1?",
+      "tenant_id": "d00712fa-3af1-5e17-ad55-729d7e2a78c4",
+      "category": "paraphrase",
+      "scenario_pack_ids": [
+        "sp-020"
+      ],
+      "expected_decision_ids": [
+        "8eabfe66-7818-5b2c-bbc4-8f68d912b418"
+      ],
+      "expected_citation_ids": [
+        "8eabfe66-7818-5b2c-bbc4-8f68d912b418"
+      ],
+      "reference_answer": "Require a blameless postmortem within 3 business days for every SEV1/SEV2 incident.",
+      "labeling": {
+        "labeler_a": "simulated-a",
+        "labeler_b": "simulated-b",
+        "simulated": true,
+        "agreed": false,
+        "adjudicator": "simulated-adjudicator",
+        "adjudication_note": "Labeler A (keyword overlap) flagged []; Labeler B (domain/topic match) flagged ['8eabfe66-7818-5b2c-bbc4-8f68d912b418']. Adjudicated to author-intended ground truth ['8eabfe66-7818-5b2c-bbc4-8f68d912b418'] -- keyword overlap is a known-weak signal for paraphrased or entity-ambiguous questions (see AUTHORING_GUIDE.md); real human review should re-check this case."
+      },
+      "notes": "Phrased away from the source transcript's wording to test embedding recall over exact keyword match."
+    },
+    {
+      "id": "ge-047",
+      "question": "How do we roll out new features?",
+      "tenant_id": "20f0a8ca-afad-5b50-bdd6-c794c0199862",
+      "category": "single_hop",
+      "scenario_pack_ids": [
+        "sp-021"
+      ],
+      "expected_decision_ids": [
+        "7a434f0f-b4f0-5c2d-9d87-2be8a52609ec"
+      ],
+      "expected_citation_ids": [
+        "7a434f0f-b4f0-5c2d-9d87-2be8a52609ec"
+      ],
+      "reference_answer": "Roll out new features behind flags at 5% -> 25% -> 100% over a week, with auto-rollback on 2x error rate for 10 minutes. Gives a controlled rollout with an automatic, objective rollback trigger.",
+      "labeling": {
+        "labeler_a": "simulated-a",
+        "labeler_b": "simulated-b",
+        "simulated": true,
+        "agreed": true,
+        "adjudicator": null,
+        "adjudication_note": null
+      },
+      "notes": null
+    },
+    {
+      "id": "ge-048",
+      "question": "What percentage of users see a brand-new feature on day one?",
+      "tenant_id": "20f0a8ca-afad-5b50-bdd6-c794c0199862",
+      "category": "paraphrase",
+      "scenario_pack_ids": [
+        "sp-021"
+      ],
+      "expected_decision_ids": [
+        "7a434f0f-b4f0-5c2d-9d87-2be8a52609ec"
+      ],
+      "expected_citation_ids": [
+        "7a434f0f-b4f0-5c2d-9d87-2be8a52609ec"
+      ],
+      "reference_answer": "Roll out new features behind flags at 5% -> 25% -> 100% over a week, with auto-rollback on 2x error rate for 10 minutes.",
+      "labeling": {
+        "labeler_a": "simulated-a",
+        "labeler_b": "simulated-b",
+        "simulated": true,
+        "agreed": false,
+        "adjudicator": "simulated-adjudicator",
+        "adjudication_note": "Labeler A (keyword overlap) flagged []; Labeler B (domain/topic match) flagged ['7a434f0f-b4f0-5c2d-9d87-2be8a52609ec']. Adjudicated to author-intended ground truth ['7a434f0f-b4f0-5c2d-9d87-2be8a52609ec'] -- keyword overlap is a known-weak signal for paraphrased or entity-ambiguous questions (see AUTHORING_GUIDE.md); real human review should re-check this case."
+      },
+      "notes": "Phrased away from the source transcript's wording to test embedding recall over exact keyword match."
+    },
+    {
+      "id": "ge-049",
+      "question": "How do we roll out new features?",
+      "tenant_id": "bec5ecdd-2246-58eb-a636-b794bb509aa8",
+      "category": "single_hop",
+      "scenario_pack_ids": [
+        "sp-022"
+      ],
+      "expected_decision_ids": [
+        "51cf5869-1982-5acb-a0b5-daf87031a1d2"
+      ],
+      "expected_citation_ids": [
+        "51cf5869-1982-5acb-a0b5-daf87031a1d2"
+      ],
+      "reference_answer": "Roll out new features behind flags at 5% -> 25% -> 100% over a week, with auto-rollback on 2x error rate for 10 minutes. Gives a controlled rollout with an automatic, objective rollback trigger.",
+      "labeling": {
+        "labeler_a": "simulated-a",
+        "labeler_b": "simulated-b",
+        "simulated": true,
+        "agreed": true,
+        "adjudicator": null,
+        "adjudication_note": null
+      },
+      "notes": null
+    },
+    {
+      "id": "ge-050",
+      "question": "What percentage of users see a brand-new feature on day one?",
+      "tenant_id": "bec5ecdd-2246-58eb-a636-b794bb509aa8",
+      "category": "paraphrase",
+      "scenario_pack_ids": [
+        "sp-022"
+      ],
+      "expected_decision_ids": [
+        "51cf5869-1982-5acb-a0b5-daf87031a1d2"
+      ],
+      "expected_citation_ids": [
+        "51cf5869-1982-5acb-a0b5-daf87031a1d2"
+      ],
+      "reference_answer": "Roll out new features behind flags at 5% -> 25% -> 100% over a week, with auto-rollback on 2x error rate for 10 minutes.",
+      "labeling": {
+        "labeler_a": "simulated-a",
+        "labeler_b": "simulated-b",
+        "simulated": true,
+        "agreed": false,
+        "adjudicator": "simulated-adjudicator",
+        "adjudication_note": "Labeler A (keyword overlap) flagged []; Labeler B (domain/topic match) flagged ['51cf5869-1982-5acb-a0b5-daf87031a1d2']. Adjudicated to author-intended ground truth ['51cf5869-1982-5acb-a0b5-daf87031a1d2'] -- keyword overlap is a known-weak signal for paraphrased or entity-ambiguous questions (see AUTHORING_GUIDE.md); real human review should re-check this case."
+      },
+      "notes": "Phrased away from the source transcript's wording to test embedding recall over exact keyword match."
+    },
+    {
+      "id": "ge-051",
+      "question": "What's our refund policy for customers?",
+      "tenant_id": "ec14b5fc-4191-5d4a-af46-c1a5099a3db4",
+      "category": "single_hop",
+      "scenario_pack_ids": [
+        "sp-023"
+      ],
+      "expected_decision_ids": [
+        "4682b2e5-39ac-5e04-9c75-1025da238235"
+      ],
+      "expected_citation_ids": [
+        "4682b2e5-39ac-5e04-9c75-1025da238235"
+      ],
+      "reference_answer": "Support may issue full refunds within 14 days with no questions asked; support leads can approve up to $500 beyond that without escalation. Reduces unnecessary escalations to leadership for routine refund cases.",
+      "labeling": {
+        "labeler_a": "simulated-a",
+        "labeler_b": "simulated-b",
+        "simulated": true,
+        "agreed": false,
+        "adjudicator": "simulated-adjudicator",
+        "adjudication_note": "Labeler A (keyword overlap) flagged []; Labeler B (domain/topic match) flagged ['4682b2e5-39ac-5e04-9c75-1025da238235']. Adjudicated to author-intended ground truth ['4682b2e5-39ac-5e04-9c75-1025da238235'] -- keyword overlap is a known-weak signal for paraphrased or entity-ambiguous questions (see AUTHORING_GUIDE.md); real human review should re-check this case."
+      },
+      "notes": null
+    },
+    {
+      "id": "ge-052",
+      "question": "Can support just refund someone without asking a manager?",
+      "tenant_id": "ec14b5fc-4191-5d4a-af46-c1a5099a3db4",
+      "category": "paraphrase",
+      "scenario_pack_ids": [
+        "sp-023"
+      ],
+      "expected_decision_ids": [
+        "4682b2e5-39ac-5e04-9c75-1025da238235"
+      ],
+      "expected_citation_ids": [
+        "4682b2e5-39ac-5e04-9c75-1025da238235"
+      ],
+      "reference_answer": "Support may issue full refunds within 14 days with no questions asked; support leads can approve up to $500 beyond that without escalation.",
+      "labeling": {
+        "labeler_a": "simulated-a",
+        "labeler_b": "simulated-b",
+        "simulated": true,
+        "agreed": true,
+        "adjudicator": null,
+        "adjudication_note": null
+      },
+      "notes": "Phrased away from the source transcript's wording to test embedding recall over exact keyword match."
+    },
+    {
+      "id": "ge-053",
+      "question": "What's our refund policy for customers?",
+      "tenant_id": "d00712fa-3af1-5e17-ad55-729d7e2a78c4",
+      "category": "single_hop",
+      "scenario_pack_ids": [
+        "sp-024"
+      ],
+      "expected_decision_ids": [
+        "11c39d22-7c20-5d25-a8be-f90fb5084b22"
+      ],
+      "expected_citation_ids": [
+        "11c39d22-7c20-5d25-a8be-f90fb5084b22"
+      ],
+      "reference_answer": "Support may issue full refunds within 14 days with no questions asked; support leads can approve up to $500 beyond that without escalation. Reduces unnecessary escalations to leadership for routine refund cases.",
+      "labeling": {
+        "labeler_a": "simulated-a",
+        "labeler_b": "simulated-b",
+        "simulated": true,
+        "agreed": false,
+        "adjudicator": "simulated-adjudicator",
+        "adjudication_note": "Labeler A (keyword overlap) flagged []; Labeler B (domain/topic match) flagged ['11c39d22-7c20-5d25-a8be-f90fb5084b22']. Adjudicated to author-intended ground truth ['11c39d22-7c20-5d25-a8be-f90fb5084b22'] -- keyword overlap is a known-weak signal for paraphrased or entity-ambiguous questions (see AUTHORING_GUIDE.md); real human review should re-check this case."
+      },
+      "notes": null
+    },
+    {
+      "id": "ge-054",
+      "question": "Can support just refund someone without asking a manager?",
+      "tenant_id": "d00712fa-3af1-5e17-ad55-729d7e2a78c4",
+      "category": "paraphrase",
+      "scenario_pack_ids": [
+        "sp-024"
+      ],
+      "expected_decision_ids": [
+        "11c39d22-7c20-5d25-a8be-f90fb5084b22"
+      ],
+      "expected_citation_ids": [
+        "11c39d22-7c20-5d25-a8be-f90fb5084b22"
+      ],
+      "reference_answer": "Support may issue full refunds within 14 days with no questions asked; support leads can approve up to $500 beyond that without escalation.",
+      "labeling": {
+        "labeler_a": "simulated-a",
+        "labeler_b": "simulated-b",
+        "simulated": true,
+        "agreed": true,
+        "adjudicator": null,
+        "adjudication_note": null
+      },
+      "notes": "Phrased away from the source transcript's wording to test embedding recall over exact keyword match."
+    },
+    {
+      "id": "ge-055",
+      "question": "How is the marketing budget split this quarter?",
+      "tenant_id": "ec14b5fc-4191-5d4a-af46-c1a5099a3db4",
+      "category": "single_hop",
+      "scenario_pack_ids": [
+        "sp-025"
+      ],
+      "expected_decision_ids": [
+        "82257dd0-6873-51af-8499-88006eb7a1a7"
+      ],
+      "expected_citation_ids": [
+        "82257dd0-6873-51af-8499-88006eb7a1a7"
+      ],
+      "reference_answer": "Shift Q2 marketing budget split to 60% content/SEO, 40% paid social. Last quarter's paid social spend had a weak CAC; content channel performed better per dollar.",
+      "labeling": {
+        "labeler_a": "simulated-a",
+        "labeler_b": "simulated-b",
+        "simulated": true,
+        "agreed": true,
+        "adjudicator": null,
+        "adjudication_note": null
+      },
+      "notes": null
+    },
+    {
+      "id": "ge-056",
+      "question": "Are we spending more on content or paid ads right now?",
+      "tenant_id": "ec14b5fc-4191-5d4a-af46-c1a5099a3db4",
+      "category": "paraphrase",
+      "scenario_pack_ids": [
+        "sp-025"
+      ],
+      "expected_decision_ids": [
+        "82257dd0-6873-51af-8499-88006eb7a1a7"
+      ],
+      "expected_citation_ids": [
+        "82257dd0-6873-51af-8499-88006eb7a1a7"
+      ],
+      "reference_answer": "Shift Q2 marketing budget split to 60% content/SEO, 40% paid social.",
+      "labeling": {
+        "labeler_a": "simulated-a",
+        "labeler_b": "simulated-b",
+        "simulated": true,
+        "agreed": true,
+        "adjudicator": null,
+        "adjudication_note": null
+      },
+      "notes": "Phrased away from the source transcript's wording to test embedding recall over exact keyword match."
+    },
+    {
+      "id": "ge-057",
+      "question": "How is the marketing budget split this quarter?",
+      "tenant_id": "bec5ecdd-2246-58eb-a636-b794bb509aa8",
+      "category": "single_hop",
+      "scenario_pack_ids": [
+        "sp-026"
+      ],
+      "expected_decision_ids": [
+        "201d15c1-9e60-5d6b-9d3f-8aa1e5ab4ef4"
+      ],
+      "expected_citation_ids": [
+        "201d15c1-9e60-5d6b-9d3f-8aa1e5ab4ef4"
+      ],
+      "reference_answer": "Shift Q2 marketing budget split to 60% content/SEO, 40% paid social. Last quarter's paid social spend had a weak CAC; content channel performed better per dollar.",
+      "labeling": {
+        "labeler_a": "simulated-a",
+        "labeler_b": "simulated-b",
+        "simulated": true,
+        "agreed": true,
+        "adjudicator": null,
+        "adjudication_note": null
+      },
+      "notes": null
+    },
+    {
+      "id": "ge-058",
+      "question": "Are we spending more on content or paid ads right now?",
+      "tenant_id": "bec5ecdd-2246-58eb-a636-b794bb509aa8",
+      "category": "paraphrase",
+      "scenario_pack_ids": [
+        "sp-026"
+      ],
+      "expected_decision_ids": [
+        "201d15c1-9e60-5d6b-9d3f-8aa1e5ab4ef4"
+      ],
+      "expected_citation_ids": [
+        "201d15c1-9e60-5d6b-9d3f-8aa1e5ab4ef4"
+      ],
+      "reference_answer": "Shift Q2 marketing budget split to 60% content/SEO, 40% paid social.",
+      "labeling": {
+        "labeler_a": "simulated-a",
+        "labeler_b": "simulated-b",
+        "simulated": true,
+        "agreed": true,
+        "adjudicator": null,
+        "adjudication_note": null
+      },
+      "notes": "Phrased away from the source transcript's wording to test embedding recall over exact keyword match."
+    },
+    {
+      "id": "ge-059",
+      "question": "What are the code review requirements for payments code?",
+      "tenant_id": "d00712fa-3af1-5e17-ad55-729d7e2a78c4",
+      "category": "single_hop",
+      "scenario_pack_ids": [
+        "sp-027"
+      ],
+      "expected_decision_ids": [
+        "8828e780-a0c4-5fe4-98d4-a85c70098359"
+      ],
+      "expected_citation_ids": [
+        "8828e780-a0c4-5fe4-98d4-a85c70098359"
+      ],
+      "reference_answer": "Require at least one approval from outside the author's immediate team for changes to payments or auth code. A self-merged PR with no second reviewer caused a production incident.",
+      "labeling": {
+        "labeler_a": "simulated-a",
+        "labeler_b": "simulated-b",
+        "simulated": true,
+        "agreed": true,
+        "adjudicator": null,
+        "adjudication_note": null
+      },
+      "notes": null
+    },
+    {
+      "id": "ge-060",
+      "question": "Can someone on my own team approve my auth-related PR?",
+      "tenant_id": "d00712fa-3af1-5e17-ad55-729d7e2a78c4",
+      "category": "paraphrase",
+      "scenario_pack_ids": [
+        "sp-027"
+      ],
+      "expected_decision_ids": [
+        "8828e780-a0c4-5fe4-98d4-a85c70098359"
+      ],
+      "expected_citation_ids": [
+        "8828e780-a0c4-5fe4-98d4-a85c70098359"
+      ],
+      "reference_answer": "Require at least one approval from outside the author's immediate team for changes to payments or auth code.",
+      "labeling": {
+        "labeler_a": "simulated-a",
+        "labeler_b": "simulated-b",
+        "simulated": true,
+        "agreed": false,
+        "adjudicator": "simulated-adjudicator",
+        "adjudication_note": "Labeler A (keyword overlap) flagged []; Labeler B (domain/topic match) flagged ['8828e780-a0c4-5fe4-98d4-a85c70098359']. Adjudicated to author-intended ground truth ['8828e780-a0c4-5fe4-98d4-a85c70098359'] -- keyword overlap is a known-weak signal for paraphrased or entity-ambiguous questions (see AUTHORING_GUIDE.md); real human review should re-check this case."
+      },
+      "notes": "Phrased away from the source transcript's wording to test embedding recall over exact keyword match."
+    },
+    {
+      "id": "ge-061",
+      "question": "What are the code review requirements for payments code?",
+      "tenant_id": "20f0a8ca-afad-5b50-bdd6-c794c0199862",
+      "category": "single_hop",
+      "scenario_pack_ids": [
+        "sp-028"
+      ],
+      "expected_decision_ids": [
+        "0757cecb-41fd-51cd-9321-56ff4a4de02c"
+      ],
+      "expected_citation_ids": [
+        "0757cecb-41fd-51cd-9321-56ff4a4de02c"
+      ],
+      "reference_answer": "Require at least one approval from outside the author's immediate team for changes to payments or auth code. A self-merged PR with no second reviewer caused a production incident.",
+      "labeling": {
+        "labeler_a": "simulated-a",
+        "labeler_b": "simulated-b",
+        "simulated": true,
+        "agreed": true,
+        "adjudicator": null,
+        "adjudication_note": null
+      },
+      "notes": null
+    },
+    {
+      "id": "ge-062",
+      "question": "Can someone on my own team approve my auth-related PR?",
+      "tenant_id": "20f0a8ca-afad-5b50-bdd6-c794c0199862",
+      "category": "paraphrase",
+      "scenario_pack_ids": [
+        "sp-028"
+      ],
+      "expected_decision_ids": [
+        "0757cecb-41fd-51cd-9321-56ff4a4de02c"
+      ],
+      "expected_citation_ids": [
+        "0757cecb-41fd-51cd-9321-56ff4a4de02c"
+      ],
+      "reference_answer": "Require at least one approval from outside the author's immediate team for changes to payments or auth code.",
+      "labeling": {
+        "labeler_a": "simulated-a",
+        "labeler_b": "simulated-b",
+        "simulated": true,
+        "agreed": false,
+        "adjudicator": "simulated-adjudicator",
+        "adjudication_note": "Labeler A (keyword overlap) flagged []; Labeler B (domain/topic match) flagged ['0757cecb-41fd-51cd-9321-56ff4a4de02c']. Adjudicated to author-intended ground truth ['0757cecb-41fd-51cd-9321-56ff4a4de02c'] -- keyword overlap is a known-weak signal for paraphrased or entity-ambiguous questions (see AUTHORING_GUIDE.md); real human review should re-check this case."
+      },
+      "notes": "Phrased away from the source transcript's wording to test embedding recall over exact keyword match."
+    },
+    {
+      "id": "ge-063",
+      "question": "Is MFA required for internal tools?",
+      "tenant_id": "bec5ecdd-2246-58eb-a636-b794bb509aa8",
+      "category": "single_hop",
+      "scenario_pack_ids": [
+        "sp-029"
+      ],
+      "expected_decision_ids": [
+        "89c2e663-0179-5477-a077-fe057fb4d6bf"
+      ],
+      "expected_citation_ids": [
+        "89c2e663-0179-5477-a077-fe057fb4d6bf"
+      ],
+      "reference_answer": "Make MFA mandatory for all internal tools within 30 days, including contractors, with no exceptions. Prompted by a phishing attempt the prior month.",
+      "labeling": {
+        "labeler_a": "simulated-a",
+        "labeler_b": "simulated-b",
+        "simulated": true,
+        "agreed": true,
+        "adjudicator": null,
+        "adjudication_note": null
+      },
+      "notes": null
+    },
+    {
+      "id": "ge-064",
+      "question": "Do contractors also need two-factor auth on our systems?",
+      "tenant_id": "bec5ecdd-2246-58eb-a636-b794bb509aa8",
+      "category": "paraphrase",
+      "scenario_pack_ids": [
+        "sp-029"
+      ],
+      "expected_decision_ids": [
+        "89c2e663-0179-5477-a077-fe057fb4d6bf"
+      ],
+      "expected_citation_ids": [
+        "89c2e663-0179-5477-a077-fe057fb4d6bf"
+      ],
+      "reference_answer": "Make MFA mandatory for all internal tools within 30 days, including contractors, with no exceptions.",
+      "labeling": {
+        "labeler_a": "simulated-a",
+        "labeler_b": "simulated-b",
+        "simulated": true,
+        "agreed": false,
+        "adjudicator": "simulated-adjudicator",
+        "adjudication_note": "Labeler A (keyword overlap) flagged []; Labeler B (domain/topic match) flagged ['89c2e663-0179-5477-a077-fe057fb4d6bf']. Adjudicated to author-intended ground truth ['89c2e663-0179-5477-a077-fe057fb4d6bf'] -- keyword overlap is a known-weak signal for paraphrased or entity-ambiguous questions (see AUTHORING_GUIDE.md); real human review should re-check this case."
+      },
+      "notes": "Phrased away from the source transcript's wording to test embedding recall over exact keyword match."
+    },
+    {
+      "id": "ge-065",
+      "question": "Is MFA required for internal tools?",
+      "tenant_id": "ec14b5fc-4191-5d4a-af46-c1a5099a3db4",
+      "category": "single_hop",
+      "scenario_pack_ids": [
+        "sp-030"
+      ],
+      "expected_decision_ids": [
+        "6b7fb84b-71ca-5d9a-a191-1b6647fcb534"
+      ],
+      "expected_citation_ids": [
+        "6b7fb84b-71ca-5d9a-a191-1b6647fcb534"
+      ],
+      "reference_answer": "Make MFA mandatory for all internal tools within 30 days, including contractors, with no exceptions. Prompted by a phishing attempt the prior month.",
+      "labeling": {
+        "labeler_a": "simulated-a",
+        "labeler_b": "simulated-b",
+        "simulated": true,
+        "agreed": true,
+        "adjudicator": null,
+        "adjudication_note": null
+      },
+      "notes": null
+    },
+    {
+      "id": "ge-066",
+      "question": "Do contractors also need two-factor auth on our systems?",
+      "tenant_id": "ec14b5fc-4191-5d4a-af46-c1a5099a3db4",
+      "category": "paraphrase",
+      "scenario_pack_ids": [
+        "sp-030"
+      ],
+      "expected_decision_ids": [
+        "6b7fb84b-71ca-5d9a-a191-1b6647fcb534"
+      ],
+      "expected_citation_ids": [
+        "6b7fb84b-71ca-5d9a-a191-1b6647fcb534"
+      ],
+      "reference_answer": "Make MFA mandatory for all internal tools within 30 days, including contractors, with no exceptions.",
+      "labeling": {
+        "labeler_a": "simulated-a",
+        "labeler_b": "simulated-b",
+        "simulated": true,
+        "agreed": false,
+        "adjudicator": "simulated-adjudicator",
+        "adjudication_note": "Labeler A (keyword overlap) flagged []; Labeler B (domain/topic match) flagged ['6b7fb84b-71ca-5d9a-a191-1b6647fcb534']. Adjudicated to author-intended ground truth ['6b7fb84b-71ca-5d9a-a191-1b6647fcb534'] -- keyword overlap is a known-weak signal for paraphrased or entity-ambiguous questions (see AUTHORING_GUIDE.md); real human review should re-check this case."
+      },
+      "notes": "Phrased away from the source transcript's wording to test embedding recall over exact keyword match."
+    },
+    {
+      "id": "ge-067",
+      "question": "How often does the team have standup now?",
+      "tenant_id": "20f0a8ca-afad-5b50-bdd6-c794c0199862",
+      "category": "single_hop",
+      "scenario_pack_ids": [
+        "sp-031"
+      ],
+      "expected_decision_ids": [
+        "00e0bca4-bded-5194-9c8b-7d35585de1ec"
+      ],
+      "expected_citation_ids": [
+        "00e0bca4-bded-5194-9c8b-7d35585de1ec"
+      ],
+      "reference_answer": "Cut daily standups to 3x/week (Mon/Wed/Fri), with async updates the other two days. Daily standups had become a low-value status report format.",
+      "labeling": {
+        "labeler_a": "simulated-a",
+        "labeler_b": "simulated-b",
+        "simulated": true,
+        "agreed": false,
+        "adjudicator": "simulated-adjudicator",
+        "adjudication_note": "Labeler A (keyword overlap) flagged []; Labeler B (domain/topic match) flagged ['00e0bca4-bded-5194-9c8b-7d35585de1ec']. Adjudicated to author-intended ground truth ['00e0bca4-bded-5194-9c8b-7d35585de1ec'] -- keyword overlap is a known-weak signal for paraphrased or entity-ambiguous questions (see AUTHORING_GUIDE.md); real human review should re-check this case."
+      },
+      "notes": null
+    },
+    {
+      "id": "ge-068",
+      "question": "Is standup a daily thing or not anymore?",
+      "tenant_id": "20f0a8ca-afad-5b50-bdd6-c794c0199862",
+      "category": "paraphrase",
+      "scenario_pack_ids": [
+        "sp-031"
+      ],
+      "expected_decision_ids": [
+        "00e0bca4-bded-5194-9c8b-7d35585de1ec"
+      ],
+      "expected_citation_ids": [
+        "00e0bca4-bded-5194-9c8b-7d35585de1ec"
+      ],
+      "reference_answer": "Cut daily standups to 3x/week (Mon/Wed/Fri), with async updates the other two days.",
+      "labeling": {
+        "labeler_a": "simulated-a",
+        "labeler_b": "simulated-b",
+        "simulated": true,
+        "agreed": false,
+        "adjudicator": "simulated-adjudicator",
+        "adjudication_note": "Labeler A (keyword overlap) flagged []; Labeler B (domain/topic match) flagged ['00e0bca4-bded-5194-9c8b-7d35585de1ec']. Adjudicated to author-intended ground truth ['00e0bca4-bded-5194-9c8b-7d35585de1ec'] -- keyword overlap is a known-weak signal for paraphrased or entity-ambiguous questions (see AUTHORING_GUIDE.md); real human review should re-check this case."
+      },
+      "notes": "Phrased away from the source transcript's wording to test embedding recall over exact keyword match."
+    },
+    {
+      "id": "ge-069",
+      "question": "How often does the team have standup now?",
+      "tenant_id": "d00712fa-3af1-5e17-ad55-729d7e2a78c4",
+      "category": "single_hop",
+      "scenario_pack_ids": [
+        "sp-032"
+      ],
+      "expected_decision_ids": [
+        "9f520fbc-36c7-5f42-a435-a32afdf4ffcc"
+      ],
+      "expected_citation_ids": [
+        "9f520fbc-36c7-5f42-a435-a32afdf4ffcc"
+      ],
+      "reference_answer": "Cut daily standups to 3x/week (Mon/Wed/Fri), with async updates the other two days. Daily standups had become a low-value status report format.",
+      "labeling": {
+        "labeler_a": "simulated-a",
+        "labeler_b": "simulated-b",
+        "simulated": true,
+        "agreed": false,
+        "adjudicator": "simulated-adjudicator",
+        "adjudication_note": "Labeler A (keyword overlap) flagged []; Labeler B (domain/topic match) flagged ['9f520fbc-36c7-5f42-a435-a32afdf4ffcc']. Adjudicated to author-intended ground truth ['9f520fbc-36c7-5f42-a435-a32afdf4ffcc'] -- keyword overlap is a known-weak signal for paraphrased or entity-ambiguous questions (see AUTHORING_GUIDE.md); real human review should re-check this case."
+      },
+      "notes": null
+    },
+    {
+      "id": "ge-070",
+      "question": "Is standup a daily thing or not anymore?",
+      "tenant_id": "d00712fa-3af1-5e17-ad55-729d7e2a78c4",
+      "category": "paraphrase",
+      "scenario_pack_ids": [
+        "sp-032"
+      ],
+      "expected_decision_ids": [
+        "9f520fbc-36c7-5f42-a435-a32afdf4ffcc"
+      ],
+      "expected_citation_ids": [
+        "9f520fbc-36c7-5f42-a435-a32afdf4ffcc"
+      ],
+      "reference_answer": "Cut daily standups to 3x/week (Mon/Wed/Fri), with async updates the other two days.",
+      "labeling": {
+        "labeler_a": "simulated-a",
+        "labeler_b": "simulated-b",
+        "simulated": true,
+        "agreed": false,
+        "adjudicator": "simulated-adjudicator",
+        "adjudication_note": "Labeler A (keyword overlap) flagged []; Labeler B (domain/topic match) flagged ['9f520fbc-36c7-5f42-a435-a32afdf4ffcc']. Adjudicated to author-intended ground truth ['9f520fbc-36c7-5f42-a435-a32afdf4ffcc'] -- keyword overlap is a known-weak signal for paraphrased or entity-ambiguous questions (see AUTHORING_GUIDE.md); real human review should re-check this case."
+      },
+      "notes": "Phrased away from the source transcript's wording to test embedding recall over exact keyword match."
+    },
+    {
+      "id": "ge-071",
+      "question": "How long do we retain data before deleting or archiving it?",
+      "tenant_id": "20f0a8ca-afad-5b50-bdd6-c794c0199862",
+      "category": "ambiguous_entity",
+      "scenario_pack_ids": [
+        "sp-011",
+        "sp-013"
+      ],
+      "expected_decision_ids": [
+        "8250bd78-95f9-5b8f-ba08-5575d1043243"
+      ],
+      "expected_citation_ids": [
+        "8250bd78-95f9-5b8f-ba08-5575d1043243"
+      ],
+      "reference_answer": "Retain raw ingested events for 30 days before deletion.",
+      "labeling": {
+        "labeler_a": "simulated-a",
+        "labeler_b": "simulated-b",
+        "simulated": true,
+        "agreed": true,
+        "adjudicator": null,
+        "adjudication_note": null
+      },
+      "notes": "Two separate retention decisions exist (raw events vs application logs) -- question is deliberately vague about which; ground truth picks raw events as the more literal reading. A real reviewer may reasonably disagree -- flagged for review, not auto-resolved."
+    },
+    {
+      "id": "ge-072",
+      "question": "How long do we retain data before deleting or archiving it?",
+      "tenant_id": "ec14b5fc-4191-5d4a-af46-c1a5099a3db4",
+      "category": "ambiguous_entity",
+      "scenario_pack_ids": [
+        "sp-012",
+        "sp-014"
+      ],
+      "expected_decision_ids": [
+        "41ef0a6e-ff8a-51ce-a8a6-40600974bada"
+      ],
+      "expected_citation_ids": [
+        "41ef0a6e-ff8a-51ce-a8a6-40600974bada"
+      ],
+      "reference_answer": "Retain raw ingested events for 30 days before deletion.",
+      "labeling": {
+        "labeler_a": "simulated-a",
+        "labeler_b": "simulated-b",
+        "simulated": true,
+        "agreed": true,
+        "adjudicator": null,
+        "adjudication_note": null
+      },
+      "notes": "Two separate retention decisions exist (raw events vs application logs) -- question is deliberately vague about which; ground truth picks raw events as the more literal reading. A real reviewer may reasonably disagree -- flagged for review, not auto-resolved."
+    },
+    {
+      "id": "ge-073",
+      "question": "What database did Aurora Robotics pick for the warehouse arm firmware?",
+      "tenant_id": "20f0a8ca-afad-5b50-bdd6-c794c0199862",
+      "category": "single_hop",
+      "scenario_pack_ids": [
+        "sp-009"
+      ],
+      "expected_decision_ids": [
+        "f0ab8759-3118-5562-a139-5c97c355a7b3"
+      ],
+      "expected_citation_ids": [
+        "f0ab8759-3118-5562-a139-5c97c355a7b3"
+      ],
+      "reference_answer": "Use Postgres as the primary datastore for the new service.",
+      "labeling": {
+        "labeler_a": "simulated-a",
+        "labeler_b": "simulated-b",
+        "simulated": true,
+        "agreed": false,
+        "adjudicator": "simulated-adjudicator",
+        "adjudication_note": "Labeler A (keyword overlap) flagged []; Labeler B (domain/topic match) flagged ['6106a591-1393-51fb-9610-af744f072135', 'f0ab8759-3118-5562-a139-5c97c355a7b3']. Adjudicated to author-intended ground truth ['f0ab8759-3118-5562-a139-5c97c355a7b3'] -- keyword overlap is a known-weak signal for paraphrased or entity-ambiguous questions (see AUTHORING_GUIDE.md); real human review should re-check this case."
+      },
+      "notes": "CROSS-TENANT TEST: a near-identical Postgres-vs-Mongo decision exists under a different tenant with different wording (product name). expected_decision_ids must be scoped to THIS tenant only -- if a live pipeline's tenant filter is broken, this is where it would show up as a false-positive cross-tenant retrieval, not a topical relevance miss."
+    },
+    {
+      "id": "ge-074",
+      "question": "What database did Cobalt Analytics pick for the reporting service?",
+      "tenant_id": "d00712fa-3af1-5e17-ad55-729d7e2a78c4",
+      "category": "single_hop",
+      "scenario_pack_ids": [
+        "sp-010"
+      ],
+      "expected_decision_ids": [
+        "caa44e05-e032-5baf-979c-d90579c1b44e"
+      ],
+      "expected_citation_ids": [
+        "caa44e05-e032-5baf-979c-d90579c1b44e"
+      ],
+      "reference_answer": "Use Postgres as the primary datastore for the new service.",
+      "labeling": {
+        "labeler_a": "simulated-a",
+        "labeler_b": "simulated-b",
+        "simulated": true,
+        "agreed": false,
+        "adjudicator": "simulated-adjudicator",
+        "adjudication_note": "Labeler A (keyword overlap) flagged []; Labeler B (domain/topic match) flagged ['51daed2e-f872-52c0-8c17-edd37fddd65b', 'caa44e05-e032-5baf-979c-d90579c1b44e']. Adjudicated to author-intended ground truth ['caa44e05-e032-5baf-979c-d90579c1b44e'] -- keyword overlap is a known-weak signal for paraphrased or entity-ambiguous questions (see AUTHORING_GUIDE.md); real human review should re-check this case."
+      },
+      "notes": "CROSS-TENANT TEST: a near-identical Postgres-vs-Mongo decision exists under a different tenant with different wording (product name). expected_decision_ids must be scoped to THIS tenant only -- if a live pipeline's tenant filter is broken, this is where it would show up as a false-positive cross-tenant retrieval, not a topical relevance miss."
+    },
+    {
+      "id": "ge-075",
+      "question": "Which vendor did we choose for background checks?",
+      "tenant_id": "20f0a8ca-afad-5b50-bdd6-c794c0199862",
+      "category": "negative",
+      "scenario_pack_ids": [],
+      "expected_decision_ids": [],
+      "expected_citation_ids": [],
+      "reference_answer": "No recorded decision exists on this topic for this tenant.",
+      "labeling": {
+        "labeler_a": "simulated-a",
+        "labeler_b": "simulated-b",
+        "simulated": true,
+        "agreed": true,
+        "adjudicator": null,
+        "adjudication_note": null
+      },
+      "notes": "'vendor_bgcheck' was never decided for Aurora Robotics (only for a different tenant) -- tests that the pipeline doesn't fabricate a plausible-sounding answer or leak the other tenant's real decision on the same topic."
+    },
+    {
+      "id": "ge-076",
+      "question": "Is there a deploy freeze before releases?",
+      "tenant_id": "20f0a8ca-afad-5b50-bdd6-c794c0199862",
+      "category": "negative",
+      "scenario_pack_ids": [],
+      "expected_decision_ids": [],
+      "expected_citation_ids": [],
+      "reference_answer": "No recorded decision exists on this topic for this tenant.",
+      "labeling": {
+        "labeler_a": "simulated-a",
+        "labeler_b": "simulated-b",
+        "simulated": true,
+        "agreed": true,
+        "adjudicator": null,
+        "adjudication_note": null
+      },
+      "notes": "'deploy_freeze' was never decided for Aurora Robotics (only for a different tenant) -- tests that the pipeline doesn't fabricate a plausible-sounding answer or leak the other tenant's real decision on the same topic."
+    },
+    {
+      "id": "ge-077",
+      "question": "What's our remote work policy?",
+      "tenant_id": "20f0a8ca-afad-5b50-bdd6-c794c0199862",
+      "category": "negative",
+      "scenario_pack_ids": [],
+      "expected_decision_ids": [],
+      "expected_citation_ids": [],
+      "reference_answer": "No recorded decision exists on this topic for this tenant.",
+      "labeling": {
+        "labeler_a": "simulated-a",
+        "labeler_b": "simulated-b",
+        "simulated": true,
+        "agreed": true,
+        "adjudicator": null,
+        "adjudication_note": null
+      },
+      "notes": "'remote_work_policy' was never decided for Aurora Robotics (only for a different tenant) -- tests that the pipeline doesn't fabricate a plausible-sounding answer or leak the other tenant's real decision on the same topic."
+    },
+    {
+      "id": "ge-078",
+      "question": "What's our on-call rotation policy?",
+      "tenant_id": "ec14b5fc-4191-5d4a-af46-c1a5099a3db4",
+      "category": "negative",
+      "scenario_pack_ids": [],
+      "expected_decision_ids": [],
+      "expected_citation_ids": [],
+      "reference_answer": "No recorded decision exists on this topic for this tenant.",
+      "labeling": {
+        "labeler_a": "simulated-a",
+        "labeler_b": "simulated-b",
+        "simulated": true,
+        "agreed": true,
+        "adjudicator": null,
+        "adjudication_note": null
+      },
+      "notes": "'oncall_rotation' was never decided for Bramble Foods (only for a different tenant) -- tests that the pipeline doesn't fabricate a plausible-sounding answer or leak the other tenant's real decision on the same topic."
+    },
+    {
+      "id": "ge-079",
+      "question": "Is there a deploy freeze before releases?",
+      "tenant_id": "ec14b5fc-4191-5d4a-af46-c1a5099a3db4",
+      "category": "negative",
+      "scenario_pack_ids": [],
+      "expected_decision_ids": [],
+      "expected_citation_ids": [],
+      "reference_answer": "No recorded decision exists on this topic for this tenant.",
+      "labeling": {
+        "labeler_a": "simulated-a",
+        "labeler_b": "simulated-b",
+        "simulated": true,
+        "agreed": true,
+        "adjudicator": null,
+        "adjudication_note": null
+      },
+      "notes": "'deploy_freeze' was never decided for Bramble Foods (only for a different tenant) -- tests that the pipeline doesn't fabricate a plausible-sounding answer or leak the other tenant's real decision on the same topic."
+    },
+    {
+      "id": "ge-080",
+      "question": "What database are we using for the new service?",
+      "tenant_id": "ec14b5fc-4191-5d4a-af46-c1a5099a3db4",
+      "category": "negative",
+      "scenario_pack_ids": [],
+      "expected_decision_ids": [],
+      "expected_citation_ids": [],
+      "reference_answer": "No recorded decision exists on this topic for this tenant.",
+      "labeling": {
+        "labeler_a": "simulated-a",
+        "labeler_b": "simulated-b",
+        "simulated": true,
+        "agreed": true,
+        "adjudicator": null,
+        "adjudication_note": null
+      },
+      "notes": "'tech_stack_db' was never decided for Bramble Foods (only for a different tenant) -- tests that the pipeline doesn't fabricate a plausible-sounding answer or leak the other tenant's real decision on the same topic."
+    },
+    {
+      "id": "ge-081",
+      "question": "What did we decide about the pricing tiers?",
+      "tenant_id": "d00712fa-3af1-5e17-ad55-729d7e2a78c4",
+      "category": "negative",
+      "scenario_pack_ids": [],
+      "expected_decision_ids": [],
+      "expected_citation_ids": [],
+      "reference_answer": "No recorded decision exists on this topic for this tenant.",
+      "labeling": {
+        "labeler_a": "simulated-a",
+        "labeler_b": "simulated-b",
+        "simulated": true,
+        "agreed": true,
+        "adjudicator": null,
+        "adjudication_note": null
+      },
+      "notes": "'pricing_tiers' was never decided for Cobalt Analytics (only for a different tenant) -- tests that the pipeline doesn't fabricate a plausible-sounding answer or leak the other tenant's real decision on the same topic."
+    },
+    {
+      "id": "ge-082",
+      "question": "What's our on-call rotation policy?",
+      "tenant_id": "d00712fa-3af1-5e17-ad55-729d7e2a78c4",
+      "category": "negative",
+      "scenario_pack_ids": [],
+      "expected_decision_ids": [],
+      "expected_citation_ids": [],
+      "reference_answer": "No recorded decision exists on this topic for this tenant.",
+      "labeling": {
+        "labeler_a": "simulated-a",
+        "labeler_b": "simulated-b",
+        "simulated": true,
+        "agreed": true,
+        "adjudicator": null,
+        "adjudication_note": null
+      },
+      "notes": "'oncall_rotation' was never decided for Cobalt Analytics (only for a different tenant) -- tests that the pipeline doesn't fabricate a plausible-sounding answer or leak the other tenant's real decision on the same topic."
+    },
+    {
+      "id": "ge-083",
+      "question": "How long do we keep raw ingested events before deleting them?",
+      "tenant_id": "d00712fa-3af1-5e17-ad55-729d7e2a78c4",
+      "category": "negative",
+      "scenario_pack_ids": [],
+      "expected_decision_ids": [],
+      "expected_citation_ids": [],
+      "reference_answer": "No recorded decision exists on this topic for this tenant.",
+      "labeling": {
+        "labeler_a": "simulated-a",
+        "labeler_b": "simulated-b",
+        "simulated": true,
+        "agreed": true,
+        "adjudicator": null,
+        "adjudication_note": null
+      },
+      "notes": "'data_retention' was never decided for Cobalt Analytics (only for a different tenant) -- tests that the pipeline doesn't fabricate a plausible-sounding answer or leak the other tenant's real decision on the same topic."
+    },
+    {
+      "id": "ge-084",
+      "question": "What did we decide about the pricing tiers?",
+      "tenant_id": "bec5ecdd-2246-58eb-a636-b794bb509aa8",
+      "category": "negative",
+      "scenario_pack_ids": [],
+      "expected_decision_ids": [],
+      "expected_citation_ids": [],
+      "reference_answer": "No recorded decision exists on this topic for this tenant.",
+      "labeling": {
+        "labeler_a": "simulated-a",
+        "labeler_b": "simulated-b",
+        "simulated": true,
+        "agreed": true,
+        "adjudicator": null,
+        "adjudication_note": null
+      },
+      "notes": "'pricing_tiers' was never decided for Driftwood Media (only for a different tenant) -- tests that the pipeline doesn't fabricate a plausible-sounding answer or leak the other tenant's real decision on the same topic."
+    },
+    {
+      "id": "ge-085",
+      "question": "Which vendor did we choose for background checks?",
+      "tenant_id": "bec5ecdd-2246-58eb-a636-b794bb509aa8",
+      "category": "negative",
+      "scenario_pack_ids": [],
+      "expected_decision_ids": [],
+      "expected_citation_ids": [],
+      "reference_answer": "No recorded decision exists on this topic for this tenant.",
+      "labeling": {
+        "labeler_a": "simulated-a",
+        "labeler_b": "simulated-b",
+        "simulated": true,
+        "agreed": true,
+        "adjudicator": null,
+        "adjudication_note": null
+      },
+      "notes": "'vendor_bgcheck' was never decided for Driftwood Media (only for a different tenant) -- tests that the pipeline doesn't fabricate a plausible-sounding answer or leak the other tenant's real decision on the same topic."
+    },
+    {
+      "id": "ge-086",
+      "question": "What database are we using for the new service?",
+      "tenant_id": "bec5ecdd-2246-58eb-a636-b794bb509aa8",
+      "category": "negative",
+      "scenario_pack_ids": [],
+      "expected_decision_ids": [],
+      "expected_citation_ids": [],
+      "reference_answer": "No recorded decision exists on this topic for this tenant.",
+      "labeling": {
+        "labeler_a": "simulated-a",
+        "labeler_b": "simulated-b",
+        "simulated": true,
+        "agreed": true,
+        "adjudicator": null,
+        "adjudication_note": null
+      },
+      "notes": "'tech_stack_db' was never decided for Driftwood Media (only for a different tenant) -- tests that the pipeline doesn't fabricate a plausible-sounding answer or leak the other tenant's real decision on the same topic."
+    }
+  ]
+}
