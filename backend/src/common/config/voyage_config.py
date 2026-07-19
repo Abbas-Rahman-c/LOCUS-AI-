@@ -1,17 +1,15 @@
 """
-Voyage AI embedding configuration (query-time only).
+Voyage AI embedding configuration - shared by query-time and document-time
+embedding.
 
-Reads VOYAGE_API_KEY, VOYAGE_MODEL, VOYAGE_OUTPUT_DIMENSION. This backs only
-modules.ai.embeddings.provider.embed_query() for Phase 2 retrieval - the
-document-time embedding pipeline (ingestion write path) is deferred Phase 1
-work, ported separately.
+Reads VOYAGE_API_KEY, VOYAGE_MODEL, VOYAGE_OUTPUT_DIMENSION. Backs both
+modules.ai.embeddings.provider.embed_query() (Phase 2 retrieval) and
+embed_document() (the ingestion write path, migrations/010_decision_
+embeddings_voyage_ai.sql resizes decision_embeddings.embedding to match).
 
-VOYAGE_OUTPUT_DIMENSION defaults to 1024: the live decision_embeddings
-table was resized to vector(1024) for voyage-4 directly against the shared
-Supabase project (the migration that did so isn't part of this branch's
-migration history - a discrepancy worth reconciling with the backend team,
-not something this module can fix). A misconfigured dimension must fail
-loudly here rather than surface later as an opaque pgvector error.
+VOYAGE_OUTPUT_DIMENSION defaults to 1024 to match decision_embeddings.
+embedding's vector(1024) column. A misconfigured dimension must fail loudly
+here rather than surface later as an opaque pgvector error.
 """
 from __future__ import annotations
 
