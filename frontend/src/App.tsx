@@ -11,6 +11,7 @@ function App() {
   const [workspacesConnected, setWorkspacesConnected] = useState(false);
   const searchParams = new URLSearchParams(window.location.search)
   const isDashboardRoute = window.location.pathname === '/dashboard'
+  const isHowItWorksRoute = window.location.pathname === '/how-it-works';
   const isOAuthCallback =
     searchParams.has('auth_callback') ||
     searchParams.has('code') ||
@@ -40,22 +41,34 @@ function App() {
     }
   }, [isOAuthCallback, userEmail])
 
-  if (isOAuthCallback) {
-    return <OAuthCallback />
-  }
+if (isOAuthCallback) {
+  return <OAuthCallback />;
+}
 
-  if (isDashboardRoute && userEmail) {
-    return <MainDashboardEntry />
-  }
+if (isDashboardRoute) {
+  return <MainDashboardEntry />;
+}
 
-  if (userEmail && !workspacesConnected) {
+if (isHowItWorksRoute) {
+  return <LandingPage onAuthenticated={setUserEmail} />;
+}
+
+if (userEmail && !workspacesConnected) {
   return <ConnectWorkspaces email={userEmail} onContinue={() => setWorkspacesConnected(true)} />;
 }
 
 if (userEmail && workspacesConnected) {
-  return <DecisionReady userEmail={userEmail} />;
+  return (
+    <DecisionReady
+      userEmail={userEmail}
+      onGoToDashboard={() => {
+        window.location.href = "/dashboard";
+      }}
+    />
+  );
 }
 
 return <LandingPage onAuthenticated={setUserEmail} />;
 }
-export default App;
+
+export default App

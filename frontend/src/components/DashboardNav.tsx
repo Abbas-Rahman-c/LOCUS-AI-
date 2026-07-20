@@ -1,7 +1,7 @@
 import { LocusLogo } from '../../landing-page/components/LocusLogo'
 
 const NAV_LINKS = [
-  { label: 'How it works', href: '#how-it-works', active: false },
+  { label: 'How it works', href: '/how-it-works', active: false },
   { label: 'Dashboard', href: '#dashboard', active: true },
   { label: 'Decision Log', href: '#decision-log', active: false },
   { label: 'Team Pulse', href: '#team-pulse', active: false, badge: true },
