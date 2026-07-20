@@ -23,6 +23,20 @@
 -- Run AFTER 009_search_decisions_fts.sql. Do NOT apply this to any shared
 -- or live database as part of this porting work - local/CI verification
 -- only.
+--
+-- Rollback: safe only while decision_embeddings is still empty (the same
+-- condition 10.1 requires to apply forward). To roll back before any row
+-- has ever been written under the 1024-dim column:
+--   drop index if exists public.idx_decision_embeddings_vec;
+--   alter table public.decision_embeddings alter column embedding type vector(1536);
+--   alter table public.decision_embeddings alter column embedding_model set default 'text-embedding-3-small';
+--   create index if not exists idx_decision_embeddings_vec
+--     on public.decision_embeddings using hnsw (embedding vector_cosine_ops);
+-- Once any real 1024-dim Voyage row exists, this is no longer a rollback -
+-- reverting the column to vector(1536) at that point would be exactly as
+-- lossy as the forward resize this migration guards against, and must go
+-- through the same "re-embed and intentionally clear the table" path
+-- described in 10.1, not a silent ALTER.
 -- =====================================================================
 
 -- ---------------------------------------------------------------------
