@@ -19,6 +19,17 @@ from modules.retrieval.router import router as retrieval_router
 from modules.security.encryption import encrypt_raw_content
 from modules.security.tenant_guard import TenantScopeError
 
+
+class _FakeTransaction:
+    """Minimal async-context-manager double for asyncpg's conn.transaction()."""
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        return False
+
+
 # ── Router Test Setup ──────────────────────────────────────────────────────────
 
 app = FastAPI()
@@ -63,6 +74,7 @@ async def test_retrieve_decisions_basic(monkeypatch):
 
     mock_conn = AsyncMock()
     mock_conn.execute = AsyncMock(return_value="SET")
+    mock_conn.transaction = MagicMock(return_value=_FakeTransaction())
     
     # We mock connection fetch behavior based on query contents
     async def mock_fetch(query, *args):
@@ -121,6 +133,7 @@ async def test_retrieve_decisions_tenant_guard_violation():
 
     mock_conn = AsyncMock()
     mock_conn.execute = AsyncMock(return_value="SET")
+    mock_conn.transaction = MagicMock(return_value=_FakeTransaction())
     mock_conn.fetch = AsyncMock(return_value=[mock_dec_row])
     
     mock_pool = MagicMock()
@@ -178,6 +191,7 @@ async def test_get_decision_context_reconstructs_thread():
 
     mock_conn = AsyncMock()
     mock_conn.execute = AsyncMock(return_value="SET")
+    mock_conn.transaction = MagicMock(return_value=_FakeTransaction())
 
     # Mock connection queries
     async def mock_fetchrow(query, *args):

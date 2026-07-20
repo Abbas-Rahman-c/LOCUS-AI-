@@ -19,6 +19,17 @@ from modules.decisions.router import router as decisions_router
 from modules.decisions.schemas import RadarCorrectionFeedback
 from modules.security.tenant_guard import TenantScopeError
 
+
+class _FakeTransaction:
+    """Minimal async-context-manager double for asyncpg's conn.transaction()."""
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        return False
+
+
 app = FastAPI()
 app.include_router(decisions_router)
 client = TestClient(app)
@@ -61,6 +72,7 @@ async def test_list_decisions_hydrates_radar_fields():
 
     mock_conn = AsyncMock()
     mock_conn.execute = AsyncMock(return_value="SET")
+    mock_conn.transaction = MagicMock(return_value=_FakeTransaction())
 
     async def mock_fetch(query, *args):
         if "decision_actors" in query:
@@ -100,6 +112,7 @@ async def test_record_radar_correction_signal():
 
     mock_conn = AsyncMock()
     mock_conn.execute = AsyncMock(return_value="SET")
+    mock_conn.transaction = MagicMock(return_value=_FakeTransaction())
     mock_conn.fetchrow = AsyncMock(return_value=mock_row)
 
     mock_pool = MagicMock()

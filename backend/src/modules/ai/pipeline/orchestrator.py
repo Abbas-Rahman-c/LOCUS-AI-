@@ -40,3 +40,57 @@ async def run_pipeline(chunk: dict) -> None:
         embedding = await embed(item.summary)
         confidence = await score(item.confidence)
         await save_capture(item, embedding, confidence, source_chunk=chunk)
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Standalone AI pipeline (triage -> extraction only)
+#
+# process_ai_event() is independent of run_pipeline() above: it takes an
+# EventEnvelope (not a chunk dict), never embeds, scores, or persists, and
+# returns its result instead of side-effecting. It does not add tenant_id,
+# permission_scope, database ids, timestamps, model name, or prompt version
+# — callers that need those own that responsibility (see
+# modules.ai.pipeline.service.process_and_persist_event()).
+# ═══════════════════════════════════════════════════════════════════════
+
+from modules.ai.extraction.extractor import ExtractionError, extract
+from modules.ai.pipeline.schemas import AIProcessingResult
+from modules.ai.triage.classifier import TriageClassificationError, classify
+from modules.ai.triage.schemas import TriageDecision
+from modules.ingestion.envelope.schemas import EventEnvelope
+
+
+class AIPipelineError(Exception):
+    """Base class for all process_ai_event() failures."""
+
+
+class ClassificationStageError(AIPipelineError):
+    """The triage stage (classify()) failed."""
+
+
+class ExtractionStageError(AIPipelineError):
+    """The extraction stage (extract()) failed."""
+
+
+async def process_ai_event(event: EventEnvelope) -> AIProcessingResult:
+    """Run triage, then extraction unless triage discarded the event.
+
+    KEEP and UNCERTAIN are both extracted — UNCERTAIN is never silently
+    treated as KEEP or as DISCARD, it just follows the same "attempt
+    extraction" path KEEP does. Only DISCARD skips extraction.
+    """
+    try:
+        triage = await classify(event)
+    except TriageClassificationError as exc:
+        raise ClassificationStageError(f"Triage classification failed: {exc}") from exc
+
+    if triage.decision == TriageDecision.DISCARD:
+        log.debug("Triage DISCARD - extraction skipped")
+        return AIProcessingResult(triage=triage, extraction=None)
+
+    try:
+        extraction = await extract(event)
+    except ExtractionError as exc:
+        raise ExtractionStageError(f"Extraction failed: {exc}") from exc
+
+    return AIProcessingResult(triage=triage, extraction=extraction)

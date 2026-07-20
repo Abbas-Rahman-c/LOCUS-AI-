@@ -68,9 +68,26 @@ def make_tenant_jwt(
 # ── Mock DB pool ───────────────────────────────────────────────────────────────
 
 
+class _FakeTransaction:
+    """Minimal async-context-manager double for asyncpg's conn.transaction()."""
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        return False
+
+
 def _make_conn_mock(rows: list[dict] | None = None, scalar: int = 0):
     """Return an asyncpg.Connection-shaped mock that returns canned data."""
     conn = AsyncMock()
+
+    # transaction() is a SYNC method returning an async context manager —
+    # tenant_conn() now opens one to keep set_config(is_local=true) bound
+    # for every query in its context (see database/tenant_connection.py).
+    # A bare AsyncMock would make conn.transaction() return a coroutine
+    # instead, which fails `async with conn.transaction():`.
+    conn.transaction = MagicMock(return_value=_FakeTransaction())
 
     # set_config — used by tenant_conn to set app.current_tenant_id
     conn.execute = AsyncMock(return_value="SET")

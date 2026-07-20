@@ -13,6 +13,7 @@ from modules.decisions.router import router as decisions_router
 from modules.feedback.router import router as feedback_router
 from modules.integrations.gmail.router import router as gmail_router
 from modules.retrieval.router import router as retrieval_router
+from modules.search.router import router as search_router
 
 app = FastAPI(title="Locus AI", version="0.1.0", lifespan=lifespan)
 
@@ -42,6 +43,11 @@ app.include_router(decisions_router)
 
 # Retrieval — QA ask route
 app.include_router(retrieval_router)
+
+# Search — Phase 2 production endpoint: authenticated tenant-scoped vector
+# retrieval + permission filtering + context + Claude answer. Additive
+# alongside retrieval_router's existing FTS /ask route; does not replace it.
+app.include_router(search_router)
 
 # Gmail integration & feedback (existing routers)
 app.include_router(gmail_router)
