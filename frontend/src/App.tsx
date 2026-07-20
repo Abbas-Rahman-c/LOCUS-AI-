@@ -4,11 +4,13 @@ import ConnectWorkspaces from './ConnectWorkspaces'
 import OAuthCallback from './OAuthCallback'
 import { getSupabaseClient } from './lib/supabase'
 import DecisionReady from "./DecisionReady";
+import MainDashboardEntry from './pages/MainDashboardEntry'
 
 function App() {
   const [userEmail, setUserEmail] = useState<string | null>(null)
   const [workspacesConnected, setWorkspacesConnected] = useState(false);
   const searchParams = new URLSearchParams(window.location.search)
+  const isDashboardRoute = window.location.pathname === '/dashboard'
   const isOAuthCallback =
     searchParams.has('auth_callback') ||
     searchParams.has('code') ||
@@ -40,6 +42,10 @@ function App() {
 
   if (isOAuthCallback) {
     return <OAuthCallback />
+  }
+
+  if (isDashboardRoute && userEmail) {
+    return <MainDashboardEntry />
   }
 
   if (userEmail && !workspacesConnected) {
