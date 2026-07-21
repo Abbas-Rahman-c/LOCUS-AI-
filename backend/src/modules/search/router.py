@@ -7,10 +7,9 @@ Single-turn only: no conversation memory, no streaming, no agents, no
 hybrid search, no reranking.
 
 Uses the same mandatory Depends(get_current_tenant) every other protected
-route uses (decisions/router.py) - never
-retrieval/router.py::get_current_tenant_optional's client-supplied-
-tenant_id fallback. tenant_id is taken exclusively from the authenticated
-TenantContext; the request body carries only search inputs.
+route uses (decisions/router.py, retrieval/router.py) - never a
+client-supplied-tenant_id fallback. tenant_id is taken exclusively from the
+authenticated TenantContext; the request body carries only search inputs.
 """
 from __future__ import annotations
 

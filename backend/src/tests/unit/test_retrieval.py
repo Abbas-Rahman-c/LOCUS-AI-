@@ -308,36 +308,38 @@ def test_router_ask_jwt_success():
         )
 
 
-def test_router_ask_temp_fallback_success():
-    """POST /ask returns stream when JWT is missing/invalid but temporary request-body tenant_id is provided."""
+def test_router_ask_body_tenant_id_fallback_is_rejected():
+    """POST /ask must NOT honor a request-body tenant_id fallback: with no valid
+    JWT the request is rejected regardless of any client-supplied tenant_id."""
     tenant_id = uuid.uuid4()
     mock_db_pool = MagicMock()
 
     with patch("modules.retrieval.router.get_db_pool", return_value=mock_db_pool), \
          patch("modules.retrieval.service.retrieve_decisions", return_value=[]) as mock_retrieve:
-        
+
         payload = {
             "query": "How is scaling handled?",
-            "tenant_id": str(tenant_id)
+            "tenant_id": str(tenant_id),
         }
-        
+
         response = client.post("/api/v1/retrieval/ask", json=payload)
-        
-        assert response.status_code == 200
-        mock_retrieve.assert_called_once_with(
-            query="How is scaling handled?",
-            tenant_id=str(tenant_id),
-            filters=None,
-            limit=10,
-            offset=0,
-            pool=mock_db_pool,
-        )
+
+        assert response.status_code in (401, 403)
+        mock_retrieve.assert_not_called()
 
 
 def test_router_ask_missing_auth():
-    """POST /ask returns 401 when JWT is missing and no request-body tenant_id fallback is provided."""
+    """POST /ask is rejected when no JWT is supplied (auth is mandatory)."""
     payload = {"query": "How is scaling handled?"}
     response = client.post("/api/v1/retrieval/ask", json=payload)
-    
+
+    assert response.status_code in (401, 403)
+
+
+def test_router_ask_invalid_jwt_is_rejected():
+    """POST /ask is rejected with 401 when the JWT is present but invalid."""
+    payload = {"query": "How is scaling handled?"}
+    headers = {"Authorization": "Bearer not-a-real-token"}
+    response = client.post("/api/v1/retrieval/ask", json=payload, headers=headers)
+
     assert response.status_code == 401
-    assert "Authentication required" in response.json()["detail"]
