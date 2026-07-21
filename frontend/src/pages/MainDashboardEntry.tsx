@@ -7,7 +7,7 @@ import { DashboardCaptures } from '../components/DashboardCaptures'
 export default function MainDashboardEntry() {
   return (
     <div className="min-h-screen bg-[#F7F7FA]">
-      <DashboardNav />
+      <DashboardNav activePage="Dashboard" />
 
       <main className="mx-auto max-w-[1120px] px-8 py-8">
         <DashboardSearch />

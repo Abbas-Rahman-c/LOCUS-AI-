@@ -5,12 +5,14 @@ import OAuthCallback from './OAuthCallback'
 import { getSupabaseClient } from './lib/supabase'
 import DecisionReady from "./DecisionReady";
 import MainDashboardEntry from './pages/MainDashboardEntry'
+import DecisionLogPage from './pages/DecisionLogPage'
 
 function App() {
   const [userEmail, setUserEmail] = useState<string | null>(null)
   const [workspacesConnected, setWorkspacesConnected] = useState(false);
   const searchParams = new URLSearchParams(window.location.search)
   const isDashboardRoute = window.location.pathname === '/dashboard'
+  const isDecisionLogRoute = window.location.pathname === '/decision-log'
   const isHowItWorksRoute = window.location.pathname === '/how-it-works';
   const isOAuthCallback =
     searchParams.has('auth_callback') ||
@@ -47,6 +49,10 @@ if (isOAuthCallback) {
 
 if (isDashboardRoute) {
   return <MainDashboardEntry />;
+}
+
+if (isDecisionLogRoute) {
+  return <DecisionLogPage />;
 }
 
 if (isHowItWorksRoute) {
