@@ -1,5 +1,4 @@
 import { useMemo, useState, type ReactNode } from 'react'
-import { DashboardNav } from '../components/DashboardNav'
 
 type SettingsSection =
   | 'Account'
@@ -154,10 +153,7 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#F7F7FA]">
-      <DashboardNav />
-
-      <div className="mx-auto flex max-w-[1120px] gap-8 px-8 py-8">
+    <div className="mx-auto flex max-w-[1120px] gap-8 px-8 py-8">
         <aside className="w-[220px] shrink-0">
           <h2 className="mb-4 text-[18px] font-bold text-[#111827]">Settings</h2>
           <nav className="flex flex-col gap-1">
@@ -414,6 +410,5 @@ export default function SettingsPage() {
           )}
         </main>
       </div>
-    </div>
   )
 }

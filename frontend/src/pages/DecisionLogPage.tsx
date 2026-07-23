@@ -1,5 +1,4 @@
 import { useMemo, useState } from 'react'
-import { DashboardNav } from '../components/DashboardNav'
 
 type EntryType = 'Decision' | 'Action Item'
 type FilterType = 'All Types' | EntryType
@@ -45,10 +44,7 @@ export default function DecisionLogPage() {
   }, [selectedType])
 
   return (
-    <div className="min-h-screen bg-[#F7F7FA]">
-      <DashboardNav />
-
-      <main className="mx-auto max-w-[1120px] px-8 py-8">
+    <main className="mx-auto max-w-[1120px] px-8 py-8">
         <h1 className="text-[32px] font-bold leading-tight tracking-[-0.02em] text-[#111827]">
           Decision Log
         </h1>
@@ -206,6 +202,5 @@ export default function DecisionLogPage() {
           </div>
         </div>
       </main>
-    </div>
   )
 }
