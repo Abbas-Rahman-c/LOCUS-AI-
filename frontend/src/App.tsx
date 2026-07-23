@@ -8,7 +8,6 @@ import {
   useSearchParams,
 } from 'react-router-dom'
 import LandingPage from '../landing-page/LandingPage'
-import HowItWorks from '../landing-page/HowItWorks'
 import ConnectWorkspaces from './ConnectWorkspaces'
 import OAuthCallback from './OAuthCallback'
 import { getSupabaseClient } from './lib/supabase'
@@ -18,6 +17,20 @@ import MainDashboardEntry from './pages/MainDashboardEntry'
 import DecisionLogPage from './pages/DecisionLogPage'
 import TeamPulse from './pages/TeamPulse'
 import SettingsPage from './pages/SettingsPage'
+
+/** Full marketing page: Get Started → How it works → Why Locus (scrollable). */
+function HowItWorksMarketing() {
+  const navigate = useNavigate()
+
+  return (
+    <LandingPage
+      initialSection="how-it-works"
+      onAuthenticated={() => {
+        navigate('/', { replace: true })
+      }}
+    />
+  )
+}
 
 function AuthRoutes() {
   const navigate = useNavigate()
@@ -87,9 +100,11 @@ function App() {
       <Routes>
         <Route path="/" element={<AuthRoutes />} />
 
-        {/* One app shell — same localhost, client-side nav between pages */}
+        {/* Full 3-section landing (Get Started + How it works + Why Locus) */}
+        <Route path="/how-it-works" element={<HowItWorksMarketing />} />
+
+        {/* Dashboard pages share one shell / one localhost */}
         <Route element={<DashboardShell />}>
-          <Route path="/how-it-works" element={<HowItWorks />} />
           <Route path="/dashboard" element={<MainDashboardEntry />} />
           <Route path="/decision-log" element={<DecisionLogPage />} />
           <Route path="/team-pulse" element={<TeamPulse />} />
