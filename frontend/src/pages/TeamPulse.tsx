@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { DashboardNav } from '../components/DashboardNav'
+import { Link } from 'react-router-dom'
 
 type PulseSection = {
   count: number
@@ -233,10 +233,7 @@ export default function TeamPulse() {
   }
 
   return (
-    <div className="min-h-screen bg-[#F7F7FA]">
-      <DashboardNav />
-
-      <main className="mx-auto max-w-[1064px] px-4 py-6 sm:px-8">
+    <main className="mx-auto max-w-[1064px] px-4 py-6 sm:px-8">
         <div className="mb-4">
           <h1 className="text-[24px] font-semibold leading-tight text-[#17171D]">Pulse</h1>
           <p className="mt-1 text-[14px] text-[#7C8392]">
@@ -369,15 +366,14 @@ export default function TeamPulse() {
                 </button>
               ))}
             </div>
-            <a
-              href="/decision-log"
+            <Link
+              to="/decision-log"
               className="text-[14px] font-medium text-[#5544E6] hover:text-[#4030CA]"
             >
               View full Decision Log
-            </a>
+            </Link>
           </footer>
         </article>
       </main>
-    </div>
   )
 }

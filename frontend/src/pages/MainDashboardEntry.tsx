@@ -1,4 +1,3 @@
-import { DashboardNav } from '../components/DashboardNav'
 import { DashboardSearch } from '../components/DashboardSearch'
 import { DashboardStats } from '../components/DashboardStats'
 import { DashboardSources } from '../components/DashboardSources'
@@ -6,18 +5,14 @@ import { DashboardCaptures } from '../components/DashboardCaptures'
 
 export default function MainDashboardEntry() {
   return (
-    <div className="min-h-screen bg-[#F7F7FA]">
-      <DashboardNav />
+    <main className="mx-auto max-w-[1120px] px-8 py-8">
+      <DashboardSearch />
+      <DashboardStats />
 
-      <main className="mx-auto max-w-[1120px] px-8 py-8">
-        <DashboardSearch />
-        <DashboardStats />
-
-        <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.7fr)] gap-5">
-          <DashboardSources />
-          <DashboardCaptures />
-        </div>
-      </main>
-    </div>
+      <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.7fr)] gap-5">
+        <DashboardSources />
+        <DashboardCaptures />
+      </div>
+    </main>
   )
 }

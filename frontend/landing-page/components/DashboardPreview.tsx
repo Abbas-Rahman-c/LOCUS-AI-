@@ -49,7 +49,7 @@ function SourceIcon({ label }: { label: string }) {
   )
 }
 
-const NAV_ITEMS = ['How it works', 'Dashboard', 'Decision Log', 'Pulse', 'Setting']
+const NAV_ITEMS = ['How it works', 'Dashboard', 'Decision Log', 'Pulse', 'Settings']
 
 const RECENT_SEARCHES = [
   'What did we decide about onboarding flow?',

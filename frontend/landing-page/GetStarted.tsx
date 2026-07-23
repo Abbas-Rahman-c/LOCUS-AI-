@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 import { getSupabaseClient } from '../src/lib/supabase'
 import { Header } from './components/Header'
-import { GoogleIcon } from './components/GoogleIcon'
 import { ProcessStepper } from './components/ProcessStepper'
 import { DashboardPreview } from './components/DashboardPreview'
 
@@ -97,10 +96,9 @@ export default function GetStarted({
               type="button"
               onClick={handleGoogleSignUp}
               disabled={isSigningIn}
-              className="mt-6 flex w-fit items-center gap-2.5 rounded-full bg-[#c8e619] px-5 py-3 text-[14.5px] font-semibold text-[#111827] transition-opacity hover:opacity-90 disabled:cursor-wait disabled:opacity-70"
+              className="mt-6 w-fit rounded-full bg-[#C8E619] px-7 py-3 text-[15px] font-semibold text-[#111827] transition-opacity hover:opacity-90 disabled:cursor-wait disabled:opacity-70"
             >
-              <GoogleIcon />
-              {isSigningIn ? 'Opening Google...' : 'Sign up with Google'}
+              {isSigningIn ? 'Opening…' : 'Get Started Now'}
             </button>
 
             {authError && (
