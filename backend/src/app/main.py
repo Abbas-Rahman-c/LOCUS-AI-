@@ -10,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.lifespan import lifespan
 from modules.auth.router import router as auth_router
 from modules.decisions.router import router as decisions_router
+from modules.digest.router import router as digest_router
 from modules.feedback.router import router as feedback_router
 from modules.integrations.gmail.router import router as gmail_router
 from modules.retrieval.router import router as retrieval_router
@@ -52,3 +53,6 @@ app.include_router(search_router)
 # Gmail integration & feedback (existing routers)
 app.include_router(gmail_router)
 app.include_router(feedback_router)
+
+# Digest — Team Pulse weekly summary (GET /digest?scope=personal|team)
+app.include_router(digest_router)
