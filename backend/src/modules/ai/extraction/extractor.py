@@ -1,5 +1,5 @@
 """
-Calls Claude Sonnet: extracts one ExtractionResult from a KEEP/UNCERTAIN event.
+Calls Claude Haiku: extracts one ExtractionResult from a KEEP/UNCERTAIN event.
 
 Stage 2 of the AI pipeline. Reuses the same Anthropic client and the same
 beta Tool Use interface as the triage stage — see
@@ -31,8 +31,9 @@ TEMPERATURE = 0
 REQUEST_TIMEOUT_SECONDS = 30.0
 
 APPROVED_EXTRACTION_MODELS = {
-    "claude-sonnet-4-5-20250929",
-    "claude-sonnet-5",
+    "claude-haiku-4-5-20251001",
+    "claude-3-5-haiku-20241022",
+    "claude-3-haiku-20240307",
 }
 
 
@@ -54,10 +55,10 @@ class ExtractionAPIError(ExtractionError):
 
 def get_extraction_model() -> str:
     """Validate and return the extraction model configuration."""
-    model = os.environ.get("ANTHROPIC_EXTRACTION_MODEL", "claude-sonnet-4-5-20250929")
+    model = os.environ.get("ANTHROPIC_EXTRACT_MODEL", "claude-haiku-4-5-20251001")
     if model not in APPROVED_EXTRACTION_MODELS:
         raise RuntimeError(
-            f"ANTHROPIC_EXTRACTION_MODEL '{model}' is not in approved list: {sorted(APPROVED_EXTRACTION_MODELS)}"
+            f"ANTHROPIC_EXTRACT_MODEL '{model}' is not in approved list: {sorted(APPROVED_EXTRACTION_MODELS)}"
         )
     return model
 
