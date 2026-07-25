@@ -23,6 +23,7 @@ from database.pool import get_db_pool
 from modules.ai.embeddings.provider import VoyageEmbeddingError, VoyageResponseValidationError
 from modules.answering.provider import AnswerAPIError, AnswerResponseValidationError
 from modules.permissions.scope_resolver import resolve_permission_scopes
+from modules.ratelimit.limiter import enforce_rate_limit
 from modules.search.schemas import SearchRequest, SearchResponse
 from modules.search.service import search
 
@@ -35,6 +36,7 @@ router = APIRouter(tags=["search"])
 async def search_endpoint(
     request: SearchRequest,
     ctx: TenantContext = Depends(get_current_tenant),
+    _: None = Depends(enforce_rate_limit("search")),
 ) -> SearchResponse:
     """Production question -> grounded answer + citations endpoint."""
     pool = get_db_pool()
