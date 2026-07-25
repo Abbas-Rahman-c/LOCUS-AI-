@@ -40,6 +40,20 @@ const INITIAL_CHANNELS: ChannelRow[] = [
   { id: '8', name: 'team@company.com', included: false, app: 'Gmail' },
 ]
 
+type ConnectedSource = {
+  id: string
+  name: string
+  sync: string
+  status: 'Active' | 'Disconnected'
+  icon: ReactNode
+}
+
+const INITIAL_SOURCES: ConnectedSource[] = [
+  { id: 'slack', name: 'Slack', sync: 'Synced today 9:00 am', status: 'Active', icon: <SlackIcon /> },
+  { id: 'notion', name: 'Notion', sync: 'Synced today 9:00 am', status: 'Active', icon: <NotionIcon /> },
+  { id: 'gmail', name: 'Gmail', sync: 'Not connected', status: 'Disconnected', icon: <GmailIcon /> },
+]
+
 function AccountIcon() {
   return (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -116,6 +130,44 @@ function BellIcon() {
   )
 }
 
+function SlackIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 122.8 122.8" aria-hidden="true">
+      <path fill="#E01E5A" d="M25.8 77.6c0 7.1-5.8 12.9-12.9 12.9S0 84.7 0 77.6s5.8-12.9 12.9-12.9h12.9v12.9z" />
+      <path fill="#E01E5A" d="M32.3 77.6c0-7.1 5.8-12.9 12.9-12.9s12.9 5.8 12.9 12.9v32.3c0 7.1-5.8 12.9-12.9 12.9s-12.9-5.8-12.9-12.9V77.6z" />
+      <path fill="#36C5F0" d="M45.2 25.8c-7.1 0-12.9-5.8-12.9-12.9S38.1 0 45.2 0s12.9 5.8 12.9 12.9v12.9H45.2z" />
+      <path fill="#36C5F0" d="M45.2 32.3c7.1 0 12.9 5.8 12.9 12.9s-5.8 12.9-12.9 12.9H12.9C5.8 58.1 0 52.3 0 45.2s5.8-12.9 12.9-12.9h32.3z" />
+      <path fill="#2EB67D" d="M97 45.2c0-7.1 5.8-12.9 12.9-12.9s12.9 5.8 12.9 12.9-5.8 12.9-12.9 12.9H97V45.2z" />
+      <path fill="#2EB67D" d="M90.5 45.2c0 7.1-5.8 12.9-12.9 12.9s-12.9-5.8-12.9-12.9V12.9C64.7 5.8 70.5 0 77.6 0s12.9 5.8 12.9 12.9v32.3z" />
+      <path fill="#ECB22E" d="M77.6 97c7.1 0 12.9 5.8 12.9 12.9s-5.8 12.9-12.9 12.9-12.9-5.8-12.9-12.9V97h12.9z" />
+      <path fill="#ECB22E" d="M77.6 90.5c-7.1 0-12.9-5.8-12.9-12.9s5.8-12.9 12.9-12.9h32.3c7.1 0 12.9 5.8 12.9 12.9s-5.8 12.9-12.9 12.9H77.6z" />
+    </svg>
+  )
+}
+
+function NotionIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 100 100" aria-hidden="true">
+      <path fill="#111827" d="M18 12h52c3 0 5.5 1 7.2 3.2L89 30.5c1.5 2 2.2 4.2 2.2 6.6V82c0 4.4-3.6 8-8 8H33c-2.8 0-5.4-1.2-7.2-3.3L10 70.5C8.4 68.6 7.5 66.2 7.5 63.6V20c0-4.4 3.6-8 10.5-8z" />
+      <path fill="#fff" d="M34 28h8.5l18 42h-9l-3.6-9H35.2L31.5 70H23l11-42zm3.2 25H48L42.6 40 37.2 53z" />
+    </svg>
+  )
+}
+
+function GmailIcon() {
+  return (
+    <svg width="20" height="15" viewBox="0 0 48 36" aria-hidden="true">
+      <path fill="#4285F4" d="M0 6v24l12-9V6z" />
+      <path fill="#34A853" d="M48 6v24L36 21V6z" />
+      <path fill="#FBBC04" d="M0 30l12-9 12 9 12-9 12 9H0z" />
+      <path fill="#EA4335" d="M0 6l24 18L48 6H0z" />
+      <rect x="1" y="1" width="46" height="34" rx="3" fill="none" stroke="#E8EAED" strokeWidth="2" />
+      <path d="M3 5.5 24 21.5 45 5.5" fill="none" stroke="#EA4335" strokeWidth="3" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
+
 const SIDEBAR_ICONS: Record<SettingsSection, ReactNode> = {
   Account: <AccountIcon />,
   'Connected Sources': <LightningIcon />,
@@ -133,6 +185,21 @@ export default function SettingsPage() {
     useState<CaptureMode>('decisions-actions')
   const [sourceFilter, setSourceFilter] = useState<SourceFilter>('All')
   const [channels, setChannels] = useState(INITIAL_CHANNELS)
+  const [sources, setSources] = useState(INITIAL_SOURCES)
+
+const toggleSourceConnection = (id: string) => {
+  setSources((current) =>
+    current.map((source) =>
+      source.id === id
+        ? {
+            ...source,
+            status: source.status === 'Active' ? 'Disconnected' : 'Active',
+            sync: source.status === 'Active' ? 'Not connected' : 'Synced just now',
+          }
+        : source,
+    ),
+  )
+}
 
   const visibleChannels = useMemo(() => {
     if (sourceFilter === 'All') return channels
@@ -398,17 +465,85 @@ export default function SettingsPage() {
                 </div>
               </section>
             </>
-          ) : (
-            <div className="rounded-2xl border border-[#E8E8ED] bg-white p-8">
-              <h1 className="text-[28px] font-bold text-[#111827]">
-                {activeSection}
-              </h1>
-              <p className="mt-2 text-[14px] text-[#6B7280]">
-                This settings section will be available soon.
-              </p>
-            </div>
-          )}
-        </main>
+         ) : activeSection === 'Connected Sources' ? (
+  <>
+    <h1 className="text-[28px] font-bold tracking-[-0.02em] text-[#111827]">
+      Connected Sources
+    </h1>
+    <p className="mt-1 text-[14px] text-[#6B7280]">
+      Manage the tools Locus reads from to capture your team's decisions.
+    </p>
+
+    <section className="mt-8">
+      <div className="overflow-hidden rounded-2xl border border-[#E8E8ED] bg-white shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
+        <ul>
+          {sources.map((source, i) => (
+            <li
+              key={source.id}
+              className={`flex items-center gap-3 px-4 py-3.5 ${
+                i < sources.length - 1 ? 'border-b border-[#F0F0F4]' : ''
+              }`}
+            >
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#F7F7FA]">
+                {source.icon}
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-[14px] font-semibold text-[#111827]">
+                  {source.name}
+                </p>
+                <p className="text-[12px] text-[#9CA3AF]">{source.sync}</p>
+              </div>
+              <div className="mr-3 flex items-center gap-1.5">
+                <span
+                  className={`h-1.5 w-1.5 rounded-full ${
+                    source.status === 'Active' ? 'bg-[#22C55E]' : 'bg-[#EF4444]'
+                  }`}
+                />
+                <span
+                  className={`text-[12px] font-medium ${
+                    source.status === 'Active' ? 'text-[#16A34A]' : 'text-[#EF4444]'
+                  }`}
+                >
+                  {source.status}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => toggleSourceConnection(source.id)}
+                className={`rounded-full px-3.5 py-1.5 text-[13px] font-semibold transition-colors ${
+                  source.status === 'Active'
+                    ? 'border border-[#E5E7EB] bg-white text-[#EF4444] hover:bg-[#FEF2F2]'
+                    : 'bg-[#5A45FF] text-white hover:bg-[#4936D9]'
+                }`}
+              >
+                {source.status === 'Active' ? 'Disconnect' : 'Connect'}
+              </button>
+            </li>
+          ))}
+        </ul>
+        <div className="border-t border-[#F0F0F4] p-3">
+          <button
+            type="button"
+            className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-[#C7C7D1] py-2.5 text-[13px] font-semibold text-[#5A45FF] transition-colors hover:bg-[#F8F7FF]"
+          >
+            <span className="text-[16px] leading-none">+</span>
+            Add New Source
+          </button>
+        </div>
       </div>
+    </section>
+  </>
+) : (
+  <div className="rounded-2xl border border-[#E8E8ED] bg-white p-8">
+    <h1 className="text-[28px] font-bold text-[#111827]">
+      {activeSection}
+    </h1>
+    <p className="mt-2 text-[14px] text-[#6B7280]">
+      This settings section will be available soon.
+            </p>
+          </div>
+        )}
+      </main>
+    </div>
   )
 }
