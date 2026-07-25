@@ -5,10 +5,13 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-async def store_feedback(request: FeedbackRequest):
+async def store_feedback(tenant_id: str, request: FeedbackRequest):
     """
     Persist a thumbs-up / thumbs-down signal into the feedback_events table.
     This data feeds directly into the evaluation harness (golden set scoring).
+
+    tenant_id is passed explicitly by the router, sourced only from the
+    verified TenantContext - never accepted as part of the request body.
 
     When the database pool is unavailable (e.g. no network), the feedback is
     logged at WARNING level so it is still captured in server logs and can be
@@ -20,10 +23,10 @@ async def store_feedback(request: FeedbackRequest):
         VALUES ($1, $2, $3, $4, $5)
     """
     try:
-        async with tenant_connection(request.tenant_id) as conn:
+        async with tenant_connection(tenant_id) as conn:
             await conn.execute(
                 query,
-                request.tenant_id,
+                tenant_id,
                 request.query,
                 request.synthesized_answer,
                 request.signal,
