@@ -27,6 +27,7 @@ from modules.answering.provider import AnswerAPIError, AnswerResponseValidationE
 from modules.digest.schemas import DigestResponse
 from modules.digest.service import generate_team_pulse
 from modules.permissions.scope_resolver import resolve_permission_scopes
+from modules.ratelimit.limiter import enforce_rate_limit
 
 log = logging.getLogger(__name__)
 
@@ -40,6 +41,7 @@ async def get_digest(
         description="'personal' for Your Week in Decisions, 'team' for Team Pulse",
     ),
     ctx: TenantContext = Depends(get_current_tenant),
+    _: None = Depends(enforce_rate_limit("digest")),
 ) -> DigestResponse:
     """Return the weekly digest for the authenticated tenant member.
 
@@ -48,7 +50,6 @@ async def get_digest(
     """
     pool = get_db_pool()
     permission_scopes = resolve_permission_scopes(ctx)
-
     try:
         return await generate_team_pulse(
             pool,
