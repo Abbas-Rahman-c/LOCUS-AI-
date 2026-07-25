@@ -9,11 +9,12 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 
 from app.dependencies import TenantContext, get_current_tenant
 from modules.billing.schemas import CheckoutRequest, CheckoutResponse
 from modules.billing.service import BillingError, create_checkout_session
+from modules.billing.webhook import handle_stripe_webhook
 
 log = logging.getLogger(__name__)
 
@@ -52,3 +53,28 @@ async def checkout(
         checkout_url=result["checkout_url"],
         session_id=result["session_id"],
     )
+
+
+@router.post(
+    "/webhook",
+    summary="Stripe Webhook Event Listener",
+)
+async def stripe_webhook(request: Request) -> dict:
+    """
+    Receives events directly from Stripe.
+    This endpoint is unauthenticated by design; it validates the Stripe
+    signature header using the webhook secret instead.
+    """
+    try:
+        await handle_stripe_webhook(request)
+        return {"status": "success"}
+    except ValueError as exc:
+        log.warning("Webhook validation failed: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)
+        ) from exc
+    except Exception as exc:
+        log.exception("Unexpected error processing webhook")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Webhook failed"
+        ) from exc
