@@ -1,4 +1,4 @@
-"""
+﻿"""
 Auth service: exchanges a verified Supabase token for a tenant-scoped JWT.
 
 Token format (HS256, signed with APP_SECRET_KEY):
@@ -11,7 +11,7 @@ Token format (HS256, signed with APP_SECRET_KEY):
     "exp": <unix>   (iat + 86400 by default)
   }
 
-The client (browser or MCP client) stores ONLY this token — no raw Supabase
+The client (browser or MCP client) stores ONLY this token - no raw Supabase
 secret or DB credentials ever leave the backend.
 """
 from __future__ import annotations
@@ -42,7 +42,7 @@ def _secret_key() -> str:
     key = os.environ.get("APP_SECRET_KEY", "")
     if not key:
         raise RuntimeError(
-            "APP_SECRET_KEY is not set — cannot sign session tokens."
+            "APP_SECRET_KEY is not set - cannot sign session tokens."
         )
     return key
 
@@ -104,8 +104,13 @@ async def exchange_supabase_token(
 
     auth_user_id: str = claims["sub"]
 
-    # 2. Look up membership
-    async with pool.acquire() as conn:
+    # 2. Look up membership - MUST use the admin pool, not the tenant-scoped
+    # one passed in. RLS requires app.current_tenant_id to already be set,
+    # but this lookup's entire job is determining what that tenant_id
+    # should be - a genuine chicken-and-egg case, not a security shortcut.
+    from database.pool import get_admin_db_pool
+
+    async with get_admin_db_pool().acquire() as conn:
         row = await conn.fetchrow(
             """
             SELECT m.tenant_id, m.role

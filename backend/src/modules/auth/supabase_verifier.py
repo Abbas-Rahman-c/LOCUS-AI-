@@ -1,8 +1,8 @@
-"""
+﻿"""
 Supabase JWT verifier.
 
 Fetches JWKS from the Supabase project's well-known endpoint and validates
-the incoming access_token using python-jose.  The JWKS response is cached for
+the incoming access_token using python-jose. The JWKS response is cached for
 the lifetime of the process (keys rotate rarely; an LRU is overkill for MVP).
 """
 from __future__ import annotations
@@ -11,8 +11,7 @@ import logging
 from functools import lru_cache
 
 import httpx
-from jose import JWTError, jwk, jwt
-from jose.utils import base64url_decode
+from jose import JWTError, jwt
 
 from common.config import get_supabase_settings
 
@@ -25,11 +24,7 @@ class SupabaseVerificationError(Exception):
 
 @lru_cache(maxsize=1)
 def _fetch_jwks_cached(jwks_url: str) -> list[dict]:
-    """Synchronously fetch the JWKS and cache the list of keys.
-
-    We use httpx in sync mode here because this is called once at startup
-    (or on first request) and caching removes repeated network calls.
-    """
+    """Synchronously fetch the JWKS and cache the list of keys."""
     try:
         response = httpx.get(jwks_url, timeout=10)
         response.raise_for_status()
@@ -40,8 +35,8 @@ def _fetch_jwks_cached(jwks_url: str) -> list[dict]:
         ) from exc
 
 
-def _get_signing_key(token: str) -> str:
-    """Return the RSA public key matching the JWT's kid header."""
+def _get_signing_key_data(token: str) -> dict:
+    """Return the raw JWK dict matching the JWT's kid header."""
     settings = get_supabase_settings()
     jwks_url = settings.get_jwks_url()
 
@@ -54,12 +49,14 @@ def _get_signing_key(token: str) -> str:
     keys = _fetch_jwks_cached(jwks_url)
 
     for key_data in keys:
-        if kid and key_data.get("kid") != kid:
-            continue
-        try:
-            return jwk.construct(key_data).public_key().export_key().decode("utf-8")
-        except Exception:
-            continue
+        if kid and key_data.get("kid") == kid:
+            return key_data
+
+    _fetch_jwks_cached.cache_clear()
+    keys = _fetch_jwks_cached(jwks_url)
+    for key_data in keys:
+        if kid and key_data.get("kid") == kid:
+            return key_data
 
     raise SupabaseVerificationError(
         f"No matching key found in JWKS for kid={kid!r}"
@@ -67,18 +64,23 @@ def _get_signing_key(token: str) -> str:
 
 
 def verify_supabase_token(token: str) -> dict:
-    """Verify a Supabase access_token and return its decoded claims.
+    """Verify a Supabase access_token and return its decoded claims."""
+    try:
+        header = jwt.get_unverified_header(token)
+    except JWTError as exc:
+        raise SupabaseVerificationError(f"Cannot parse JWT header: {exc}") from exc
 
-    Raises SupabaseVerificationError on any failure (expired, bad sig, etc.).
-    """
-    signing_key = _get_signing_key(token)
-    settings = get_supabase_settings()
+    alg = header.get("alg")
+    if alg not in ("RS256", "ES256", "HS256"):
+        raise SupabaseVerificationError(f"Unsupported JWT algorithm: {alg!r}")
+
+    signing_key_data = _get_signing_key_data(token)
 
     try:
         payload = jwt.decode(
             token,
-            signing_key,
-            algorithms=["RS256"],
+            signing_key_data,
+            algorithms=[alg],
             audience="authenticated",
             options={"verify_aud": True},
         )
