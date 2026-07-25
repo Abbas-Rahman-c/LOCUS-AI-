@@ -12,36 +12,56 @@
 // call it via RPC here, store the returned secret id instead.
 
 import { withTenant } from "../_shared/db.ts";
+import {
+  authorizeErrorResponse,
+  parseTenantState,
+  popupCallbackResponse,
+  resolveTenantFromAuthorize,
+} from "../_shared/oauth_tenant.ts";
 
 const CLIENT_ID = Deno.env.get("SLACK_CLIENT_ID");
 const CLIENT_SECRET = Deno.env.get("SLACK_CLIENT_SECRET");
 const REDIRECT_URI = Deno.env.get("SLACK_REDIRECT_URI");
 
-// TODO (Rebira): replace with real tenant resolution once Phase 4 Auth
-// exists. For now, testing against Lam's real tenant row (auto-created
-// by the auth trigger in migration 005) since it's the only one that
-// currently exists in public.tenants.
-const TEST_TENANT_ID = "13bcd0fa-1ed9-4634-93c7-278ba97ec658";
+const SOURCE = "slack" as const;
 
 Deno.serve(async (req: Request) => {
   const url = new URL(req.url);
 
   if (url.pathname.endsWith("/authorize")) {
-    const slackAuthUrl = new URL("https://slack.com/oauth/v2/authorize");
-    slackAuthUrl.searchParams.set("client_id", CLIENT_ID ?? "");
-    slackAuthUrl.searchParams.set(
-      "scope",
-      "channels:history,groups:history,im:history,mpim:history,chat:write"
-    );
-    slackAuthUrl.searchParams.set("redirect_uri", REDIRECT_URI ?? "");
+    try {
+      const tenantId = await resolveTenantFromAuthorize(url);
 
-    return Response.redirect(slackAuthUrl.toString(), 302);
+      const slackAuthUrl = new URL("https://slack.com/oauth/v2/authorize");
+      slackAuthUrl.searchParams.set("client_id", CLIENT_ID ?? "");
+      slackAuthUrl.searchParams.set(
+        "scope",
+        "channels:history,groups:history,im:history,mpim:history,chat:write",
+      );
+      slackAuthUrl.searchParams.set("redirect_uri", REDIRECT_URI ?? "");
+      slackAuthUrl.searchParams.set("state", tenantId);
+
+      return Response.redirect(slackAuthUrl.toString(), 302);
+    } catch (err) {
+      return authorizeErrorResponse(SOURCE, err);
+    }
   }
 
   if (url.pathname.endsWith("/callback")) {
+    let tenantId: string;
+    try {
+      tenantId = parseTenantState(url.searchParams.get("state"));
+    } catch (err) {
+      return authorizeErrorResponse(SOURCE, err);
+    }
+
     const code = url.searchParams.get("code");
     if (!code) {
-      return new Response("Missing authorization code", { status: 400 });
+      return popupCallbackResponse(SOURCE, {
+        success: false,
+        error: "Missing authorization code",
+        status: 400,
+      });
     }
 
     const tokenResponse = await fetch("https://slack.com/api/oauth.v2.access", {
@@ -58,20 +78,21 @@ Deno.serve(async (req: Request) => {
     const tokenData = await tokenResponse.json();
 
     if (!tokenData.ok) {
-      return new Response(
-        `Slack OAuth failed: ${tokenData.error ?? "unknown error"}`,
-        { status: 400 }
-      );
+      return popupCallbackResponse(SOURCE, {
+        success: false,
+        error: `Slack OAuth failed: ${tokenData.error ?? "unknown error"}`,
+        status: 400,
+      });
     }
 
     try {
-      await withTenant(TEST_TENANT_ID, async (sql) => {
+      await withTenant(tenantId, async (sql) => {
         await sql`
           insert into public.source_connections (
             tenant_id, source, external_workspace_id, oauth_token_ref,
             ingestion_mode, status, cursor_state
           ) values (
-            ${TEST_TENANT_ID}::uuid,
+            ${tenantId}::uuid,
             'slack',
             ${tokenData.team?.id ?? null},
             ${tokenData.access_token},
@@ -89,14 +110,14 @@ Deno.serve(async (req: Request) => {
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      return new Response(`Failed to store token: ${message}`, {
+      return popupCallbackResponse(SOURCE, {
+        success: false,
+        error: `Failed to store token: ${message}`,
         status: 500,
       });
     }
 
-    return new Response("Slack workspace connected successfully.", {
-      status: 200,
-    });
+    return popupCallbackResponse(SOURCE, { success: true });
   }
 
   return new Response("Not found", { status: 404 });

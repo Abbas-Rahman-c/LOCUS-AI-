@@ -1,4 +1,10 @@
 import { withTenant } from "../_shared/db.ts";
+import {
+  authorizeErrorResponse,
+  parseTenantState,
+  popupCallbackResponse,
+  resolveTenantFromAuthorize,
+} from "../_shared/oauth_tenant.ts";
 
 console.log("Gmail OAuth handler started!");
 
@@ -6,36 +12,54 @@ const CLIENT_ID = Deno.env.get("GMAIL_CLIENT_ID");
 const CLIENT_SECRET = Deno.env.get("GMAIL_CLIENT_SECRET");
 const REDIRECT_URI = Deno.env.get("GMAIL_REDIRECT_URI");
 
-// TODO: replace with real tenant resolution once Phase 4 Auth exists.
-// Same test tenant used for Slack/Notion tonight, for consistency.
-const TEST_TENANT_ID = "13bcd0fa-1ed9-4634-93c7-278ba97ec658";
+const SOURCE = "gmail" as const;
 
 Deno.serve(async (req: Request) => {
   const url = new URL(req.url);
 
   // GET /authorize: redirect to Google's consent screen
   if (url.pathname.endsWith("/authorize")) {
-    const scopes = [
-      "https://www.googleapis.com/auth/gmail.readonly",
-      "https://www.googleapis.com/auth/userinfo.email",
-      "openid",
-    ];
-    const googleAuthUrl = new URL("https://accounts.google.com/o/oauth2/v2/auth");
-    googleAuthUrl.searchParams.set("client_id", CLIENT_ID ?? "");
-    googleAuthUrl.searchParams.set("redirect_uri", REDIRECT_URI ?? "");
-    googleAuthUrl.searchParams.set("response_type", "code");
-    googleAuthUrl.searchParams.set("scope", scopes.join(" "));
-    googleAuthUrl.searchParams.set("access_type", "offline");
-    googleAuthUrl.searchParams.set("prompt", "consent");
+    try {
+      const tenantId = await resolveTenantFromAuthorize(url);
 
-    return Response.redirect(googleAuthUrl.toString(), 302);
+      const scopes = [
+        "https://www.googleapis.com/auth/gmail.readonly",
+        "https://www.googleapis.com/auth/userinfo.email",
+        "openid",
+      ];
+      const googleAuthUrl = new URL(
+        "https://accounts.google.com/o/oauth2/v2/auth",
+      );
+      googleAuthUrl.searchParams.set("client_id", CLIENT_ID ?? "");
+      googleAuthUrl.searchParams.set("redirect_uri", REDIRECT_URI ?? "");
+      googleAuthUrl.searchParams.set("response_type", "code");
+      googleAuthUrl.searchParams.set("scope", scopes.join(" "));
+      googleAuthUrl.searchParams.set("access_type", "offline");
+      googleAuthUrl.searchParams.set("prompt", "consent");
+      googleAuthUrl.searchParams.set("state", tenantId);
+
+      return Response.redirect(googleAuthUrl.toString(), 302);
+    } catch (err) {
+      return authorizeErrorResponse(SOURCE, err);
+    }
   }
 
   // GET /callback: handle Google's redirect back
   if (url.pathname.endsWith("/callback")) {
+    let tenantId: string;
+    try {
+      tenantId = parseTenantState(url.searchParams.get("state"));
+    } catch (err) {
+      return authorizeErrorResponse(SOURCE, err);
+    }
+
     const code = url.searchParams.get("code");
     if (!code) {
-      return new Response("Missing authorization code", { status: 400 });
+      return popupCallbackResponse(SOURCE, {
+        success: false,
+        error: "Missing authorization code",
+        status: 400,
+      });
     }
 
     try {
@@ -54,33 +78,38 @@ Deno.serve(async (req: Request) => {
 
       const tokenData = await tokenResponse.json();
       if (!tokenResponse.ok) {
-        return new Response(
-          `Gmail OAuth failed: ${tokenData.error ?? "unknown error"}`,
-          { status: 400 }
-        );
+        return popupCallbackResponse(SOURCE, {
+          success: false,
+          error: `Gmail OAuth failed: ${tokenData.error ?? "unknown error"}`,
+          status: 400,
+        });
       }
 
       // 2. Get the user's email address
       const userInfoResponse = await fetch(
         "https://www.googleapis.com/oauth2/v2/userinfo",
-        { headers: { Authorization: `Bearer ${tokenData.access_token}` } }
+        { headers: { Authorization: `Bearer ${tokenData.access_token}` } },
       );
       const userInfo = await userInfoResponse.json();
       const email = userInfo.email;
       if (!email) {
-        return new Response("Email address not returned by Google", { status: 400 });
+        return popupCallbackResponse(SOURCE, {
+          success: false,
+          error: "Email address not returned by Google",
+          status: 400,
+        });
       }
 
       // 3. Store the connection under tenant GUC (locus_app / APP_DATABASE_URL).
       // Token stored as plain text for now to unblock testing.
       try {
-        await withTenant(TEST_TENANT_ID, async (sql) => {
+        await withTenant(tenantId, async (sql) => {
           await sql`
             insert into public.source_connections (
               tenant_id, source, external_workspace_id, oauth_token_ref,
               ingestion_mode, status, cursor_state
             ) values (
-              ${TEST_TENANT_ID}::uuid,
+              ${tenantId}::uuid,
               'gmail',
               ${email},
               ${tokenData.access_token},
@@ -101,15 +130,21 @@ Deno.serve(async (req: Request) => {
         });
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
-        return new Response(`Failed to store token: ${message}`, {
+        return popupCallbackResponse(SOURCE, {
+          success: false,
+          error: `Failed to store token: ${message}`,
           status: 500,
         });
       }
 
-      return new Response("Gmail inbox connected successfully.", { status: 200 });
+      return popupCallbackResponse(SOURCE, { success: true });
     } catch (error) {
       console.error("OAuth error:", error);
-      return new Response("Internal Server Error", { status: 500 });
+      return popupCallbackResponse(SOURCE, {
+        success: false,
+        error: "Internal Server Error",
+        status: 500,
+      });
     }
   }
 
