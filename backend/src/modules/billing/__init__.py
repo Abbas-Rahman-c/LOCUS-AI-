@@ -1,1 +1,1 @@
-# Billing module â Stripe
+# Billing module — Stripe Checkout & Webhook handlers
