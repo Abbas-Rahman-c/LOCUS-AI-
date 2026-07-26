@@ -58,6 +58,12 @@ class SearchMetadata(BaseModel):
     authorized_count: int
     decision_count: int
     token_estimate: int
+    # Additive fields (production RAG upgrade) - all optional-with-default
+    # so any existing consumer that only reads the fields above is
+    # unaffected.
+    question_type: str = "other"
+    is_multi_document: bool = False
+    reranked: bool = False
 
 
 class SearchResponse(BaseModel):
@@ -68,3 +74,10 @@ class SearchResponse(BaseModel):
     answer: str
     citations: list[SourceCitation]
     metadata: SearchMetadata
+    # Additive fields (production RAG upgrade): reasoning is Claude's own
+    # brief grounding explanation (see modules.answering.prompt_builder),
+    # confidence is Claude's self-reported confidence in the answer.
+    # Existing consumers reading only answer/citations/metadata are
+    # unaffected.
+    reasoning: str = ""
+    confidence: float = 0.0
