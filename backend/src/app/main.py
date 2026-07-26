@@ -9,6 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.lifespan import lifespan
 from modules.auth.router import router as auth_router
+from modules.billing.router import router as billing_router
 from modules.decisions.router import router as decisions_router
 from modules.digest.router import router as digest_router
 from modules.feedback.router import router as feedback_router
@@ -35,6 +36,9 @@ app.add_middleware(
 
 # Auth — no authentication required (this IS the auth endpoint)
 app.include_router(auth_router)
+
+# Billing — Stripe Checkout (requires JWT auth)
+app.include_router(billing_router)
 
 # Decisions — all routes require JWT auth (enforced inside the router)
 app.include_router(decisions_router)
