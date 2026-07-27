@@ -43,12 +43,16 @@ def _decision_block_lines(index: int, decision: AuthorizedDecisionInput) -> list
         "Confidence:",
         _format_confidence(decision.confidence),
     ]
-    if decision.created_at:
-        lines += ["", "Timestamp:", decision.created_at]
-    if decision.decision_type:
-        lines += ["", "Decision Type:", decision.decision_type]
     if decision.owner:
         lines += ["", "Owner:", decision.owner]
+    if decision.created_at:
+        lines += ["", "Date:", decision.created_at]
+    if decision.source:
+        lines += ["", "Source:", decision.source]
+    if decision.decision_type:
+        lines += ["", "Decision Type:", decision.decision_type]
+    if decision.impact:
+        lines += ["", "Impact:", decision.impact]
     lines += ["", DIVIDER]
     return lines
 

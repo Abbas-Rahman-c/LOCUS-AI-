@@ -25,6 +25,11 @@ class AuthorizedDecisionInput(BaseModel):
     created_at: str | None = None
     decision_type: str | None = None
     owner: str | None = None
+    source: str | None = None
+    # No impact/severity column exists in public.decisions today - this
+    # field exists so the formatter can render it the moment a real value
+    # is ever available, without inventing one now. Always None currently.
+    impact: str | None = None
 
 
 class ContextResult(BaseModel):

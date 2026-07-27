@@ -104,9 +104,12 @@ async def search_similar_decisions(
                       AND da.tenant_id = d.tenant_id
                       AND da.role = 'decided_by'
                     LIMIT 1
-                ) AS owner
+                ) AS owner,
+                r.source AS source
             FROM public.decision_embeddings de
             JOIN public.decisions d ON d.id = de.decision_id AND d.tenant_id = de.tenant_id
+            LEFT JOIN public.raw_events r
+              ON r.id = d.origin_raw_event_id AND r.tenant_id = d.tenant_id
             WHERE d.tenant_id = $2
             ORDER BY de.embedding <=> $1::vector ASC
             LIMIT $3
@@ -132,6 +135,7 @@ async def search_similar_decisions(
                 created_at=row["created_at"],
                 decision_type=row["decision_type"],
                 owner=row["owner"],
+                source=row["source"],
             )
         )
     return matches

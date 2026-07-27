@@ -1,10 +1,11 @@
 """
 Locus AI — Production Search API (Phase 2).
 
-POST /search: authenticated tenant-scoped vector retrieval -> permission
-filter -> context builder -> Claude answer -> answer + source citations.
-Single-turn only: no conversation memory, no streaming, no agents, no
-hybrid search, no reranking.
+POST /search: authenticated tenant-scoped query understanding -> retrieval
+(candidate_k=20, RETRIEVAL_MODE-dependent) -> permission filter ->
+cross-encoder rerank to top_k -> structured context builder -> Claude
+answer (forced tool call) -> answer + reasoning + source citations.
+Single-turn only: no conversation memory, no streaming, no agents.
 
 Uses the same mandatory Depends(get_current_tenant) every other protected
 route uses (decisions/router.py, retrieval/router.py) - never a
@@ -21,7 +22,11 @@ from app.dependencies import TenantContext, get_current_tenant
 from common.config.voyage_config import VoyageConfigError
 from database.pool import get_db_pool
 from modules.ai.embeddings.provider import VoyageEmbeddingError, VoyageResponseValidationError
-from modules.answering.provider import AnswerAPIError, AnswerResponseValidationError
+from modules.answering.provider import (
+    AnswerAPIError,
+    AnswerResponseValidationError,
+    AnswerToolCallError,
+)
 from modules.permissions.scope_resolver import resolve_permission_scopes
 from modules.ratelimit.limiter import enforce_rate_limit
 from modules.search.schemas import SearchRequest, SearchResponse
@@ -62,7 +67,7 @@ async def search_endpoint(
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY, detail="Query embedding failed"
         ) from exc
-    except (AnswerAPIError, AnswerResponseValidationError) as exc:
+    except (AnswerAPIError, AnswerToolCallError, AnswerResponseValidationError) as exc:
         log.error("Claude answer failure during /search: %s", exc)
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY, detail="Answer generation failed"
