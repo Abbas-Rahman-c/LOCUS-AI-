@@ -1,4 +1,4 @@
-﻿"""
+"""
 Application lifespan context manager.
 Handles startup (DB pools, queue connections) and shutdown teardown.
 """
@@ -58,8 +58,13 @@ async def lifespan(app: FastAPI):
     try:
         yield
     finally:
+        from modules.ai.embeddings.provider import close_voyage_session
+
+        log.info("Closing Voyage HTTP session...")
+        await close_voyage_session()
         if pool is not None:
             log.info("Closing asyncpg pools...")
             await pool.close()
         if admin_pool is not None:
             await admin_pool.close()
+
