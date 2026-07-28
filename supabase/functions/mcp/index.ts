@@ -305,6 +305,60 @@ async function toolGetDecisionContext(
   };
 }
 
+// ── Audit logging ──────────────────────────────────────────────────────────────
+//
+// mcp_tool_calls exists in the schema but nothing was ever writing to it —
+// every MCP tool invocation was going completely unaudited. Logging failures
+// must never break the actual tool response (same "never let secondary
+// bookkeeping break the primary flow" pattern as modules/feedback/service.py
+// on the Python side) — errors are caught and logged, not surfaced to the
+// caller or retried.
+
+interface McpToolCallLog {
+  tenantId: string;
+  requestingClient: string;
+  toolName: string;
+  requestParams: Record<string, unknown>;
+  resultDecisionIds: string[] | null;
+  latencyMs: number;
+}
+
+function extractResultDecisionIds(
+  toolName: string,
+  result: Record<string, unknown>,
+): string[] | null {
+  if (toolName === "search_decisions") {
+    const decisions = result.decisions as Array<{ id: string }> | undefined;
+    return decisions ? decisions.map((d) => d.id) : [];
+  }
+  if (toolName === "get_decision_context") {
+    const decision = result.decision as { id: string } | undefined;
+    return decision ? [decision.id] : [];
+  }
+  return null;
+}
+
+async function logMcpToolCall(
+  supabase: SupabaseClient,
+  entry: McpToolCallLog,
+): Promise<void> {
+  try {
+    const { error } = await supabase.from("mcp_tool_calls").insert({
+      tenant_id: entry.tenantId,
+      requesting_client: entry.requestingClient,
+      tool_name: entry.toolName,
+      request_params: entry.requestParams,
+      result_decision_ids: entry.resultDecisionIds,
+      latency_ms: Math.round(entry.latencyMs),
+    });
+    if (error) {
+      console.error("Failed to log mcp_tool_calls row:", error);
+    }
+  } catch (err) {
+    console.error("Failed to log mcp_tool_calls row:", (err as Error).message);
+  }
+}
+
 // ── Main handler ───────────────────────────────────────────────────────────────
 
 Deno.serve(async (req: Request) => {
@@ -379,6 +433,7 @@ Deno.serve(async (req: Request) => {
   // ── Tool dispatch ─────────────────────────────────────────────────────────
   const toolName = String(params.name ?? "");
   const toolArgs = (params.arguments ?? {}) as Record<string, unknown>;
+  const requestingClient = req.headers.get("User-Agent") ?? "unknown";
 
   // Service-role client: bypasses RLS. Tenant isolation is enforced by
   // explicit tenant_id WHERE clauses on every query (Layer-2).
@@ -396,7 +451,16 @@ Deno.serve(async (req: Request) => {
       return toolError(rpcId, `Unknown tool: ${toolName}`);
     }
   } catch (err) {
+    const elapsedMs = Date.now() - t0;
     console.error(`MCP tool ${toolName} failed:`, (err as Error).message);
+    await logMcpToolCall(supabase, {
+      tenantId: ctx.tenantId,
+      requestingClient,
+      toolName,
+      requestParams: toolArgs,
+      resultDecisionIds: null,
+      latencyMs: elapsedMs,
+    });
     return toolError(rpcId, "Internal error");
   }
 
@@ -404,6 +468,15 @@ Deno.serve(async (req: Request) => {
   console.log(
     `MCP tool=${toolName} tenant=${ctx.tenantId} latency=${elapsedMs}ms`,
   );
+
+  await logMcpToolCall(supabase, {
+    tenantId: ctx.tenantId,
+    requestingClient,
+    toolName,
+    requestParams: toolArgs,
+    resultDecisionIds: extractResultDecisionIds(toolName, result),
+    latencyMs: elapsedMs,
+  });
 
   return jsonrpcOk(rpcId, {
     content: [{ type: "text", text: JSON.stringify(result) }],
