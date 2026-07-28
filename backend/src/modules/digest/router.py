@@ -56,6 +56,7 @@ async def get_digest(
             ctx.tenant_id,
             permission_scopes,
             scope,
+            user_id=ctx.user_id,
         )
     except VoyageConfigError as exc:
         log.error("Voyage configuration error during /digest: %s", exc)
