@@ -19,7 +19,9 @@ from typing import Any
 import httpx
 
 from common.config import get_gmail_settings
-from database.tenant_context import admin_connection, tenant_connection
+from database.pool import get_db_pool
+from database.tenant_connection import tenant_conn
+from database.tenant_context import admin_connection
 from modules.integrations.gmail.service import _get_valid_access_token
 
 log = logging.getLogger(__name__)
@@ -63,7 +65,8 @@ async def _renew_single_watch(source: dict) -> None:
     tenant_id = source["tenant_id"]
     settings = get_gmail_settings()
 
-    async with tenant_connection(tenant_id) as conn:
+    pool = get_db_pool()
+    async with tenant_conn(pool, tenant_id) as conn:
         access_token = await _get_valid_access_token(source_id, conn)
 
         async with httpx.AsyncClient() as client:

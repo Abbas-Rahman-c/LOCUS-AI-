@@ -114,12 +114,13 @@ async def test_handle_callback_success():
     mock_conn.transaction.return_value.__aexit__ = AsyncMock(return_value=False)
 
     with patch(
-        "modules.integrations.gmail.service.tenant_connection",
+        "modules.integrations.gmail.service.tenant_conn",
         return_value=MagicMock(
             __aenter__=AsyncMock(return_value=mock_conn),
             __aexit__=AsyncMock(return_value=False),
         ),
     ), \
+         patch("modules.integrations.gmail.service.get_db_pool"), \
          patch("modules.integrations.gmail.service.setup_watch", new_callable=AsyncMock) as mock_setup_watch, \
          patch("httpx.AsyncClient", return_value=mock_http_client), \
          patch.dict("os.environ", {"APP_SECRET_KEY": "test-secret-key-for-unit-tests"}):

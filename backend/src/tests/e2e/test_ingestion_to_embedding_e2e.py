@@ -219,7 +219,8 @@ class TestFullIngestionToEmbeddingChain:
 
         mock_client = _mock_anthropic_client()
         with (
-            patch("database.tenant_context.get_db_pool", return_value=pool),
+            patch("modules.ingestion.dedup.ledger.get_db_pool", return_value=pool),
+            patch("modules.ingestion.raw_events.store.get_db_pool", return_value=pool),
             patch("modules.ai.triage.classifier.get_anthropic_client", return_value=mock_client),
             patch("modules.ai.extraction.extractor.get_anthropic_client", return_value=mock_client),
             patch("queues.pgmq.producer.get_pgmq_client", return_value=pgmq_client),
@@ -290,7 +291,8 @@ class TestDiscardNeverCreatesADecisionOrEmbeddingJob:
         pgmq_client.send = AsyncMock()
 
         with (
-            patch("database.tenant_context.get_db_pool", return_value=pool),
+            patch("modules.ingestion.dedup.ledger.get_db_pool", return_value=pool),
+            patch("modules.ingestion.raw_events.store.get_db_pool", return_value=pool),
             patch(
                 "modules.ai.triage.classifier.get_anthropic_client",
                 return_value=_mock_discard_anthropic_client(),
@@ -323,7 +325,8 @@ class TestDuplicateEventNeverReachesTheAIPipeline:
         pgmq_client.send = AsyncMock()
 
         with (
-            patch("database.tenant_context.get_db_pool", return_value=pool),
+            patch("modules.ingestion.dedup.ledger.get_db_pool", return_value=pool),
+            patch("modules.ingestion.raw_events.store.get_db_pool", return_value=pool),
             patch("modules.ai.triage.classifier.get_anthropic_client") as triage_client_patch,
             patch("modules.ai.extraction.extractor.get_anthropic_client") as extract_client_patch,
         ):
