@@ -1,5 +1,6 @@
 from modules.feedback.schemas import FeedbackRequest
-from database.tenant_context import tenant_connection
+from database.tenant_connection import tenant_conn
+from database.pool import get_db_pool
 import logging
 
 logger = logging.getLogger(__name__)
@@ -23,7 +24,8 @@ async def store_feedback(tenant_id: str, request: FeedbackRequest):
         VALUES ($1, $2, $3, $4, $5)
     """
     try:
-        async with tenant_connection(tenant_id) as conn:
+        pool = get_db_pool()
+        async with tenant_conn(pool, tenant_id) as conn:
             await conn.execute(
                 query,
                 tenant_id,
