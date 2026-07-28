@@ -40,12 +40,27 @@ class DatabaseConfig:
 
 def get_admin_database_config() -> DatabaseConfig:
     """postgres / bypass role — migrations, admin scripts, cross-tenant jobs."""
-    return DatabaseConfig(url=os.environ.get("DATABASE_URL", ""))
+    return DatabaseConfig(
+        url=os.environ.get("DATABASE_URL", ""),
+        min_size=int(os.environ.get("DATABASE_POOL_MIN_SIZE", "1")),
+        max_size=int(os.environ.get("DATABASE_POOL_MAX_SIZE", "5")),
+    )
 
 
 def get_app_database_config() -> DatabaseConfig:
-    """Non-bypass locus_app role — workers and API (subject to row-level security)."""
-    return DatabaseConfig(url=os.environ.get("APP_DATABASE_URL", ""))
+    """
+    Non-bypass locus_app role — workers and API (subject to row-level security).
+
+    Sized independently from the admin pool: the pooler's "Pool size" limit
+    is per user+db combination, so postgres and locus_app each get their own
+    ceiling — this is the pool that takes real request concurrency, so it's
+    sized much larger than the admin pool (login/session lookups only).
+    """
+    return DatabaseConfig(
+        url=os.environ.get("APP_DATABASE_URL", ""),
+        min_size=int(os.environ.get("APP_DATABASE_POOL_MIN_SIZE", "1")),
+        max_size=int(os.environ.get("APP_DATABASE_POOL_MAX_SIZE", "5")),
+    )
 
 
 def get_database_config() -> DatabaseConfig:
