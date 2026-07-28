@@ -38,6 +38,20 @@ class DigestMetadata(BaseModel):
     latency_ms: float
     decision_count: int
     token_estimate: int
+    personalized: bool = Field(
+        default=True,
+        description=(
+            "For scope='personal': whether the caller's actor identity could "
+            "be resolved (actors.auth_user_id) and used to ask a genuinely "
+            "answerable 'decisions I was involved in' question. False means "
+            "no such linkage exists yet for this account, so the digest fell "
+            "back to the same broad team-wide question as scope='team' — "
+            "this keeps summary and items consistent instead of Claude "
+            "truthfully refusing an unanswerable first-person question. "
+            "Always True for scope='team' (the question never depends on "
+            "caller identity there)."
+        ),
+    )
 
 
 class DigestResponse(BaseModel):

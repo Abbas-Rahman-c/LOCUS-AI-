@@ -32,6 +32,7 @@ from typing import Literal
 
 import asyncpg
 
+from database.tenant_connection import tenant_conn
 from modules.context.service import build_context
 from modules.context.schemas import AuthorizedDecisionInput
 from modules.digest.schemas import DigestItem, DigestMetadata, DigestResponse
@@ -44,15 +45,46 @@ log = logging.getLogger(__name__)
 # Digest retrieves more decisions than a point query to cover the full week.
 _DIGEST_TOP_K = 25
 
-_PERSONAL_QUESTION = (
-    "Summarize the key decisions I was involved in or that affected my work "
-    "over the past 7 days. Group by theme if helpful."
-)
-
 _TEAM_QUESTION = (
     "What were the most important decisions made by the team this week? "
     "Summarize them clearly, grouped by theme if helpful."
 )
+
+
+def _personal_question(actor_name: str) -> str:
+    """A first-person question is only answerable if Claude can tell who 'I' is.
+
+    Names the caller explicitly (from actors.auth_user_id) instead of saying
+    "I" — Claude has no identity of its own to match "I" against context.
+    """
+    return (
+        f"Summarize the key decisions {actor_name} was involved in or that "
+        f"affected their work over the past 7 days. Group by theme if helpful."
+    )
+
+
+async def _resolve_caller_actor(
+    pool: asyncpg.Pool, tenant_id: uuid.UUID | str, user_id: uuid.UUID | str | None
+) -> str | None:
+    """Look up the actor record linked to this authenticated user, if any.
+
+    Returns a display name usable in a first-person digest question, or None
+    if no actors.auth_user_id linkage exists yet for this account (currently
+    true for every account — nothing in onboarding/ingestion populates this
+    column yet). Callers must treat None as "identity unknown", not "user
+    has no decisions".
+    """
+    if user_id is None:
+        return None
+    async with tenant_conn(pool, tenant_id) as conn:
+        row = await conn.fetchrow(
+            "SELECT display_name, email FROM actors WHERE tenant_id = $1 AND auth_user_id = $2",
+            tenant_id,
+            user_id,
+        )
+    if row is None:
+        return None
+    return row["display_name"] or row["email"]
 
 
 def _period_string() -> str:
@@ -67,6 +99,7 @@ async def generate_team_pulse(
     tenant_id: uuid.UUID | str,
     permission_scopes: list[str],
     scope: Literal["personal", "team"] = "team",
+    user_id: uuid.UUID | str | None = None,
 ) -> DigestResponse:
     """Generate the weekly Team Pulse or personal digest.
 
@@ -75,8 +108,27 @@ async def generate_team_pulse(
 
     tenant_id must already be authenticated (from TenantContext) — this
     function never validates it. That trust boundary is the router's job.
+
+    user_id (from TenantContext) is only used for scope="personal", to try
+    resolving a real actor identity to ask Claude an answerable first-person
+    question. If no linkage exists, falls back to the team-wide question so
+    summary and items stay consistent — see _resolve_caller_actor.
     """
-    question = _PERSONAL_QUESTION if scope == "personal" else _TEAM_QUESTION
+    personalized = True
+    if scope == "personal":
+        actor_name = await _resolve_caller_actor(pool, tenant_id, user_id)
+        if actor_name is not None:
+            question = _personal_question(actor_name)
+        else:
+            log.info(
+                "Digest scope=personal but no actors.auth_user_id linkage for "
+                "user_id=%s tenant_id=%s — falling back to team-wide question",
+                user_id, tenant_id,
+            )
+            question = _TEAM_QUESTION
+            personalized = False
+    else:
+        question = _TEAM_QUESTION
 
     # Step 1: vector retrieval (same as /search, just higher top_k)
     matches, _ = await vector_search(pool, tenant_id, question, _DIGEST_TOP_K)
@@ -132,5 +184,6 @@ async def generate_team_pulse(
             latency_ms=answer_result.latency_ms,
             decision_count=context_result.decision_count,
             token_estimate=context_result.token_estimate,
+            personalized=personalized,
         ),
     )
