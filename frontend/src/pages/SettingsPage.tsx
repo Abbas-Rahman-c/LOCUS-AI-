@@ -21,6 +21,13 @@ type ChannelRow = {
   app: SourceFilter
 }
 
+type SearchHistoryItem = {
+  id: string
+  query: string
+  result_count: number
+  searched_at: string
+}
+
 const SIDEBAR_ITEMS: { id: SettingsSection; label: string }[] = [
   { id: 'Account', label: 'Account' },
   { id: 'Connected Sources', label: 'Connected Sources' },
@@ -162,6 +169,26 @@ function RocketIcon() {
         d="M14.5 5.5c2.3-2.3 4.7-2.5 5.8-2.4.1 1.1-.1 3.5-2.4 5.8l-5.8 5.8-3.4-3.4 5.8-5.8zM8.8 8.5l-3.7.7-2 2 4.3.8M14.9 14l-.7 3.7-2 2-.8-4.3M7.5 15.7l-2.8 2.8M6.2 14.4l-3 1.2M8.8 17l-1.2 3"
         stroke="currentColor"
         strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  )
+}
+
+function DownloadIcon() {
+  return (
+    <svg
+      width="17"
+      height="17"
+      viewBox="0 0 24 24"
+      fill="none"
+      aria-hidden="true"
+    >
+      <path
+        d="M12 3v11M8 10l4 4 4-4M5 16v4h14v-4"
+        stroke="currentColor"
+        strokeWidth="1.8"
         strokeLinecap="round"
         strokeLinejoin="round"
       />
@@ -427,6 +454,264 @@ function BillingInformation({
             </tbody>
           </table>
         </div>
+      </section>
+    </div>
+  )
+}
+
+function formatSearchAge(searchedAt: string, now = Date.now()) {
+  const elapsedMs = Math.max(0, now - new Date(searchedAt).getTime())
+  const hours = Math.max(1, Math.floor(elapsedMs / 3_600_000))
+
+  if (elapsedMs < 86_400_000) {
+    return `${hours} ${hours === 1 ? 'hour' : 'hours'} ago`
+  }
+
+  const days = Math.floor(elapsedMs / 86_400_000)
+  if (days < 7) return `${days} ${days === 1 ? 'day' : 'days'} ago`
+
+  const weeks = Math.floor(days / 7)
+  if (days < 30) return `${weeks} ${weeks === 1 ? 'week' : 'weeks'} ago`
+
+  const months = Math.floor(days / 30)
+  if (days < 365) {
+    return `${months} ${months === 1 ? 'month' : 'months'} ago`
+  }
+
+  const years = Math.floor(days / 365)
+  return `${years} ${years === 1 ? 'year' : 'years'} ago`
+}
+
+function SearchSettings() {
+  const [items, setItems] = useState<SearchHistoryItem[]>([])
+  const [total, setTotal] = useState(0)
+  const [saveHistory, setSaveHistory] = useState(true)
+  const [isLoading, setIsLoading] = useState(true)
+  const [isUpdating, setIsUpdating] = useState(false)
+  const [isDownloading, setIsDownloading] = useState(false)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    let active = true
+
+    const loadHistory = async () => {
+      const supabase = getSupabaseClient()
+      const { data: sessionData } = await supabase.auth.getSession()
+      if (!sessionData.session) {
+        if (active) {
+          setError('Your session has expired. Please sign in again.')
+          setIsLoading(false)
+        }
+        return
+      }
+
+      const { data, error: historyError } = await supabase.functions.invoke(
+        'search-history',
+        { body: { action: 'list' } },
+      )
+
+      if (!active) return
+      if (historyError) {
+        setError(historyError.message)
+      } else {
+        setItems((data?.items ?? []) as SearchHistoryItem[])
+        setTotal(Number(data?.total ?? 0))
+        setSaveHistory(data?.saveHistory !== false)
+      }
+      setIsLoading(false)
+    }
+
+    void loadHistory()
+    return () => {
+      active = false
+    }
+  }, [])
+
+  const toggleHistory = async () => {
+    const nextValue = !saveHistory
+    setIsUpdating(true)
+    setError('')
+
+    const { error: toggleError } = await getSupabaseClient().functions.invoke(
+      'search-history',
+      { body: { action: 'toggle', enabled: nextValue } },
+    )
+
+    if (toggleError) {
+      setError(toggleError.message)
+    } else {
+      setSaveHistory(nextValue)
+    }
+    setIsUpdating(false)
+  }
+
+  const clearHistory = async () => {
+    setIsUpdating(true)
+    setError('')
+
+    const { error: clearError } = await getSupabaseClient().functions.invoke(
+      'search-history',
+      { body: { action: 'clear' } },
+    )
+
+    if (clearError) {
+      setError(clearError.message)
+    } else {
+      setItems([])
+      setTotal(0)
+    }
+    setIsUpdating(false)
+  }
+
+  const downloadHistory = async () => {
+    setIsDownloading(true)
+    setError('')
+
+    const { data, error: downloadError } =
+      await getSupabaseClient().functions.invoke('search-history', {
+        body: { action: 'download' },
+      })
+
+    if (downloadError || !data) {
+      setError(downloadError?.message ?? 'Unable to download search history.')
+      setIsDownloading(false)
+      return
+    }
+
+    const file = new Blob([JSON.stringify(data, null, 2)], {
+      type: 'application/json',
+    })
+    const url = URL.createObjectURL(file)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `locus-search-history-${new Date().toISOString().slice(0, 10)}.json`
+    link.click()
+    URL.revokeObjectURL(url)
+    setIsDownloading(false)
+  }
+
+  return (
+    <div className="w-full max-w-[780px]">
+      <h1 className="text-[28px] font-bold leading-tight text-[#17171D]">
+        Search
+      </h1>
+      <p className="mt-1 text-[15px] text-[#7B8393]">
+        Review and manage your search history.
+      </p>
+
+      <section className="mt-6 rounded-[12px] border border-[#E1E3E9] bg-white px-7 py-5">
+        <div className="flex items-start justify-between gap-6">
+          <div>
+            <h2 className="text-[15px] font-semibold text-[#24242A]">
+              Save search history
+            </h2>
+            <p className="mt-2 max-w-[610px] text-[14px] leading-5 text-[#7A8292]">
+              Store your searches so you can revisit and download your history.
+            </p>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-label="Save search history"
+            aria-checked={saveHistory}
+            disabled={isLoading || isUpdating}
+            onClick={() => void toggleHistory()}
+            className={`relative mt-0.5 h-7 w-12 shrink-0 rounded-full border transition-colors disabled:cursor-wait disabled:opacity-60 ${
+              saveHistory
+                ? 'border-[#4B3BD4] bg-[#4B3BD4]'
+                : 'border-[#8A93A3] bg-white'
+            }`}
+          >
+            <span
+              className={`absolute top-[3px] h-5 w-5 rounded-full transition-transform ${
+                saveHistory
+                  ? 'left-[3px] translate-x-5 bg-white'
+                  : 'left-[3px] translate-x-0 bg-[#7B8494]'
+              }`}
+            />
+          </button>
+        </div>
+      </section>
+
+      <section className="mt-6">
+        <h2 className="text-[13px] font-semibold tracking-[0.08em] text-[#777F8E] uppercase">
+          Recent Searches
+        </h2>
+
+        <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-[14px] text-[#7A8292]">
+            Showing{' '}
+            <span className="font-semibold text-[#4B3BD4]">
+              {Math.min(total, 20)}
+            </span>{' '}
+            Recent {total === 1 ? 'Query' : 'Queries'}
+          </p>
+          <div className="flex flex-wrap gap-3">
+            <button
+              type="button"
+              disabled={isLoading || isDownloading || total === 0}
+              onClick={() => void downloadHistory()}
+              className="flex h-10 items-center gap-2 rounded-[8px] border border-[#DEE1E8] bg-white px-5 text-[14px] font-semibold text-[#4B3BD4] hover:bg-[#F8F7FF] disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <DownloadIcon />
+              {isDownloading ? 'Downloading...' : 'Download Log'}
+            </button>
+            <button
+              type="button"
+              disabled={isLoading || isUpdating || total === 0}
+              onClick={() => void clearHistory()}
+              className="flex h-10 items-center gap-2 rounded-[8px] border border-[#DEE1E8] bg-white px-5 text-[14px] font-semibold text-[#B4232C] hover:bg-[#FFF7F7] disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <TrashIcon />
+              Clear All
+            </button>
+          </div>
+        </div>
+
+        <div className="mt-4 overflow-hidden rounded-[12px] border border-[#E1E3E9] bg-white">
+          <div className="grid grid-cols-[minmax(0,1fr)_130px] border-b border-[#E7E8ED] px-7 py-4 text-[14px] font-medium text-[#24242A]">
+            <span>Query</span>
+            <span>results</span>
+          </div>
+
+          {isLoading ? (
+            <div className="px-7 py-12 text-center text-[14px] text-[#7A8292]">
+              Loading search history...
+            </div>
+          ) : items.length === 0 ? (
+            <div className="px-7 py-12 text-center text-[14px] text-[#7A8292]">
+              No recent search history
+            </div>
+          ) : (
+            items.slice(0, 20).map((item) => (
+              <div
+                key={item.id}
+                className="grid grid-cols-[minmax(0,1fr)_130px] items-center border-b border-[#E7E8ED] px-7 py-4 last:border-b-0"
+              >
+                <div className="min-w-0 pr-5">
+                  <p className="truncate text-[14px] text-[#24242A]">
+                    {item.query}
+                  </p>
+                  <p className="mt-1 text-[12px] text-[#7A8292]">
+                    {formatSearchAge(item.searched_at)}
+                  </p>
+                </div>
+                <p className="text-[14px] text-[#7A8292]">
+                  <span className="font-semibold text-[#24242A]">
+                    {item.result_count}
+                  </span>{' '}
+                  {item.result_count === 1 ? 'result' : 'results'}
+                </p>
+              </div>
+            ))
+          )}
+        </div>
+
+        {error ? (
+          <p role="alert" className="mt-3 text-[13px] text-[#B4232C]">
+            {error}
+          </p>
+        ) : null}
       </section>
     </div>
   )
@@ -897,17 +1182,20 @@ export default function SettingsPage() {
     )
   }
 
+  const usesFullSettingsLayout =
+    activeSection === 'Account' || activeSection === 'Search'
+
   return (
     <div
       className={
-        activeSection === 'Account'
+        usesFullSettingsLayout
           ? 'flex min-h-[calc(100vh-56px)] flex-col md:flex-row'
           : 'mx-auto flex max-w-[1120px] gap-8 px-8 py-8'
       }
     >
         <aside
           className={
-            activeSection === 'Account'
+            usesFullSettingsLayout
               ? 'w-full shrink-0 border-b border-[#E6E7EC] bg-white px-6 py-8 md:w-[280px] md:border-r md:border-b-0 md:px-8'
               : 'w-[220px] shrink-0'
           }
@@ -939,7 +1227,7 @@ export default function SettingsPage() {
 
         <main
           className={
-            activeSection === 'Account'
+            usesFullSettingsLayout
               ? 'min-w-0 flex-1 px-5 py-8 sm:px-8 lg:px-10'
               : 'min-w-0 flex-1'
           }
@@ -948,6 +1236,8 @@ export default function SettingsPage() {
             <div className="w-full max-w-[1080px]">
               <AccountSettings />
             </div>
+          ) : activeSection === 'Search' ? (
+            <SearchSettings />
           ) : activeSection === 'Capture Controls' ? (
             <>
               <h1 className="text-[28px] font-bold tracking-[-0.02em] text-[#111827]">
