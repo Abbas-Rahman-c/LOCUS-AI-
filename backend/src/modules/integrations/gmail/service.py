@@ -11,7 +11,9 @@ from typing import Dict, Any
 from urllib.parse import urlencode
 import httpx
 
-from database.tenant_context import admin_connection, tenant_connection
+from database.pool import get_db_pool
+from database.tenant_connection import tenant_conn
+from database.tenant_context import admin_connection
 from common.config import get_gmail_settings
 from modules.security.encryption import encrypt_string, decrypt_string
 from modules.ingestion.envelope.normalizer import normalize_gmail_message
@@ -86,7 +88,8 @@ async def handle_callback(code: str, tenant_id: uuid.UUID) -> Dict[str, Any]:
             raise RuntimeError("Email address not returned by Google OAuth")
 
     # 3. Save workspace source & tokens inside transaction
-    async with tenant_connection(tenant_id) as conn:
+    pool = get_db_pool()
+    async with tenant_conn(pool, tenant_id) as conn:
         async with conn.transaction():
             # The Gmail address is the provider's external workspace identity.
             existing_source = await conn.fetchrow(
@@ -150,7 +153,8 @@ async def handle_callback(code: str, tenant_id: uuid.UUID) -> Dict[str, Any]:
         log.warning("Failed to setup Gmail watch (Google Pub/Sub): %s. Sync will fall back to manual sync.", e)
         # Even if watch fails, we return success so the user can test using manual sync!
         # Let's save a placeholder history_id in cursor_state if it wasn't set by watch
-        async with tenant_connection(tenant_id) as conn:
+        pool = get_db_pool()
+        async with tenant_conn(pool, tenant_id) as conn:
             source_row = await conn.fetchrow("SELECT cursor_state FROM source_connections WHERE id = $1", source_id)
             if source_row:
                 config = json.loads(source_row["cursor_state"])
@@ -168,7 +172,8 @@ async def setup_watch(source_id: uuid.UUID, tenant_id: uuid.UUID) -> Dict[str, A
     """Call Google watch() API and update source_connections with subscription metadata."""
     settings = get_gmail_settings()
 
-    async with tenant_connection(tenant_id) as conn:
+    pool = get_db_pool()
+    async with tenant_conn(pool, tenant_id) as conn:
         access_token = await _get_valid_access_token(source_id, conn)
 
         async with httpx.AsyncClient() as client:
@@ -255,7 +260,8 @@ async def process_pubsub_notification(payload: Dict[str, Any]) -> None:
     config = json.loads(source_row["cursor_state"])
     last_history_id = config.get("history_id")
 
-    async with tenant_connection(tenant_id) as conn:
+    pool = get_db_pool()
+    async with tenant_conn(pool, tenant_id) as conn:
         try:
             access_token = await _get_valid_access_token(source_id, conn)
         except Exception as e:
@@ -333,7 +339,8 @@ async def manual_sync(tenant_id: uuid.UUID, max_messages: int = 10) -> int:
     Returns the count of messages ingested.
     No Pub/Sub required — useful for local testing.
     """
-    async with tenant_connection(tenant_id) as conn:
+    pool = get_db_pool()
+    async with tenant_conn(pool, tenant_id) as conn:
         source_row = await conn.fetchrow(
             """
             SELECT id, cursor_state FROM source_connections
@@ -377,7 +384,8 @@ async def manual_sync(tenant_id: uuid.UUID, max_messages: int = 10) -> int:
             new_history_id = profile_resp.json().get("historyId")
             if new_history_id:
                 config["history_id"] = new_history_id
-                async with tenant_connection(tenant_id) as conn:
+                pool = get_db_pool()
+                async with tenant_conn(pool, tenant_id) as conn:
                     await conn.execute(
                         "UPDATE source_connections SET cursor_state = $1::jsonb WHERE id = $2",
                         json.dumps(config), source_id

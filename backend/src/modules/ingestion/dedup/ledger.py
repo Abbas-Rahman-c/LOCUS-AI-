@@ -10,7 +10,8 @@ from __future__ import annotations
 import logging
 import uuid
 
-from database.tenant_context import tenant_connection
+from database.pool import get_db_pool
+from database.tenant_connection import tenant_conn
 from modules.ingestion.raw_events.store import store_raw_event
 
 log = logging.getLogger(__name__)
@@ -33,7 +34,8 @@ async def is_duplicate(payload: dict) -> bool:
     source = _require_str(payload, "source")
     source_id = _require_str(payload, "source_id")
 
-    async with tenant_connection(tenant_id) as conn:
+    pool = get_db_pool()
+    async with tenant_conn(pool, tenant_id) as conn:
         exists = await conn.fetchval(
             """
             select exists(
