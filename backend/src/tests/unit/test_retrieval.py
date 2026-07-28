@@ -14,8 +14,11 @@ from fastapi.testclient import TestClient
 
 from app.dependencies import TenantContext
 from database.pool import init_db_pool
+from modules.answering.schemas import AnswerResult
+from modules.query_understanding.schemas import NULL_QUERY_ANALYSIS
 from modules.retrieval import service
 from modules.retrieval.router import router as retrieval_router
+from modules.retrieval.vector.schemas import RetrievalMatch
 from modules.security.encryption import encrypt_raw_content
 from modules.security.tenant_guard import TenantScopeError
 
@@ -280,31 +283,42 @@ async def test_synthesis_generic_sanitized_error(monkeypatch):
 # ── Router API Tests ───────────────────────────────────────────────────────────
 
 def test_router_ask_jwt_success():
-    """POST /ask returns stream when auth JWT is valid."""
+    """POST /ask returns stream when auth JWT is valid, delegating to the
+    same modules.search.service.search() pipeline /search uses (query
+    understanding -> hybrid retrieval -> RRF -> permission filtering ->
+    cross-encoder reranking -> structured context -> Claude answer), not
+    the old standalone FTS-only retrieve_decisions()."""
     tenant_id = uuid.uuid4()
-    
-    # Issue valid JWT token
+
     from modules.auth.service import issue_tenant_jwt
+    from modules.search.schemas import SearchMetadata, SearchResponse
     token = issue_tenant_jwt(user_id="user-123", tenant_id=str(tenant_id), role="member")
 
     mock_db_pool = MagicMock()
-    
+    fake_result = SearchResponse(
+        answer="Scaling is handled via read replicas (Decision 1).",
+        citations=[],
+        reasoning="Decision 1 directly addresses scaling.",
+        confidence=0.9,
+        metadata=SearchMetadata(
+            model="claude-haiku-4-5-20251001", latency_ms=12.0,
+            retrieved_count=1, authorized_count=1, decision_count=1, token_estimate=42,
+            question_type="how", is_multi_document=False, reranked=True,
+        ),
+    )
+
     with patch("modules.retrieval.router.get_db_pool", return_value=mock_db_pool), \
-         patch("modules.retrieval.service.retrieve_decisions", return_value=[]) as mock_retrieve:
-        
+         patch("modules.retrieval.router.run_search_pipeline", return_value=fake_result) as mock_search:
+
         headers = {"Authorization": f"Bearer {token}"}
         payload = {"query": "How is scaling handled?"}
-        
+
         response = client.post("/api/v1/retrieval/ask", json=payload, headers=headers)
-        
+
         assert response.status_code == 200
-        mock_retrieve.assert_called_once_with(
-            query="How is scaling handled?",
-            tenant_id=str(tenant_id),
-            filters=None,
-            limit=10,
-            offset=0,
-            pool=mock_db_pool,
+        assert "Scaling is handled via read replicas" in response.text
+        mock_search.assert_called_once_with(
+            mock_db_pool, str(tenant_id), "How is scaling handled?", [], 10,
         )
 
 
@@ -343,3 +357,88 @@ def test_router_ask_invalid_jwt_is_rejected():
     response = client.post("/api/v1/retrieval/ask", json=payload, headers=headers)
 
     assert response.status_code == 401
+
+
+# ── Security regression: /ask must pass server-resolved permission_scopes ──────
+# into the shared search pipeline, and unauthorized decisions must never reach
+# Claude's context (and therefore can never appear in the response) through /ask.
+#
+# Only the two boundary calls modules.search.service.search() itself doesn't
+# own are mocked (retrieval, reranking, and answer generation) - exactly the
+# same technique test_search_service.py uses for the /search endpoint.
+# modules.permissions.service.filter_accessible_decisions() and
+# modules.context.service.build_context() run for REAL, so this proves the
+# actual reused permission-filtering code path, not a re-implementation of it.
+
+def _retrieval_match(**overrides) -> RetrievalMatch:
+    fields = {
+        "decision_id": uuid.uuid4(),
+        "decision_statement": "placeholder",
+        "similarity_score": 0.9,
+        "confidence": 0.9,
+        "tenant_id": uuid.uuid4(),
+        "permission_scope": [],
+        "rationale": None,
+        "alternatives_considered": [],
+        "created_at": datetime.now(timezone.utc),
+        "decision_type": "decision",
+        "owner": None,
+    }
+    fields.update(overrides)
+    return RetrievalMatch(**fields)
+
+
+def test_ask_passes_resolved_permission_scopes_and_blocks_unauthorized_decisions():
+    """Regression test for the /ask permission-filtering gap found in code
+    review: the old FTS-only path never called filter_accessible_decisions()
+    at all. This proves two things at once, through the real router:
+
+    1. The permission_scopes actually threaded into the shared pipeline are
+       whatever modules.permissions.scope_resolver.resolve_permission_scopes()
+       (server-derived, never client-supplied) returns - not [], not a
+       hardcoded value, not something silently dropped along the way. If the
+       router regressed to passing [] instead, the "authorized" decision below
+       (which itself requires ["team:billing"]) would ALSO get excluded, and
+       this test would fail differently (empty context) - not silently pass.
+    2. A decision whose permission_scope does not overlap the resolved scopes
+       never reaches the context Claude actually answers from - i.e. it can
+       never appear in an /ask response, cited or otherwise.
+    """
+    tenant_id = uuid.uuid4()
+
+    from modules.auth.service import issue_tenant_jwt
+    token = issue_tenant_jwt(user_id="sec-test", tenant_id=str(tenant_id), role="member")
+
+    authorized = _retrieval_match(
+        decision_statement="AUTHORIZED_DECISION_TEXT", permission_scope=["team:billing"],
+    )
+    unauthorized = _retrieval_match(
+        decision_statement="UNAUTHORIZED_DECISION_TEXT", permission_scope=["team:finance-only"],
+    )
+
+    answer_result = AnswerResult(
+        answer="Per Decision 1.", reasoning="test", citations=[1],
+        confidence=0.9, sufficient_evidence=True, model="m", latency_ms=1.0,
+    )
+    answer_mock = AsyncMock(return_value=answer_result)
+    mock_db_pool = MagicMock()
+
+    with patch("modules.retrieval.router.get_db_pool", return_value=mock_db_pool), \
+         patch("modules.retrieval.router.resolve_permission_scopes", return_value=["team:billing"]) as mock_resolve, \
+         patch("modules.search.service.analyze_query", AsyncMock(return_value=NULL_QUERY_ANALYSIS)), \
+         patch("modules.search.service.vector_search", AsyncMock(return_value=([authorized, unauthorized], 1024))), \
+         patch("modules.search.service.rerank", side_effect=lambda question, matches, top_k, entities=None: matches[:top_k]), \
+         patch("modules.search.service.generate_answer", answer_mock):
+
+        headers = {"Authorization": f"Bearer {token}"}
+        response = client.post("/api/v1/retrieval/ask", json={"query": "What decisions exist?"}, headers=headers)
+
+    assert response.status_code == 200
+    mock_resolve.assert_called_once()
+
+    # The context actually sent to Claude - build_context() ran for real.
+    assert answer_mock.call_count == 1
+    context_sent_to_claude = answer_mock.call_args.args[1]
+
+    assert "AUTHORIZED_DECISION_TEXT" in context_sent_to_claude
+    assert "UNAUTHORIZED_DECISION_TEXT" not in context_sent_to_claude
