@@ -186,6 +186,9 @@ export default function SettingsPage() {
   const [sourceFilter, setSourceFilter] = useState<SourceFilter>('All')
   const [channels, setChannels] = useState(INITIAL_CHANNELS)
   const [sources, setSources] = useState(INITIAL_SOURCES)
+  const [weeklyPulse, setWeeklyPulse] = useState(true)
+  const [emailNotifications, setEmailNotifications] = useState(true)
+  const [inAppNotifications, setInAppNotifications] = useState(true)
 
 const toggleSourceConnection = (id: string) => {
   setSources((current) =>
@@ -533,6 +536,109 @@ const toggleSourceConnection = (id: string) => {
       </div>
     </section>
   </>
+) : activeSection === 'Notifications' ? (
+  <>
+    <h1 className="text-[28px] font-bold tracking-[-0.02em] text-[#111827]">
+      Notifications
+    </h1>
+    <p className="mt-1 text-[14px] text-[#6B7280]">
+      Control how and when Locus reaches you.
+    </p>
+
+    <section className="mt-8">
+      <div className="rounded-2xl border border-[#E8E8ED] bg-white p-5 shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <p className="text-[15px] font-semibold text-[#111827]">
+              Send Weekly Pulse
+            </p>
+            <p className="mt-1 text-[13px] leading-relaxed text-[#6B7280]">
+              Receive your Pulse summary on a recurring schedule.
+            </p>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={weeklyPulse}
+            onClick={() => setWeeklyPulse((value) => !value)}
+            className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${
+              weeklyPulse ? 'bg-[#5A45FF]' : 'bg-[#D1D5DB]'
+            }`}
+          >
+            <span
+              className={`absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white transition-transform ${
+                weeklyPulse ? 'translate-x-5' : 'translate-x-0'
+              }`}
+            />
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <section className="mt-8">
+      <h3 className="mb-3 text-[11px] font-semibold tracking-[0.08em] text-[#9CA3AF] uppercase">
+        Delivery Channels
+      </h3>
+
+      <div className="flex flex-col gap-3">
+        <div className="rounded-2xl border border-[#E8E8ED] bg-white p-5 shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="text-[15px] font-semibold text-[#111827]">
+                Email
+              </p>
+              <p className="mt-1 text-[13px] leading-relaxed text-[#6B7280]">
+                Send digest and system alerts to your email.
+              </p>
+            </div>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={emailNotifications}
+              onClick={() => setEmailNotifications((value) => !value)}
+              className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${
+                emailNotifications ? 'bg-[#5A45FF]' : 'bg-[#D1D5DB]'
+              }`}
+            >
+              <span
+                className={`absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white transition-transform ${
+                  emailNotifications ? 'translate-x-5' : 'translate-x-0'
+                }`}
+              />
+            </button>
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-[#E8E8ED] bg-white p-5 shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="text-[15px] font-semibold text-[#111827]">
+                In App
+              </p>
+              <p className="mt-1 text-[13px] leading-relaxed text-[#6B7280]">
+                Show a notification badge in the Locus dashboard when new captures arrive.
+              </p>
+            </div>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={inAppNotifications}
+              onClick={() => setInAppNotifications((value) => !value)}
+              className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${
+                inAppNotifications ? 'bg-[#5A45FF]' : 'bg-[#D1D5DB]'
+              }`}
+            >
+              <span
+                className={`absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white transition-transform ${
+                  inAppNotifications ? 'translate-x-5' : 'translate-x-0'
+                }`}
+              />
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
+  </>
 ) : (
   <div className="rounded-2xl border border-[#E8E8ED] bg-white p-8">
     <h1 className="text-[28px] font-bold text-[#111827]">
@@ -540,10 +646,10 @@ const toggleSourceConnection = (id: string) => {
     </h1>
     <p className="mt-2 text-[14px] text-[#6B7280]">
       This settings section will be available soon.
-            </p>
-          </div>
-        )}
-      </main>
+    </p>
+  </div>
+)}
+</main>
     </div>
   )
 }
