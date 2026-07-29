@@ -2,19 +2,31 @@
 
 Do **not** run these against production until the `fix/rls-tenant-isolation` PR is accepted.
 
+Full guide: `REF/Results/RLS_tenant_isolation_developer_guide.md`
+
 ## 1. Apply SQL (as `postgres` / `DATABASE_URL`)
 
 1. `backend/src/database/migrations/007_rls_tenant_isolation.sql`
 2. `backend/src/database/migrations/008_create_locus_app_role.sql`
-3. Set password: `alter role locus_app with password '<strong-password>';`
-4. Set secrets:
-   - Backend `.env`: `APP_DATABASE_URL` for `locus_app`
-   - Keep `DATABASE_URL` as postgres
-   - **Pooler username must be** `locus_app.<project-ref>` (e.g. `locus_app.imazdfzxinltbgktrgmv`),  
-     same pattern as `postgres.<project-ref>`. Plain `locus_app` on the pooler causes `ENOIDENTIFIER`.
-   - Or use direct: `postgresql://locus_app:...@db.<project-ref>.supabase.co:5432/postgres`
+3. Finish M8 role setup for `locus_app`.
 
-## 2. Verify
+## 2. Set `APP_DATABASE_URL`
+
+Copy `DATABASE_URL`. Replace only the username role (`postgres…` → `locus_app…`).
+
+**Example (pooler):**
+
+```env
+DATABASE_URL=postgresql://postgres.your-project-ref:<PASSWORD>@aws-0-us-west-1.pooler.supabase.com:6543/postgres?pgbouncer=true
+
+APP_DATABASE_URL=postgresql://locus_app.your-project-ref:<PASSWORD>@aws-0-us-west-1.pooler.supabase.com:6543/postgres?pgbouncer=true
+```
+
+Keep `<PASSWORD>` exactly as in `DATABASE_URL`. On the pooler, username must be `locus_app.<project-ref>` (not plain `locus_app`).
+
+Set the same on Edge secrets; redeploy Edge functions.
+
+## 3. Verify
 
 ```powershell
 cd backend
@@ -23,4 +35,4 @@ $env:PYTHONPATH = "src"
 python scripts/verify_rls_tenant_isolation.py
 ```
 
-Expect `=== ALL CHECKS PASSED ===` (catalog FORCE/policies + cross-tenant actors isolation).
+Expect `=== ALL CHECKS PASSED ===`.
