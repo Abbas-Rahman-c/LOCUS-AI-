@@ -24,6 +24,20 @@ pytestmark = pytest.mark.asyncio
 TENANT = uuid4()
 
 
+def _answer(**overrides) -> AnswerResult:
+    fields = {
+        "answer": "ok",
+        "reasoning": "grounded",
+        "citations": [],
+        "confidence": 0.9,
+        "sufficient_evidence": True,
+        "model": "m",
+        "latency_ms": 1.0,
+    }
+    fields.update(overrides)
+    return AnswerResult(**fields)
+
+
 def _match(**overrides) -> RetrievalMatch:
     fields = {
         "decision_id": uuid4(),
@@ -58,9 +72,8 @@ def _patched(matches, answer_result):
 class TestTeamScope:
     async def test_returns_digest_response_with_expected_shape(self):
         match = _match()
-        answer_result = AnswerResult(
+        answer_result = _answer(
             answer="This week the team decided to use Stripe.",
-            citations=[],
             model="claude-test",
             latency_ms=42.0,
         )
@@ -80,7 +93,7 @@ class TestTeamScope:
         assert result.metadata.decision_count == 1
 
     async def test_period_string_is_a_date_range(self):
-        answer_result = AnswerResult(answer="ok", citations=[], model="m", latency_ms=1.0)
+        answer_result = _answer()
         retrieval_patch, answer_patch = _patched([_match()], answer_result)
 
         with retrieval_patch, answer_patch:
@@ -94,7 +107,7 @@ class TestTeamScope:
 
     async def test_vector_search_called_with_digest_top_k(self):
         """Digest must retrieve more decisions than a point query."""
-        answer_result = AnswerResult(answer="ok", citations=[], model="m", latency_ms=1.0)
+        answer_result = _answer()
         retrieval_patch, answer_patch = _patched([], answer_result)
 
         with retrieval_patch as vector_mock, answer_patch:
@@ -106,20 +119,19 @@ class TestTeamScope:
 
 class TestPersonalScope:
     async def test_returns_personal_scope_in_response(self):
-        answer_result = AnswerResult(
-            answer="Your decisions this week.", citations=[], model="m", latency_ms=1.0
-        )
+        answer_result = _answer(answer="Your decisions this week.")
         retrieval_patch, answer_patch = _patched([_match()], answer_result)
 
         with retrieval_patch, answer_patch:
             result = await generate_team_pulse(object(), TENANT, [], scope="personal")
 
         assert result.scope == "personal"
+        # No actors.auth_user_id linkage → falls back to team-wide question
+        assert result.metadata.personalized is False
 
-    async def test_uses_different_question_from_team_scope(self):
-        """Personal and team scopes must use different question strings so
-        Claude generates appropriately scoped summaries."""
-        answer_result = AnswerResult(answer="ok", citations=[], model="m", latency_ms=1.0)
+    async def test_uses_named_question_when_actor_resolves(self):
+        """When actors.auth_user_id links, personal scope asks about that person."""
+        answer_result = _answer()
 
         team_retrieval_patch, team_answer_patch = _patched([], answer_result)
         personal_retrieval_patch, personal_answer_patch = _patched([], answer_result)
@@ -128,21 +140,26 @@ class TestPersonalScope:
             await generate_team_pulse(object(), TENANT, [], scope="team")
         team_question = team_answer_mock.await_args.args[0]
 
-        with personal_retrieval_patch, personal_answer_patch as personal_answer_mock:
-            await generate_team_pulse(object(), TENANT, [], scope="personal")
+        with (
+            personal_retrieval_patch,
+            personal_answer_patch as personal_answer_mock,
+            patch(
+                "modules.digest.service._resolve_caller_actor",
+                AsyncMock(return_value="Jane Doe"),
+            ),
+        ):
+            await generate_team_pulse(
+                object(), TENANT, [], scope="personal", user_id=uuid4()
+            )
         personal_question = personal_answer_mock.await_args.args[0]
 
         assert team_question != personal_question
+        assert "Jane Doe" in personal_question
 
 
 class TestEmptyResults:
     async def test_empty_retrieval_produces_empty_items(self):
-        answer_result = AnswerResult(
-            answer="No decisions were found this week.",
-            citations=[],
-            model="m",
-            latency_ms=1.0,
-        )
+        answer_result = _answer(answer="No decisions were found this week.")
         retrieval_patch, answer_patch = _patched([], answer_result)
 
         with retrieval_patch, answer_patch:
@@ -158,7 +175,7 @@ class TestPermissionFiltering:
         out when the caller has no resolved scopes — same Layer 2 guarantee
         as /search."""
         scoped = _match(permission_scope=["team:billing"])
-        answer_result = AnswerResult(answer="ok", citations=[], model="m", latency_ms=1.0)
+        answer_result = _answer()
         retrieval_patch, answer_patch = _patched([scoped], answer_result)
 
         with retrieval_patch, answer_patch:
@@ -169,7 +186,7 @@ class TestPermissionFiltering:
 
     async def test_workspace_wide_decision_surfaces_with_no_resolved_scopes(self):
         workspace_wide = _match(permission_scope=[])
-        answer_result = AnswerResult(answer="ok", citations=[], model="m", latency_ms=1.0)
+        answer_result = _answer()
         retrieval_patch, answer_patch = _patched([workspace_wide], answer_result)
 
         with retrieval_patch, answer_patch:
@@ -178,15 +195,28 @@ class TestPermissionFiltering:
         assert len(result.items) == 1
 
 
-class TestScheduler:
-    def test_cron_schedule_is_monday_0900(self):
-        from modules.digest.scheduler import get_cron_schedule
+class TestDigestWeekHelpers:
+    def test_digest_week_of_is_monday(self):
+        from datetime import datetime, timezone
 
-        assert get_cron_schedule() == "0 9 * * 1"
+        from modules.digest.store import digest_week_of
 
-    async def test_trigger_weekly_digest_does_not_raise(self):
-        """Ensures the scheduler module imports cleanly — fixes the broken
-        import bug where generate_team_pulse() didn't exist yet."""
-        from modules.digest.scheduler import trigger_weekly_digest
+        # Wednesday 2026-07-22 → week_of Monday 2026-07-20
+        wed = datetime(2026, 7, 22, 12, 0, tzinfo=timezone.utc)
+        assert digest_week_of(wed).isoformat() == "2026-07-20"
 
-        await trigger_weekly_digest()  # should not raise
+    def test_digest_week_of_before_monday_0900_uses_previous(self):
+        from datetime import datetime, timezone
+
+        from modules.digest.store import digest_week_of
+
+        mon_early = datetime(2026, 7, 20, 8, 0, tzinfo=timezone.utc)
+        assert digest_week_of(mon_early).isoformat() == "2026-07-13"
+
+    def test_digest_week_of_monday_after_0900_is_today(self):
+        from datetime import datetime, timezone
+
+        from modules.digest.store import digest_week_of
+
+        mon_late = datetime(2026, 7, 20, 9, 0, tzinfo=timezone.utc)
+        assert digest_week_of(mon_late).isoformat() == "2026-07-20"

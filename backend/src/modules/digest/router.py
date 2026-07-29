@@ -3,6 +3,8 @@ Digest Router — GET /digest returns the weekly Team Pulse or personal digest.
 
 ?scope=personal  → "Your Week in Decisions" (default)
 ?scope=team      → "Team Pulse" (team-wide)
+?refresh=true    → force regenerate (dev / explicit refresh); otherwise prefer
+                   the Monday-persisted row for the current digest week
 
 Uses the same mandatory Depends(get_current_tenant) every other protected
 route uses — tenant_id is taken exclusively from the authenticated
@@ -26,6 +28,7 @@ from modules.ai.embeddings.provider import VoyageEmbeddingError, VoyageResponseV
 from modules.answering.provider import AnswerAPIError, AnswerResponseValidationError
 from modules.digest.schemas import DigestResponse
 from modules.digest.service import generate_team_pulse
+from modules.digest.store import digest_week_of, load_weekly_digest, save_weekly_digest
 from modules.permissions.scope_resolver import resolve_permission_scopes
 from modules.ratelimit.limiter import enforce_rate_limit
 
@@ -40,18 +43,43 @@ async def get_digest(
         default="personal",
         description="'personal' for Your Week in Decisions, 'team' for Team Pulse",
     ),
+    refresh: bool = Query(
+        default=False,
+        description="If true, regenerate now instead of serving the stored Monday digest",
+    ),
     ctx: TenantContext = Depends(get_current_tenant),
     _: None = Depends(enforce_rate_limit("digest")),
 ) -> DigestResponse:
     """Return the weekly digest for the authenticated tenant member.
 
-    scope=personal → decisions the caller was involved in this week.
-    scope=team     → all team decisions from the past 7 days.
+    Prefers the persisted Monday digest for the current week. Regenerates
+    (and stores) only when no row exists or refresh=true.
     """
     pool = get_db_pool()
     permission_scopes = resolve_permission_scopes(ctx)
+    week_of = digest_week_of()
+    user_id = ctx.user_id if scope == "personal" else None
+
+    if not refresh:
+        try:
+            stored = await load_weekly_digest(
+                pool,
+                ctx.tenant_id,
+                scope,
+                week_of=week_of,
+                user_id=user_id,
+            )
+            if stored is not None:
+                return stored
+        except Exception:
+            log.exception(
+                "Failed to load stored digest tenant=%s scope=%s — falling back to generate",
+                ctx.tenant_id,
+                scope,
+            )
+
     try:
-        return await generate_team_pulse(
+        digest = await generate_team_pulse(
             pool,
             ctx.tenant_id,
             permission_scopes,
@@ -78,3 +106,20 @@ async def get_digest(
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY, detail="Digest generation failed"
         ) from exc
+
+    try:
+        await save_weekly_digest(
+            pool,
+            ctx.tenant_id,
+            digest,
+            week_of,
+            user_id=user_id,
+        )
+    except Exception:
+        log.exception(
+            "Failed to persist digest after generate tenant=%s scope=%s",
+            ctx.tenant_id,
+            scope,
+        )
+
+    return digest
