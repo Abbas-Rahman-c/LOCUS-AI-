@@ -20,7 +20,7 @@ const LocusLogo: React.FC = () => (
   <div className="flex items-center justify-center gap-2">
     <img src={logoSrc} alt="Locus AI" className="h-8 w-8 rounded-lg" />
     <span className="text-lg font-bold text-gray-900">
-      LOCUS <span className="text-indigo-600">AI</span>
+      LOCUS <span className="text-[#5b52e8]">AI</span>
     </span>
   </div>
 );

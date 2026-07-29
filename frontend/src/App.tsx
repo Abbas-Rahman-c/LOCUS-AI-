@@ -8,9 +8,10 @@ import {
   useSearchParams,
 } from 'react-router-dom'
 import LandingPage from '../landing-page/LandingPage'
+import WelcomePage from '../landing-page/WelcomePage'
 import ConnectWorkspaces from './ConnectWorkspaces'
 import OAuthCallback from './OAuthCallback'
-import { getSupabaseClient } from './lib/supabase'
+import { getSupabaseClient, isSupabaseConfigured } from './lib/supabase'
 import DecisionReady from './DecisionReady'
 import { DashboardShell } from './components/DashboardShell'
 import MainDashboardEntry from './pages/MainDashboardEntry'
@@ -20,16 +21,7 @@ import SettingsPage from './pages/SettingsPage'
 
 /** Full marketing page: Get Started → How it works → Why Locus (scrollable). */
 function HowItWorksMarketing() {
-  const navigate = useNavigate()
-
-  return (
-    <LandingPage
-      initialSection="how-it-works"
-      onAuthenticated={() => {
-        navigate('/', { replace: true })
-      }}
-    />
-  )
+  return <LandingPage initialSection="how-it-works" />
 }
 
 function AuthRoutes() {
@@ -45,6 +37,12 @@ function AuthRoutes() {
     searchParams.has('error')
 
   useEffect(() => {
+    // Allow viewing the full landing demo without Supabase env vars.
+    if (!isSupabaseConfigured()) {
+      setAuthReady(true)
+      return
+    }
+
     const supabase = getSupabaseClient()
 
     void supabase.auth.getSession().then(({ data }) => {
@@ -91,7 +89,7 @@ function AuthRoutes() {
     )
   }
 
-  return <LandingPage onAuthenticated={setUserEmail} />
+  return <LandingPage />
 }
 
 function App() {
@@ -99,6 +97,7 @@ function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<AuthRoutes />} />
+        <Route path="/welcome" element={<WelcomePage />} />
 
         {/* Full 3-section landing (Get Started + How it works + Why Locus) */}
         <Route path="/how-it-works" element={<HowItWorksMarketing />} />

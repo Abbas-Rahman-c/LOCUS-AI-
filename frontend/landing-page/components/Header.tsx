@@ -1,6 +1,9 @@
 import { LocusLogo } from './LocusLogo'
+import { useNavigate } from 'react-router-dom'
 
 export function Header() {
+  const navigate = useNavigate()
+
   return (
     <header className="flex items-center justify-between px-8 pt-6 pb-2 lg:px-10">
       <LocusLogo />
@@ -23,6 +26,7 @@ export function Header() {
 
         <button
           type="button"
+          onClick={() => navigate('/welcome')}
           className="rounded-full border border-[#d1d5db] bg-white px-5 py-1.5 text-[14px] font-medium text-[#374151] transition-colors hover:bg-gray-50"
         >
           Log in

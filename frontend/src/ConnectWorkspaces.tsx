@@ -49,7 +49,7 @@ export default function ConnectWorkspaces({ email, onContinue }: { email: string
         <div className="flex items-center gap-3" aria-label="Locus AI">
           <img src="/locus-mark.png" alt="" className="h-10 w-10 rounded-[6px]" />
           <span className="text-[22px] font-bold leading-none">
-            LOCUS <span className="text-[#4b38d1]">AI</span>
+            LOCUS <span className="text-[#5b52e8]">AI</span>
           </span>
         </div>
 

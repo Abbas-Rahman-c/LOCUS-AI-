@@ -4,12 +4,10 @@ import HowItWorks from './HowItWorks'
 import WhyLocus from './WhyLocus'
 
 export default function LandingPage({
-  onAuthenticated,
   initialSection,
 }: {
-  onAuthenticated: (email: string) => void
   initialSection?: 'get-started' | 'how-it-works' | 'why-locus'
-}) {
+} = {}) {
   useEffect(() => {
     if (!initialSection) return
     const section = document.getElementById(initialSection)
@@ -19,7 +17,7 @@ export default function LandingPage({
   return (
     <div className="w-full">
       <section id="get-started" aria-label="Get started">
-        <GetStarted onAuthenticated={onAuthenticated} />
+        <GetStarted />
       </section>
       <section id="how-it-works" aria-label="How it works">
         <HowItWorks />

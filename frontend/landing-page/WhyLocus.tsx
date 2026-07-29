@@ -1,3 +1,5 @@
+import { useNavigate } from 'react-router-dom'
+
 function SparkleIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
@@ -105,12 +107,14 @@ function BoltIcon() {
 function FooterLogo() {
   return (
     <div className="flex items-center gap-2.5">
-      <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#5b52e8]">
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-          <path d="M8 1.5L9.1 6.1L13.5 7.2L9.1 8.3L8 12.9L6.9 8.3L2.5 7.2L6.9 6.1L8 1.5Z" fill="white" />
-        </svg>
-      </div>
-      <span className="text-[14px] font-bold tracking-[0.06em] text-white">LOCUS AI</span>
+      <img
+        src="/locus-mark.png"
+        alt=""
+        className="h-8 w-8 rounded-lg"
+      />
+      <span className="text-[14px] font-bold tracking-[0.06em] text-white">
+        LOCUS <span className="text-[#a5b4fc]">AI</span>
+      </span>
     </div>
   )
 }
@@ -161,6 +165,8 @@ const FEATURES = [
 ]
 
 export default function WhyLocus() {
+  const navigate = useNavigate()
+
   return (
     <div className="bg-[#f7f7f9]">
       <div className="mx-auto max-w-[1040px] px-6 pb-4 pt-16 sm:px-10 lg:px-12 lg:pt-20">
@@ -210,9 +216,10 @@ export default function WhyLocus() {
           </div>
           <button
             type="button"
+            onClick={() => navigate('/welcome')}
             className="shrink-0 rounded-full bg-[#c8e619] px-6 py-3 text-[14.5px] font-semibold text-[#111827] transition-opacity hover:opacity-90"
           >
-            Request a demo →
+            Get started now →
           </button>
         </div>
       </div>
