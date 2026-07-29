@@ -135,12 +135,11 @@ async def _isolation_check(admin: asyncpg.Connection, app_dsn: str) -> None:
         if "ENOIDENTIFIER" in msg or "tenant identifier" in msg.lower():
             raise SystemExit(
                 "Failed to connect as locus_app via the pooler.\n"
-                "Supabase requires the project ref in the username:\n"
-                "  APP_DATABASE_URL=postgresql://locus_app.imazdfzxinltbgktrgmv:"
-                "PASSWORD@aws-0-us-west-1.pooler.supabase.com:6543/postgres?pgbouncer=true\n"
-                "Or use the direct host (no suffix):\n"
-                "  APP_DATABASE_URL=postgresql://locus_app:PASSWORD@"
-                "db.imazdfzxinltbgktrgmv.supabase.co:5432/postgres\n"
+                "Derive APP_DATABASE_URL from DATABASE_URL by replacing only the "
+                "role in the username:\n"
+                "  pooler: postgres.<project-ref> → locus_app.<project-ref>\n"
+                "  direct: postgres → locus_app\n"
+                "Plain locus_app (no .<project-ref>) on the pooler causes this error.\n"
                 f"Original error: {exc}"
             ) from exc
         raise

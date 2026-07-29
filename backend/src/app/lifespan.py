@@ -1,6 +1,10 @@
-"""
+﻿"""
 Application lifespan context manager.
 Handles startup (DB pools, queue connections) and shutdown teardown.
+
+Scheduled jobs (Monday Team Pulse, daily raw purge) are started only in
+queues/workers/run.py — not here — so API replicas do not fire duplicate
+cron work / AI calls.
 """
 from __future__ import annotations
 
@@ -11,7 +15,6 @@ import asyncpg
 from fastapi import FastAPI
 
 from common.config.database_config import get_admin_database_config, get_app_database_config
-from jobs.scheduler.base import build_scheduler
 
 log = logging.getLogger(__name__)
 
@@ -56,19 +59,9 @@ async def lifespan(app: FastAPI):
         log.error(f"Failed to connect to the database: {e}")
         log.warning("App starting without database connection. Features relying on DB will fail.")
 
-    # Start APScheduler — this is what actually runs the purge, digest, and
-    # renewal jobs on their cron schedules. Without this call, jobs are
-    # registered but never triggered.
-    scheduler = build_scheduler()
-    scheduler.start()
-    log.info("APScheduler started with %d jobs", len(scheduler.get_jobs()))
-
     try:
         yield
     finally:
-        scheduler.shutdown(wait=False)
-        log.info("APScheduler stopped")
-
         from modules.ai.embeddings.provider import close_voyage_session
 
         log.info("Closing Voyage HTTP session...")
@@ -78,4 +71,3 @@ async def lifespan(app: FastAPI):
             await pool.close()
         if admin_pool is not None:
             await admin_pool.close()
-

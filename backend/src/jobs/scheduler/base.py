@@ -31,7 +31,9 @@ def build_scheduler() -> AsyncIOScheduler:
     scheduler.add_job(run_purge_job, CronTrigger(hour=2, minute=0), id="purge_raw_events")
 
     # Weekly Team Pulse digest — every Monday at 09:00 UTC
-    # NOTE: currently a no-op — see jobs/cron/digest_cron.py for why.
+    # Generates + persists digests for all tenants (see jobs/cron/digest_cron.py).
+    # Must be started from the worker process (queues/workers/run.py), not each
+    # API replica, to avoid duplicate Monday runs.
     scheduler.add_job(run_digest_job, CronTrigger(day_of_week="mon", hour=9, minute=0), id="weekly_digest")
 
     return scheduler
