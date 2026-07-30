@@ -19,25 +19,18 @@ import DecisionLogPage from './pages/DecisionLogPage'
 import TeamPulse from './pages/TeamPulse'
 import SettingsPage from './pages/SettingsPage'
 
+const WORKSPACES_DONE_KEY = 'locus:workspaces-connected'
+
 /** Full marketing page: Get Started → How it works → Why Locus (scrollable). */
 function HowItWorksMarketing() {
   return <LandingPage initialSection="how-it-works" />
 }
 
-function AuthRoutes() {
-  const navigate = useNavigate()
-  const [searchParams] = useSearchParams()
+function useAuthEmail() {
   const [userEmail, setUserEmail] = useState<string | null>(null)
-  const [workspacesConnected, setWorkspacesConnected] = useState(false)
   const [authReady, setAuthReady] = useState(false)
 
-  const isOAuthCallback =
-    searchParams.has('auth_callback') ||
-    searchParams.has('code') ||
-    searchParams.has('error')
-
   useEffect(() => {
-    // Allow viewing the full landing demo without Supabase env vars.
     if (!isSupabaseConfigured()) {
       setAuthReady(true)
       return
@@ -58,6 +51,63 @@ function AuthRoutes() {
     return () => data.subscription.unsubscribe()
   }, [])
 
+  return { userEmail, authReady }
+}
+
+function useWorkspacesConnected() {
+  const [workspacesConnected, setWorkspacesConnected] = useState(
+    () => sessionStorage.getItem(WORKSPACES_DONE_KEY) === '1',
+  )
+
+  const markConnected = () => {
+    sessionStorage.setItem(WORKSPACES_DONE_KEY, '1')
+    setWorkspacesConnected(true)
+  }
+
+  return { workspacesConnected, markConnected }
+}
+
+function ConnectWorkspacesRoute() {
+  const navigate = useNavigate()
+  const { userEmail, authReady } = useAuthEmail()
+  const { workspacesConnected, markConnected } = useWorkspacesConnected()
+
+  if (!authReady) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-white text-sm text-[#6B7280]">
+        Loading…
+      </main>
+    )
+  }
+
+  if (!userEmail) {
+    return <Navigate to="/welcome" replace />
+  }
+
+  if (workspacesConnected) {
+    return (
+      <DecisionReady
+        userEmail={userEmail}
+        onGoToDashboard={() => navigate('/dashboard')}
+        onOpenSettings={() => navigate('/settings')}
+      />
+    )
+  }
+
+  return <ConnectWorkspaces email={userEmail} onContinue={markConnected} />
+}
+
+function AuthRoutes() {
+  const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const { userEmail, authReady } = useAuthEmail()
+  const { workspacesConnected } = useWorkspacesConnected()
+
+  const isOAuthCallback =
+    searchParams.has('auth_callback') ||
+    searchParams.has('code') ||
+    searchParams.has('error')
+
   if (isOAuthCallback) {
     return <OAuthCallback />
   }
@@ -71,12 +121,7 @@ function AuthRoutes() {
   }
 
   if (userEmail && !workspacesConnected) {
-    return (
-      <ConnectWorkspaces
-        email={userEmail}
-        onContinue={() => setWorkspacesConnected(true)}
-      />
-    )
+    return <Navigate to="/connect-workspaces" replace />
   }
 
   if (userEmail && workspacesConnected) {
@@ -98,6 +143,7 @@ function App() {
       <Routes>
         <Route path="/" element={<AuthRoutes />} />
         <Route path="/welcome" element={<WelcomePage />} />
+        <Route path="/connect-workspaces" element={<ConnectWorkspacesRoute />} />
 
         {/* Full 3-section landing (Get Started + How it works + Why Locus) */}
         <Route path="/how-it-works" element={<HowItWorksMarketing />} />

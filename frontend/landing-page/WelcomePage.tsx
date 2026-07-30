@@ -16,7 +16,19 @@ export default function WelcomePage() {
   const [authError, setAuthError] = useState<string | null>(null)
 
   useEffect(() => {
-    const handleAuthMessage = (event: MessageEvent) => {
+    if (!isSupabaseConfigured()) return
+
+    void getSupabaseClient()
+      .auth.getSession()
+      .then(({ data }) => {
+        if (data.session?.user.email) {
+          navigate('/connect-workspaces', { replace: true })
+        }
+      })
+  }, [navigate])
+
+  useEffect(() => {
+    const handleAuthMessage = async (event: MessageEvent) => {
       if (
         event.origin !== window.location.origin ||
         event.data?.type !== 'locus:google-auth'
@@ -24,11 +36,26 @@ export default function WelcomePage() {
         return
       }
 
-      setIsSigningIn(false)
-      setAuthError(event.data.success ? null : event.data.error)
+      if (!event.data.success) {
+        setIsSigningIn(false)
+        setAuthError(event.data.error ?? 'Unable to complete Google sign in.')
+        return
+      }
 
-      if (event.data.success) {
-        navigate('/', { replace: true })
+      try {
+        if (event.data.access_token && event.data.refresh_token) {
+          const { error } = await getSupabaseClient().auth.setSession({
+            access_token: event.data.access_token,
+            refresh_token: event.data.refresh_token,
+          })
+          if (error) throw error
+        }
+        navigate('/connect-workspaces', { replace: true })
+      } catch (error) {
+        setIsSigningIn(false)
+        setAuthError(
+          error instanceof Error ? error.message : 'Unable to complete Google sign in.',
+        )
       }
     }
 

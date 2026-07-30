@@ -24,12 +24,15 @@ export default function OAuthCallback() {
 
         const { data, error } = await getSupabaseClient().auth.exchangeCodeForSession(code)
         if (error) throw error
+        if (!data.session) throw new Error('No session returned from Google sign in.')
 
         window.opener?.postMessage(
           {
             type: AUTH_MESSAGE_TYPE,
             success: true,
             email: data.session.user.email,
+            access_token: data.session.access_token,
+            refresh_token: data.session.refresh_token,
           },
           window.location.origin,
         )

@@ -17,9 +17,9 @@ export function DashboardNav() {
           className="flex items-center gap-2.5"
           aria-label="Locus AI dashboard"
         >
-          <img src="/locus-mark.png" alt="" className="h-7 w-7 shrink-0" />
+          <img src="/locus-mark.png" alt="" className="h-7 w-7 shrink-0 rounded-[5px]" />
           <span className="whitespace-nowrap text-[16px] font-bold text-[#111117]">
-            LOCUS <span className="text-[#4B3FD1]">AI</span>
+            LOCUS <span className="text-[#5b52e8]">AI</span>
           </span>
         </NavLink>
 
