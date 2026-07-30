@@ -84,69 +84,32 @@ export function parseTenantState(state: string | null): string {
   return tenantId;
 }
 
-function escapeHtml(text: string): string {
-  return text
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#39;");
-}
-
 /**
- * HTML response for OAuth popup completion.
- * Posts { type: 'locus:source-oauth', source, success, error? } to opener, then closes.
+ * Redirects the OAuth popup back to a page on the frontend's own origin,
+ * which reads the query params and does the postMessage(opener) + close().
  *
- * Optional secret OAUTH_POPUP_TARGET_ORIGIN restricts postMessage target
- * (defaults to "*" so any opener can receive the event).
+ * Supabase Edge Functions on the default *.supabase.co domain cannot serve
+ * HTML at all — the gateway unconditionally rewrites any text/html response
+ * to text/plain (confirmed live: the Response object here can set whatever
+ * Content-Type it wants, the platform overrides it regardless), so an
+ * inline <script> never executes and the popup never closes itself. This
+ * redirects to FRONTEND_URL instead, where the page is a normal SPA route
+ * with no such restriction.
+ *
+ * FRONTEND_URL must be set as a Supabase secret pointing at the real
+ * deployed frontend origin (defaults to localhost for local dev).
  */
 export function popupCallbackResponse(
   source: SourceKind,
   options: { success: boolean; error?: string; status?: number },
 ): Response {
-  const payload = {
-    type: "locus:source-oauth",
-    source,
-    success: options.success,
-    ...(options.error ? { error: options.error } : {}),
-  };
+  const frontendUrl = Deno.env.get("FRONTEND_URL") ?? "http://localhost:5173";
+  const redirectUrl = new URL("/oauth/source-callback", frontendUrl);
+  redirectUrl.searchParams.set("source", source);
+  redirectUrl.searchParams.set("success", String(options.success));
+  if (options.error) redirectUrl.searchParams.set("error", options.error);
 
-  // Prevent </script> breakout if an error string ever contains HTML-ish text.
-  const payloadJson = JSON.stringify(payload).replaceAll("<", "\\u003c");
-  const targetOrigin = Deno.env.get("OAUTH_POPUP_TARGET_ORIGIN") ?? "*";
-  const targetOriginJson = JSON.stringify(targetOrigin);
-
-  const visibleMessage = options.success
-    ? `${source[0]!.toUpperCase()}${source.slice(1)} connected successfully. You can close this window.`
-    : (options.error ?? "Connection failed. You can close this window.");
-
-  const html = `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <title>Locus OAuth</title>
-</head>
-<body>
-  <p>${escapeHtml(visibleMessage)}</p>
-  <script>
-    (function () {
-      var payload = ${payloadJson};
-      var targetOrigin = ${targetOriginJson};
-      try {
-        if (window.opener) {
-          window.opener.postMessage(payload, targetOrigin);
-        }
-      } catch (e) {}
-      window.close();
-    })();
-  </script>
-</body>
-</html>`;
-
-  return new Response(html, {
-    status: options.status ?? (options.success ? 200 : 400),
-    headers: { "Content-Type": "text/html; charset=utf-8" },
-  });
+  return Response.redirect(redirectUrl.toString(), 302);
 }
 
 export function authorizeErrorResponse(

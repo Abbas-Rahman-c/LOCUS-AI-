@@ -4,7 +4,7 @@ import { getSupabaseClient, isSupabaseConfigured } from '../lib/supabase'
 import { DEMO_EMAIL_KEY, WORKSPACES_DONE_KEY } from '../lib/sessionKeys'
 
 const NAV_LINKS = [
-  { label: 'How it works', to: '/how-it-works' },
+  { label: 'How it works', to: '/dashboard/how-it-works' },
   { label: 'Dashboard', to: '/dashboard' },
   { label: 'Memory Explorer', to: '/decision-log' },
   { label: 'Team Pulse', to: '/team-pulse', badge: true },

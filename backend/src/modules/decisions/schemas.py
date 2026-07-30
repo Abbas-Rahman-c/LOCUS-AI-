@@ -30,6 +30,10 @@ class DecisionOut(BaseModel):
     scope: str
     confidence: float
     source_links: list[str] = Field(default_factory=list)
+    source_platforms: list[str] = Field(
+        default_factory=list,
+        description="Distinct originating platforms ('gmail'/'slack'/'notion') this decision was captured from.",
+    )
     created_at: datetime
     updated_at: datetime
 

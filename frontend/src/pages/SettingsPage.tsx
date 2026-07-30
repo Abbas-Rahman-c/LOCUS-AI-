@@ -1,5 +1,7 @@
-import { useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import AccountSettings from './AccountSettings'
+import { getSupabaseClient } from '../lib/supabase'
+import { connectSource, fetchSourceConnections, type SourceId } from '../lib/sourceConnections'
 
 type SettingsSection =
   | 'Account'
@@ -11,27 +13,28 @@ type SettingsSection =
 
 type CaptureMode = 'decisions-actions' | 'decisions-only'
 type SourceFilter = 'All' | 'Gmail' | 'Notion' | 'Slack'
-type SourceStatus = 'active' | 'expiring' | 'disconnected'
+type CaptureSource = 'slack' | 'notion' | 'gmail'
 
 type ChannelRow = {
   id: string
   name: string
   included: boolean
   app: SourceFilter
+  source: CaptureSource
+  itemId: string
 }
 
-type ConnectedSource = {
-  id: 'slack' | 'notion' | 'gmail'
-  name: string
-  icon: string
-  status: SourceStatus
+const SOURCE_APP_LABELS: Record<CaptureSource, Exclude<SourceFilter, 'All'>> = {
+  slack: 'Slack',
+  notion: 'Notion',
+  gmail: 'Gmail',
 }
 
-type RecentSearch = {
+type SearchHistoryItem = {
   id: string
   query: string
-  time: string
-  count: number
+  result_count: number
+  searched_at: string
 }
 
 const SIDEBAR_ITEMS: { id: SettingsSection; label: string }[] = [
@@ -44,30 +47,6 @@ const SIDEBAR_ITEMS: { id: SettingsSection; label: string }[] = [
 ]
 
 const SOURCE_FILTERS: SourceFilter[] = ['All', 'Gmail', 'Notion', 'Slack']
-
-const INITIAL_CHANNELS: ChannelRow[] = [
-  { id: '1', name: '# product-planning', included: false, app: 'Slack' },
-  { id: '2', name: '# product-planning', included: true, app: 'Slack' },
-  { id: '3', name: '# product-planning', included: true, app: 'Slack' },
-  { id: '4', name: '# product-planning', included: true, app: 'Slack' },
-  { id: '5', name: '# eng-standup', included: true, app: 'Slack' },
-  { id: '6', name: 'Product Specs', included: true, app: 'Notion' },
-  { id: '7', name: 'Launch checklist', included: true, app: 'Notion' },
-  { id: '8', name: 'team@company.com', included: false, app: 'Gmail' },
-]
-
-const INITIAL_SOURCES: ConnectedSource[] = [
-  { id: 'slack', name: 'Slack', icon: '/slack-logo.png', status: 'active' },
-  { id: 'notion', name: 'Notion', icon: '/notion-logo.png', status: 'expiring' },
-  { id: 'gmail', name: 'Gmail', icon: '/gmail-logo.png', status: 'disconnected' },
-]
-
-const INITIAL_SEARCHES: RecentSearch[] = Array.from({ length: 12 }, (_, index) => ({
-  id: String(index + 1),
-  query: 'What did we decide about the Q3 timeline?',
-  time: '2h ago',
-  count: 9,
-}))
 
 function AccountIcon() {
   return (
@@ -145,17 +124,11 @@ function BellIcon() {
   )
 }
 
-function RefreshIcon() {
+function DownloadIcon() {
   return (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
       <path
-        d="M20 12a8 8 0 1 1-2.3-5.6"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-      />
-      <path
-        d="M20 4v5h-5"
+        d="M12 4v10M8 10l4 4 4-4M5 18h14"
         stroke="currentColor"
         strokeWidth="1.8"
         strokeLinecap="round"
@@ -179,40 +152,11 @@ function TrashIcon({ color = 'currentColor' }: { color?: string }) {
   )
 }
 
-function WarningIcon({ color }: { color: string }) {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <path
-        d="M12 3.5 2.8 19.5h18.4L12 3.5Z"
-        stroke={color}
-        strokeWidth="1.6"
-        strokeLinejoin="round"
-      />
-      <path d="M12 9v5" stroke={color} strokeWidth="1.8" strokeLinecap="round" />
-      <circle cx="12" cy="16.5" r="1" fill={color} />
-    </svg>
-  )
-}
-
 function ClockIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
       <circle cx="12" cy="12" r="8" stroke="#5A45FF" strokeWidth="1.8" />
       <path d="M12 8v4.5l3 2" stroke="#5A45FF" strokeWidth="1.8" strokeLinecap="round" />
-    </svg>
-  )
-}
-
-function DownloadIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <path
-        d="M12 4v10M8 10l4 4 4-4M5 18h14"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
     </svg>
   )
 }
@@ -246,16 +190,6 @@ function Toggle({
   )
 }
 
-function statusMeta(status: SourceStatus) {
-  if (status === 'active') {
-    return { label: 'Active', color: '#16A34A', dot: '#22C55E' }
-  }
-  if (status === 'expiring') {
-    return { label: 'Token Expiring', color: '#EA580C', dot: '#F97316' }
-  }
-  return { label: 'Disconnected', color: '#DC2626', dot: '#EF4444' }
-}
-
 const SIDEBAR_ICONS: Record<SettingsSection, ReactNode> = {
   Account: <AccountIcon />,
   'Connected Sources': <LightningIcon />,
@@ -265,23 +199,437 @@ const SIDEBAR_ICONS: Record<SettingsSection, ReactNode> = {
   Notifications: <BellIcon />,
 }
 
-export default function SettingsPage() {
-  const [activeSection, setActiveSection] =
-    useState<SettingsSection>('Connected Sources')
+function formatSearchAge(searchedAt: string, now = Date.now()) {
+  const elapsedMs = Math.max(0, now - new Date(searchedAt).getTime())
+  const hours = Math.max(1, Math.floor(elapsedMs / 3_600_000))
+
+  if (elapsedMs < 86_400_000) {
+    return `${hours} ${hours === 1 ? 'hour' : 'hours'} ago`
+  }
+
+  const days = Math.floor(elapsedMs / 86_400_000)
+  if (days < 7) return `${days} ${days === 1 ? 'day' : 'days'} ago`
+
+  const weeks = Math.floor(days / 7)
+  if (days < 30) return `${weeks} ${weeks === 1 ? 'week' : 'weeks'} ago`
+
+  const months = Math.floor(days / 30)
+  if (days < 365) {
+    return `${months} ${months === 1 ? 'month' : 'months'} ago`
+  }
+
+  const years = Math.floor(days / 365)
+  return `${years} ${years === 1 ? 'year' : 'years'} ago`
+}
+
+function SearchSettings() {
+  const [items, setItems] = useState<SearchHistoryItem[]>([])
+  const [total, setTotal] = useState(0)
+  const [saveHistory, setSaveHistory] = useState(true)
+  const [isLoading, setIsLoading] = useState(true)
+  const [isUpdating, setIsUpdating] = useState(false)
+  const [isDownloading, setIsDownloading] = useState(false)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    let active = true
+
+    const loadHistory = async () => {
+      const supabase = getSupabaseClient()
+      const { data: sessionData } = await supabase.auth.getSession()
+      if (!sessionData.session) {
+        if (active) {
+          setError('Your session has expired. Please sign in again.')
+          setIsLoading(false)
+        }
+        return
+      }
+
+      const { data, error: historyError } = await supabase.functions.invoke(
+        'search-history',
+        { body: { action: 'list' } },
+      )
+
+      if (!active) return
+      if (historyError) {
+        setError(historyError.message)
+      } else {
+        setItems((data?.items ?? []) as SearchHistoryItem[])
+        setTotal(Number(data?.total ?? 0))
+        setSaveHistory(data?.saveHistory !== false)
+      }
+      setIsLoading(false)
+    }
+
+    void loadHistory()
+    return () => {
+      active = false
+    }
+  }, [])
+
+  const toggleHistory = async () => {
+    const nextValue = !saveHistory
+    setIsUpdating(true)
+    setError('')
+
+    const { error: toggleError } = await getSupabaseClient().functions.invoke(
+      'search-history',
+      { body: { action: 'toggle', enabled: nextValue } },
+    )
+
+    if (toggleError) {
+      setError(toggleError.message)
+    } else {
+      setSaveHistory(nextValue)
+    }
+    setIsUpdating(false)
+  }
+
+  const clearHistory = async () => {
+    setIsUpdating(true)
+    setError('')
+
+    const { error: clearError } = await getSupabaseClient().functions.invoke(
+      'search-history',
+      { body: { action: 'clear' } },
+    )
+
+    if (clearError) {
+      setError(clearError.message)
+    } else {
+      setItems([])
+      setTotal(0)
+    }
+    setIsUpdating(false)
+  }
+
+  const downloadHistory = async () => {
+    setIsDownloading(true)
+    setError('')
+
+    const { data, error: downloadError } =
+      await getSupabaseClient().functions.invoke('search-history', {
+        body: { action: 'download' },
+      })
+
+    if (downloadError || !data) {
+      setError(downloadError?.message ?? 'Unable to download search history.')
+      setIsDownloading(false)
+      return
+    }
+
+    const file = new Blob([JSON.stringify(data, null, 2)], {
+      type: 'application/json',
+    })
+    const url = URL.createObjectURL(file)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `locus-search-history-${new Date().toISOString().slice(0, 10)}.json`
+    link.click()
+    URL.revokeObjectURL(url)
+    setIsDownloading(false)
+  }
+
+  return (
+    <>
+      <h1 className="text-[28px] font-bold tracking-[-0.02em] text-[#111827]">
+        Search
+      </h1>
+      <p className="mt-1 text-[14px] text-[#6B7280]">
+        Ask anything your organization already knows
+      </p>
+
+      <div className="mt-8 rounded-2xl border border-[#E8E8ED] bg-white p-5 shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <p className="text-[15px] font-semibold text-[#111827]">
+              Save search history
+            </p>
+            <p className="mt-1 max-w-[560px] text-[13px] leading-relaxed text-[#6B7280]">
+              Store your searches so you can revisit and download your history.
+            </p>
+          </div>
+          <Toggle
+            checked={saveHistory}
+            onChange={() => void toggleHistory()}
+            label="Save search history"
+          />
+        </div>
+        {isUpdating ? null : null}
+      </div>
+
+      <section className="mt-8">
+        <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h3 className="text-[11px] font-semibold tracking-[0.08em] text-[#9CA3AF] uppercase">
+              Recent Searches
+            </h3>
+            <p className="mt-1 text-[13px] font-semibold text-[#5A45FF]">
+              Showing {Math.min(total, 20)} Recent {total === 1 ? 'Query' : 'Queries'}
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              disabled={isLoading || isDownloading || total === 0}
+              onClick={() => void downloadHistory()}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-[#C4B5FD] bg-white px-3 py-1.5 text-[13px] font-semibold text-[#5A45FF] transition-colors hover:bg-[#F8F7FF] disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <DownloadIcon />
+              {isDownloading ? 'Downloading...' : 'Download Log'}
+            </button>
+            <button
+              type="button"
+              disabled={isLoading || isUpdating || total === 0}
+              onClick={() => void clearHistory()}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-[#FECACA] bg-white px-3 py-1.5 text-[13px] font-semibold text-[#DC2626] transition-colors hover:bg-[#FEF2F2]"
+            >
+              <TrashIcon color="#DC2626" />
+              Clear All
+            </button>
+          </div>
+        </div>
+
+        <div className="overflow-hidden rounded-2xl border border-[#E8E8ED] bg-white shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
+          <div className="grid grid-cols-[1fr_auto] gap-4 border-b border-[#F0F0F4] px-5 py-3">
+            <p className="text-[12px] font-semibold text-[#9CA3AF]">Query</p>
+            <p className="text-[12px] font-semibold text-[#9CA3AF]">results</p>
+          </div>
+          {isLoading ? (
+            <p className="px-5 py-8 text-[14px] text-[#6B7280]">Loading search history...</p>
+          ) : items.length === 0 ? (
+            <p className="px-5 py-8 text-[14px] text-[#6B7280]">No recent searches.</p>
+          ) : (
+            items.slice(0, 20).map((item, index) => (
+              <div
+                key={item.id}
+                className={`grid grid-cols-[1fr_auto] items-center gap-4 px-5 py-4 ${
+                  index < Math.min(items.length, 20) - 1 ? 'border-b border-[#F0F0F4]' : ''
+                }`}
+              >
+                <div>
+                  <p className="text-[14px] font-semibold text-[#111827]">{item.query}</p>
+                  <p className="mt-1 text-[12px] text-[#9CA3AF]">{formatSearchAge(item.searched_at)}</p>
+                </div>
+                <p className="text-[14px] text-[#111827]">
+                  <span className="font-bold">{item.result_count}</span> results
+                </p>
+              </div>
+            ))
+          )}
+        </div>
+
+        {error ? (
+          <p role="alert" className="mt-3 text-[13px] text-[#B4232C]">
+            {error}
+          </p>
+        ) : null}
+      </section>
+    </>
+  )
+}
+
+const CONNECTED_SOURCE_META: { id: SourceId; name: string; description: string; icon: string }[] = [
+  {
+    id: 'slack',
+    name: 'Slack',
+    description: "Capture decisions from channels and threads you're already in.",
+    icon: '/slack-logo.png',
+  },
+  {
+    id: 'notion',
+    name: 'Notion',
+    description: 'Capture decisions from docs, wikis, and databases.',
+    icon: '/notion-logo.png',
+  },
+  {
+    id: 'gmail',
+    name: 'Gmail',
+    description: 'Capture decisions from email threads and replies.',
+    icon: '/gmail-logo.png',
+  },
+]
+
+function formatConnectedSourceSync(info: { status: string; lastSyncedAt: string | null } | null) {
+  if (!info || info.status !== 'active') return 'Not connected'
+  if (!info.lastSyncedAt) return 'Connected, not yet synced'
+
+  const elapsedMs = Math.max(0, Date.now() - new Date(info.lastSyncedAt).getTime())
+  const minutes = Math.floor(elapsedMs / 60_000)
+  if (minutes < 1) return 'Synced just now'
+  if (minutes < 60) return `Synced ${minutes}m ago`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `Synced ${hours}h ago`
+  return `Synced ${Math.floor(hours / 24)}d ago`
+}
+
+function ConnectedSourcesSettings() {
+  const [connections, setConnections] = useState<
+    Record<SourceId, { status: string; lastSyncedAt: string | null } | null>
+  >({ slack: null, notion: null, gmail: null })
+  const [isLoading, setIsLoading] = useState(true)
+  const [connectingId, setConnectingId] = useState<SourceId | null>(null)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    let active = true
+    fetchSourceConnections()
+      .then((rows) => {
+        if (!active) return
+        setConnections((current) => {
+          const next = { ...current }
+          for (const row of rows) {
+            next[row.source] = { status: row.status, lastSyncedAt: row.last_synced_at }
+          }
+          return next
+        })
+      })
+      .catch(() => {
+        setError('Unable to load connected sources.')
+      })
+      .finally(() => {
+        if (active) setIsLoading(false)
+      })
+    return () => {
+      active = false
+    }
+  }, [])
+
+  const handleConnect = async (sourceId: SourceId) => {
+    if (connectingId) return
+    setConnectingId(sourceId)
+    setError('')
+
+    const result = await connectSource(sourceId)
+    if (result.success) {
+      setConnections((current) => ({
+        ...current,
+        [sourceId]: { status: 'active', lastSyncedAt: null },
+      }))
+    } else {
+      setError(result.error ?? 'Connection failed.')
+    }
+    setConnectingId(null)
+  }
+
+  return (
+    <>
+      <h1 className="text-[28px] font-bold tracking-[-0.02em] text-[#111827]">
+        Connected Sources
+      </h1>
+      <p className="mt-1 text-[14px] text-[#6B7280]">
+        Manage the tools Locus reads to build organizational memory.
+      </p>
+
+      <div className="mt-8 overflow-hidden rounded-2xl border border-[#E8E8ED] bg-white shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
+        {isLoading ? (
+          <p className="px-5 py-12 text-center text-[14px] text-[#6B7280]">
+            Loading connected sources...
+          </p>
+        ) : (
+          CONNECTED_SOURCE_META.map((source, index) => {
+            const info = connections[source.id]
+            const isActive = info?.status === 'active'
+            return (
+              <div
+                key={source.id}
+                className={`flex flex-col gap-4 px-5 py-5 md:flex-row md:items-start md:justify-between ${
+                  index < CONNECTED_SOURCE_META.length - 1 ? 'border-b border-[#F0F0F4]' : ''
+                }`}
+              >
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-start gap-3">
+                    <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-[#E5E7EB] bg-white">
+                      <img src={source.icon} alt="" className="h-7 w-7 object-contain" />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h3 className="text-[15px] font-semibold text-[#111827]">{source.name}</h3>
+                        <span
+                          className={`rounded-full px-2.5 py-1 text-[12px] font-medium ${
+                            isActive ? 'bg-[#DCFCE7] text-[#16A34A]' : 'bg-[#F3F4F6] text-[#6B7280]'
+                          }`}
+                        >
+                          {formatConnectedSourceSync(info)}
+                        </span>
+                      </div>
+                      <p className="mt-1 text-[13px] text-[#9CA3AF]">{source.description}</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex shrink-0 items-center gap-2 md:pt-1">
+                  <button
+                    type="button"
+                    disabled={connectingId === source.id}
+                    onClick={() => void handleConnect(source.id)}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-[#C4B5FD] bg-white px-3 py-1.5 text-[13px] font-semibold text-[#5A45FF] transition-colors hover:bg-[#F8F7FF] disabled:cursor-wait disabled:opacity-60"
+                  >
+                    {connectingId === source.id ? 'Connecting...' : isActive ? 'Reconnect' : 'Connect'}
+                  </button>
+                </div>
+              </div>
+            )
+          })
+        )}
+      </div>
+
+      {error ? (
+        <p role="alert" className="mt-3 text-[13px] text-[#B4232C]">
+          {error}
+        </p>
+      ) : null}
+    </>
+  )
+}
+
+function CaptureControlsSettings() {
   const [pauseCapture, setPauseCapture] = useState(false)
-  const [captureMode, setCaptureMode] =
-    useState<CaptureMode>('decisions-actions')
+  const [captureMode, setCaptureMode] = useState<CaptureMode>('decisions-actions')
   const [sourceFilter, setSourceFilter] = useState<SourceFilter>('All')
-  const [channels, setChannels] = useState(INITIAL_CHANNELS)
-  const [sources, setSources] = useState(INITIAL_SOURCES)
-  const [blockCookies, setBlockCookies] = useState(false)
-  const [excludePrivate, setExcludePrivate] = useState(false)
-  const [excludeDms, setExcludeDms] = useState(false)
-  const [saveSearchHistory, setSaveSearchHistory] = useState(false)
-  const [recentSearches, setRecentSearches] = useState(INITIAL_SEARCHES)
-  const [weeklyPulse, setWeeklyPulse] = useState(true)
-  const [emailNotifications, setEmailNotifications] = useState(true)
-  const [inAppNotifications, setInAppNotifications] = useState(true)
+  const [channels, setChannels] = useState<ChannelRow[]>([])
+  const [isLoadingChannels, setIsLoadingChannels] = useState(true)
+  const [channelsError, setChannelsError] = useState('')
+
+  useEffect(() => {
+    let active = true
+
+    getSupabaseClient()
+      .functions.invoke('capture-source-rules', { body: { action: 'list' } })
+      .then(({ data, error }) => {
+        if (!active) return
+        if (error) {
+          setChannelsError(error.message)
+          return
+        }
+        const items = (data?.items ?? []) as {
+          source: CaptureSource
+          item_id: string
+          item_name: string
+          included: boolean
+        }[]
+        setChannels(
+          items.map((item) => ({
+            id: `${item.source}:${item.item_id}`,
+            name: item.item_name,
+            included: item.included,
+            app: SOURCE_APP_LABELS[item.source],
+            source: item.source,
+            itemId: item.item_id,
+          })),
+        )
+      })
+      .catch(() => {
+        if (active) setChannelsError('Unable to load channels.')
+      })
+      .finally(() => {
+        if (active) setIsLoadingChannels(false)
+      })
+
+    return () => {
+      active = false
+    }
+  }, [])
 
   const visibleChannels = useMemo(() => {
     if (sourceFilter === 'All') return channels
@@ -291,51 +639,272 @@ export default function SettingsPage() {
   const includedCount = channels.filter((channel) => channel.included).length
   const excludedCount = channels.length - includedCount
 
-  const toggleChannel = (id: string) => {
+  const toggleChannel = async (channel: ChannelRow) => {
+    const nextIncluded = !channel.included
     setChannels((current) =>
-      current.map((channel) =>
-        channel.id === id
-          ? { ...channel, included: !channel.included }
-          : channel,
-      ),
+      current.map((c) => (c.id === channel.id ? { ...c, included: nextIncluded } : c)),
     )
+
+    const { error } = await getSupabaseClient().functions.invoke('capture-source-rules', {
+      body: {
+        action: 'toggle',
+        source: channel.source,
+        item_id: channel.itemId,
+        item_name: channel.name,
+        included: nextIncluded,
+      },
+    })
+
+    if (error) {
+      setChannels((current) =>
+        current.map((c) => (c.id === channel.id ? { ...c, included: channel.included } : c)),
+      )
+      setChannelsError(error.message)
+    }
   }
 
-  const reconnectSource = (id: ConnectedSource['id']) => {
-    setSources((current) =>
-      current.map((source) =>
-        source.id === id ? { ...source, status: 'active' } : source,
-      ),
-    )
-  }
+  return (
+    <>
+      <h1 className="text-[28px] font-bold tracking-[-0.02em] text-[#111827]">
+        Build Memory
+      </h1>
+      <p className="mt-1 text-[14px] text-[#6B7280]">
+        Control what Locus learns from, from where, and when.
+      </p>
 
-  const disconnectSource = (id: ConnectedSource['id']) => {
-    setSources((current) =>
-      current.map((source) =>
-        source.id === id ? { ...source, status: 'disconnected' } : source,
-      ),
-    )
-  }
+      <section className="mt-8">
+        <h3 className="mb-3 text-[11px] font-semibold tracking-[0.08em] text-[#9CA3AF] uppercase">
+          Memory Mode
+        </h3>
+
+        <div className="rounded-2xl border border-[#E8E8ED] bg-white p-5 shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="text-[15px] font-semibold text-[#111827]">
+                Pause all learning
+              </p>
+              <p className="mt-1 max-w-[520px] text-[13px] leading-relaxed text-[#6B7280]">
+                Temporarily stop Locus from reading new messages. All
+                existing memory is preserved and search remains
+                available.
+              </p>
+            </div>
+            <Toggle
+              checked={pauseCapture}
+              onChange={() => setPauseCapture((value) => !value)}
+              label="Pause all learning"
+            />
+          </div>
+        </div>
+
+        <div className="mt-3 grid grid-cols-2 gap-3">
+          <button
+            type="button"
+            onClick={() => setCaptureMode('decisions-actions')}
+            className={`rounded-2xl border bg-white p-4 text-left transition-colors ${
+              captureMode === 'decisions-actions'
+                ? 'border-[#5A45FF]'
+                : 'border-[#E8E8ED] hover:border-[#C7C7D1]'
+            }`}
+          >
+            <div className="mb-2 flex items-center gap-2">
+              <span
+                className={`flex h-4 w-4 items-center justify-center rounded-full border-2 ${
+                  captureMode === 'decisions-actions'
+                    ? 'border-[#5A45FF]'
+                    : 'border-[#D1D5DB]'
+                }`}
+              >
+                {captureMode === 'decisions-actions' ? (
+                  <span className="h-2 w-2 rounded-full bg-[#5A45FF]" />
+                ) : null}
+              </span>
+              <span className="text-[14px] font-semibold text-[#111827]">
+                Full context
+              </span>
+            </div>
+            <p className="text-[13px] leading-relaxed text-[#6B7280]">
+              Also learn action items and blockers. Recommended for
+              full team understanding.
+            </p>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setCaptureMode('decisions-only')}
+            className={`rounded-2xl border bg-white p-4 text-left transition-colors ${
+              captureMode === 'decisions-only'
+                ? 'border-[#5A45FF]'
+                : 'border-[#E8E8ED] hover:border-[#C7C7D1]'
+            }`}
+          >
+            <div className="mb-2 flex items-center gap-2">
+              <span
+                className={`flex h-4 w-4 items-center justify-center rounded-full border-2 ${
+                  captureMode === 'decisions-only'
+                    ? 'border-[#5A45FF]'
+                    : 'border-[#D1D5DB]'
+                }`}
+              >
+                {captureMode === 'decisions-only' ? (
+                  <span className="h-2 w-2 rounded-full bg-[#5A45FF]" />
+                ) : null}
+              </span>
+              <span className="text-[14px] font-semibold text-[#111827]">
+                Core knowledge only
+              </span>
+            </div>
+            <p className="text-[13px] leading-relaxed text-[#6B7280]">
+              Only learn explicit conclusions and agreements. Lower
+              volume, higher precision.
+            </p>
+          </button>
+        </div>
+      </section>
+
+      <section className="mt-8">
+        <h3 className="mb-3 text-[11px] font-semibold tracking-[0.08em] text-[#9CA3AF] uppercase">
+          Channels & Memory Source Rules
+        </h3>
+
+        <div className="mb-3 flex flex-wrap gap-2">
+          {SOURCE_FILTERS.map((filter) => {
+            const isActive = sourceFilter === filter
+            return (
+              <button
+                key={filter}
+                type="button"
+                onClick={() => setSourceFilter(filter)}
+                className={`rounded-full px-3.5 py-1.5 text-[13px] font-semibold transition-colors ${
+                  isActive
+                    ? 'bg-[#5A45FF] text-white'
+                    : 'border border-[#E5E7EB] bg-white text-[#5A45FF] hover:bg-[#F8F7FF]'
+                }`}
+              >
+                {filter}
+              </button>
+            )
+          })}
+        </div>
+
+        <p className="mb-3 text-[13px]">
+          <span className="font-semibold text-[#5A45FF]">
+            {includedCount} Included
+          </span>
+          <span className="mx-2 text-[#9CA3AF]">{excludedCount} Excluded</span>
+        </p>
+
+        <div className="overflow-hidden rounded-2xl border border-[#E8E8ED] bg-white shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
+          <table className="w-full border-collapse text-left">
+            <thead>
+              <tr className="border-b border-[#F0F0F4]">
+                <th className="w-12 px-4 py-3" />
+                <th className="px-4 py-3 text-[12px] font-semibold text-[#9CA3AF]">
+                  Channel/Page Name
+                </th>
+                <th className="px-4 py-3 text-[12px] font-semibold text-[#9CA3AF]">
+                  Status
+                </th>
+                <th className="px-4 py-3 text-[12px] font-semibold text-[#9CA3AF]">
+                  App
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {isLoadingChannels ? (
+                <tr>
+                  <td colSpan={4} className="px-4 py-12 text-center text-[14px] text-[#6B7280]">
+                    Loading channels...
+                  </td>
+                </tr>
+              ) : visibleChannels.length === 0 ? (
+                <tr>
+                  <td colSpan={4} className="px-4 py-12 text-center text-[14px] text-[#6B7280]">
+                    No channels found for this filter.
+                  </td>
+                </tr>
+              ) : (
+                visibleChannels.map((channel, index) => (
+                  <tr
+                    key={channel.id}
+                    className={
+                      index < visibleChannels.length - 1
+                        ? 'border-b border-[#F0F0F4]'
+                        : ''
+                    }
+                  >
+                    <td className="px-4 py-3.5">
+                      <button
+                        type="button"
+                        aria-label={
+                          channel.included
+                            ? `Exclude ${channel.name}`
+                            : `Include ${channel.name}`
+                        }
+                        onClick={() => void toggleChannel(channel)}
+                        className={`flex h-4 w-4 items-center justify-center rounded-full border-2 ${
+                          channel.included
+                            ? 'border-[#5A45FF]'
+                            : 'border-[#D1D5DB]'
+                        }`}
+                      >
+                        {channel.included ? (
+                          <span className="h-2 w-2 rounded-full bg-[#5A45FF]" />
+                        ) : null}
+                      </button>
+                    </td>
+                    <td className="px-4 py-3.5 text-[14px] font-medium text-[#111827]">
+                      {channel.name}
+                    </td>
+                    <td className="px-4 py-3.5">
+                      {channel.included ? (
+                        <span className="inline-flex items-center gap-1.5 text-[13px] font-medium text-[#16A34A]">
+                          <span className="flex h-4 w-4 items-center justify-center rounded-full bg-[#DCFCE7] text-[10px]">
+                            ✓
+                          </span>
+                          Included
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1.5 text-[13px] font-medium text-[#9CA3AF]">
+                          <span className="flex h-4 w-4 items-center justify-center rounded-full bg-[#F3F4F6] text-[10px]">
+                            ×
+                          </span>
+                          Excluded
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3.5 text-[14px] text-[#6B7280]">
+                      {channel.app}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {channelsError ? (
+          <p role="alert" className="mt-3 text-[13px] text-[#B4232C]">
+            {channelsError}
+          </p>
+        ) : null}
+      </section>
+    </>
+  )
+}
+
+export default function SettingsPage() {
+  const [activeSection, setActiveSection] = useState<SettingsSection>('Account')
+  const [blockCookies, setBlockCookies] = useState(false)
+  const [excludePrivate, setExcludePrivate] = useState(false)
+  const [excludeDms, setExcludeDms] = useState(false)
+  const [weeklyPulse, setWeeklyPulse] = useState(true)
+  const [emailNotifications, setEmailNotifications] = useState(true)
+  const [inAppNotifications, setInAppNotifications] = useState(true)
 
   const clearCookies = () => {
     setBlockCookies(false)
     window.alert('Cookies cleared. You will need to sign in again on next visit.')
-  }
-
-  const downloadSearchLog = () => {
-    const rows = [
-      'query,time,results',
-      ...recentSearches.map(
-        (item) => `"${item.query}",${item.time},${item.count}`,
-      ),
-    ]
-    const blob = new Blob([rows.join('\n')], { type: 'text/csv;charset=utf-8' })
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = 'locus-search-history.csv'
-    link.click()
-    URL.revokeObjectURL(url)
   }
 
   return (
@@ -370,304 +939,9 @@ export default function SettingsPage() {
         {activeSection === 'Account' ? (
           <AccountSettings />
         ) : activeSection === 'Connected Sources' ? (
-          <>
-            <h1 className="text-[28px] font-bold tracking-[-0.02em] text-[#111827]">
-              Connected Sources
-            </h1>
-            <p className="mt-1 text-[14px] text-[#6B7280]">
-              Manage the tools Locus reads to build organizational memory.
-            </p>
-
-            <div className="mt-8 overflow-hidden rounded-2xl border border-[#E8E8ED] bg-white shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
-              {sources.map((source, index) => {
-                const status = statusMeta(source.status)
-                return (
-                  <div
-                    key={source.id}
-                    className={`flex flex-col gap-4 px-5 py-5 md:flex-row md:items-start md:justify-between ${
-                      index < sources.length - 1 ? 'border-b border-[#F0F0F4]' : ''
-                    }`}
-                  >
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-start gap-3">
-                        <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-[#E5E7EB] bg-white">
-                          <img
-                            src={source.icon}
-                            alt=""
-                            className="h-7 w-7 object-contain"
-                          />
-                        </div>
-                        <div className="min-w-0">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <h3 className="text-[15px] font-semibold text-[#111827]">
-                              {source.name}
-                            </h3>
-                            <span
-                              className="inline-flex items-center gap-1.5 text-[13px] font-medium"
-                              style={{ color: status.color }}
-                            >
-                              <span
-                                className="h-1.5 w-1.5 rounded-full"
-                                style={{ backgroundColor: status.dot }}
-                              />
-                              {status.label}
-                            </span>
-                          </div>
-                          <p className="mt-1 text-[13px] text-[#9CA3AF]">
-                            Synced today 9:00 am
-                          </p>
-                          <p className="mt-2 text-[13px] font-semibold text-[#4F46E5]">
-                            142 captures
-                            <span className="mx-2 font-normal text-[#C7C7D1]">·</span>
-                            12 channels monitored
-                          </p>
-                          {source.status === 'expiring' ? (
-                            <p className="mt-2 inline-flex items-start gap-1.5 text-[13px] text-[#EA580C]">
-                              <WarningIcon color="#EA580C" />
-                              OAuth token expires in ~2 days. Reconnect to avoid
-                              interruption.
-                            </p>
-                          ) : null}
-                          {source.status === 'disconnected' ? (
-                            <p className="mt-2 inline-flex items-start gap-1.5 text-[13px] text-[#DC2626]">
-                              <WarningIcon color="#DC2626" />
-                              Reconnect to keep the source active.
-                            </p>
-                          ) : null}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="flex shrink-0 items-center gap-2 md:pt-1">
-                      <button
-                        type="button"
-                        onClick={() => reconnectSource(source.id)}
-                        className="inline-flex items-center gap-1.5 rounded-lg border border-[#C4B5FD] bg-white px-3 py-1.5 text-[13px] font-semibold text-[#5A45FF] transition-colors hover:bg-[#F8F7FF]"
-                      >
-                        <RefreshIcon />
-                        Reconnect
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => disconnectSource(source.id)}
-                        className="inline-flex items-center gap-1.5 rounded-lg border border-[#FECACA] bg-white px-3 py-1.5 text-[13px] font-semibold text-[#DC2626] transition-colors hover:bg-[#FEF2F2]"
-                      >
-                        <TrashIcon color="#DC2626" />
-                        Disconnect
-                      </button>
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          </>
+          <ConnectedSourcesSettings />
         ) : activeSection === 'Build Memory' ? (
-          <>
-            <h1 className="text-[28px] font-bold tracking-[-0.02em] text-[#111827]">
-              Build Memory
-            </h1>
-            <p className="mt-1 text-[14px] text-[#6B7280]">
-              Control what Locus learns from, from where, and when.
-            </p>
-
-            <section className="mt-8">
-              <h3 className="mb-3 text-[11px] font-semibold tracking-[0.08em] text-[#9CA3AF] uppercase">
-                Memory Mode
-              </h3>
-
-              <div className="rounded-2xl border border-[#E8E8ED] bg-white p-5 shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <p className="text-[15px] font-semibold text-[#111827]">
-                      Pause all learning
-                    </p>
-                    <p className="mt-1 max-w-[520px] text-[13px] leading-relaxed text-[#6B7280]">
-                      Temporarily stop Locus from reading new messages. All
-                      existing memory is preserved and search remains
-                      available.
-                    </p>
-                  </div>
-                  <Toggle
-                    checked={pauseCapture}
-                    onChange={() => setPauseCapture((value) => !value)}
-                    label="Pause all learning"
-                  />
-                </div>
-              </div>
-
-              <div className="mt-3 grid grid-cols-2 gap-3">
-                <button
-                  type="button"
-                  onClick={() => setCaptureMode('decisions-actions')}
-                  className={`rounded-2xl border bg-white p-4 text-left transition-colors ${
-                    captureMode === 'decisions-actions'
-                      ? 'border-[#5A45FF]'
-                      : 'border-[#E8E8ED] hover:border-[#C7C7D1]'
-                  }`}
-                >
-                  <div className="mb-2 flex items-center gap-2">
-                    <span
-                      className={`flex h-4 w-4 items-center justify-center rounded-full border-2 ${
-                        captureMode === 'decisions-actions'
-                          ? 'border-[#5A45FF]'
-                          : 'border-[#D1D5DB]'
-                      }`}
-                    >
-                      {captureMode === 'decisions-actions' ? (
-                        <span className="h-2 w-2 rounded-full bg-[#5A45FF]" />
-                      ) : null}
-                    </span>
-                    <span className="text-[14px] font-semibold text-[#111827]">
-                      Full context
-                    </span>
-                  </div>
-                  <p className="text-[13px] leading-relaxed text-[#6B7280]">
-                    Also learn action items and blockers. Recommended for
-                    full team understanding.
-                  </p>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setCaptureMode('decisions-only')}
-                  className={`rounded-2xl border bg-white p-4 text-left transition-colors ${
-                    captureMode === 'decisions-only'
-                      ? 'border-[#5A45FF]'
-                      : 'border-[#E8E8ED] hover:border-[#C7C7D1]'
-                  }`}
-                >
-                  <div className="mb-2 flex items-center gap-2">
-                    <span
-                      className={`flex h-4 w-4 items-center justify-center rounded-full border-2 ${
-                        captureMode === 'decisions-only'
-                          ? 'border-[#5A45FF]'
-                          : 'border-[#D1D5DB]'
-                      }`}
-                    >
-                      {captureMode === 'decisions-only' ? (
-                        <span className="h-2 w-2 rounded-full bg-[#5A45FF]" />
-                      ) : null}
-                    </span>
-                    <span className="text-[14px] font-semibold text-[#111827]">
-                      Core knowledge only
-                    </span>
-                  </div>
-                  <p className="text-[13px] leading-relaxed text-[#6B7280]">
-                    Only learn explicit conclusions and agreements. Lower
-                    volume, higher precision.
-                  </p>
-                </button>
-              </div>
-            </section>
-
-            <section className="mt-8">
-              <h3 className="mb-3 text-[11px] font-semibold tracking-[0.08em] text-[#9CA3AF] uppercase">
-                Channels & Memory Source Rules
-              </h3>
-
-              <div className="mb-3 flex flex-wrap gap-2">
-                {SOURCE_FILTERS.map((filter) => {
-                  const isActive = sourceFilter === filter
-                  return (
-                    <button
-                      key={filter}
-                      type="button"
-                      onClick={() => setSourceFilter(filter)}
-                      className={`rounded-full px-3.5 py-1.5 text-[13px] font-semibold transition-colors ${
-                        isActive
-                          ? 'bg-[#5A45FF] text-white'
-                          : 'border border-[#E5E7EB] bg-white text-[#5A45FF] hover:bg-[#F8F7FF]'
-                      }`}
-                    >
-                      {filter}
-                    </button>
-                  )
-                })}
-              </div>
-
-              <p className="mb-3 text-[13px]">
-                <span className="font-semibold text-[#5A45FF]">
-                  {includedCount} Included
-                </span>
-                <span className="mx-2 text-[#9CA3AF]">{excludedCount} Excluded</span>
-              </p>
-
-              <div className="overflow-hidden rounded-2xl border border-[#E8E8ED] bg-white shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
-                <table className="w-full border-collapse text-left">
-                  <thead>
-                    <tr className="border-b border-[#F0F0F4]">
-                      <th className="w-12 px-4 py-3" />
-                      <th className="px-4 py-3 text-[12px] font-semibold text-[#9CA3AF]">
-                        Channel/Page Name
-                      </th>
-                      <th className="px-4 py-3 text-[12px] font-semibold text-[#9CA3AF]">
-                        Status
-                      </th>
-                      <th className="px-4 py-3 text-[12px] font-semibold text-[#9CA3AF]">
-                        App
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {visibleChannels.map((channel, index) => (
-                      <tr
-                        key={channel.id}
-                        className={
-                          index < visibleChannels.length - 1
-                            ? 'border-b border-[#F0F0F4]'
-                            : ''
-                        }
-                      >
-                        <td className="px-4 py-3.5">
-                          <button
-                            type="button"
-                            aria-label={
-                              channel.included
-                                ? `Exclude ${channel.name}`
-                                : `Include ${channel.name}`
-                            }
-                            onClick={() => toggleChannel(channel.id)}
-                            className={`flex h-4 w-4 items-center justify-center rounded-full border-2 ${
-                              channel.included
-                                ? 'border-[#5A45FF]'
-                                : 'border-[#D1D5DB]'
-                            }`}
-                          >
-                            {channel.included ? (
-                              <span className="h-2 w-2 rounded-full bg-[#5A45FF]" />
-                            ) : null}
-                          </button>
-                        </td>
-                        <td className="px-4 py-3.5 text-[14px] font-medium text-[#111827]">
-                          {channel.name}
-                        </td>
-                        <td className="px-4 py-3.5">
-                          {channel.included ? (
-                            <span className="inline-flex items-center gap-1.5 text-[13px] font-medium text-[#16A34A]">
-                              <span className="flex h-4 w-4 items-center justify-center rounded-full bg-[#DCFCE7] text-[10px]">
-                                ✓
-                              </span>
-                              Included
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1.5 text-[13px] font-medium text-[#9CA3AF]">
-                              <span className="flex h-4 w-4 items-center justify-center rounded-full bg-[#F3F4F6] text-[10px]">
-                                ×
-                              </span>
-                              Excluded
-                            </span>
-                          )}
-                        </td>
-                        <td className="px-4 py-3.5 text-[14px] text-[#6B7280]">
-                          {channel.app}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </section>
-          </>
+          <CaptureControlsSettings />
         ) : activeSection === 'Privacy' ? (
           <>
             <h1 className="text-[28px] font-bold tracking-[-0.02em] text-[#111827]">
@@ -863,98 +1137,7 @@ export default function SettingsPage() {
             </section>
           </>
         ) : activeSection === 'Search' ? (
-          <>
-            <h1 className="text-[28px] font-bold tracking-[-0.02em] text-[#111827]">
-              Search
-            </h1>
-            <p className="mt-1 text-[14px] text-[#6B7280]">
-              Ask anything your organization already knows
-            </p>
-
-            <div className="mt-8 rounded-2xl border border-[#E8E8ED] bg-white p-5 shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <p className="text-[15px] font-semibold text-[#111827]">
-                    Save search history
-                  </p>
-                  <p className="mt-1 max-w-[560px] text-[13px] leading-relaxed text-[#6B7280]">
-                    Temporarily stop Locus from reading new messages. All
-                    existing captures are preserved and search remains
-                    available.
-                  </p>
-                </div>
-                <Toggle
-                  checked={saveSearchHistory}
-                  onChange={() => setSaveSearchHistory((value) => !value)}
-                  label="Save search history"
-                />
-              </div>
-            </div>
-
-            <section className="mt-8">
-              <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
-                <div>
-                  <h3 className="text-[11px] font-semibold tracking-[0.08em] text-[#9CA3AF] uppercase">
-                    Recent Searches
-                  </h3>
-                  <p className="mt-1 text-[13px] font-semibold text-[#5A45FF]">
-                    Showing {recentSearches.length} Recent Queries
-                  </p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={downloadSearchLog}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-[#C4B5FD] bg-white px-3 py-1.5 text-[13px] font-semibold text-[#5A45FF] transition-colors hover:bg-[#F8F7FF]"
-                  >
-                    <DownloadIcon />
-                    Download Log
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setRecentSearches([])}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-[#FECACA] bg-white px-3 py-1.5 text-[13px] font-semibold text-[#DC2626] transition-colors hover:bg-[#FEF2F2]"
-                  >
-                    <TrashIcon color="#DC2626" />
-                    Clear All
-                  </button>
-                </div>
-              </div>
-
-              <div className="overflow-hidden rounded-2xl border border-[#E8E8ED] bg-white shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
-                <div className="grid grid-cols-[1fr_auto] gap-4 border-b border-[#F0F0F4] px-5 py-3">
-                  <p className="text-[12px] font-semibold text-[#9CA3AF]">Query</p>
-                  <p className="text-[12px] font-semibold text-[#9CA3AF]">results</p>
-                </div>
-                {recentSearches.length === 0 ? (
-                  <p className="px-5 py-8 text-[14px] text-[#6B7280]">
-                    No recent searches.
-                  </p>
-                ) : (
-                  recentSearches.map((item, index) => (
-                    <div
-                      key={item.id}
-                      className={`grid grid-cols-[1fr_auto] items-center gap-4 px-5 py-4 ${
-                        index < recentSearches.length - 1
-                          ? 'border-b border-[#F0F0F4]'
-                          : ''
-                      }`}
-                    >
-                      <div>
-                        <p className="text-[14px] font-semibold text-[#111827]">
-                          {item.query}
-                        </p>
-                        <p className="mt-1 text-[12px] text-[#9CA3AF]">{item.time}</p>
-                      </div>
-                      <p className="text-[14px] text-[#111827]">
-                        <span className="font-bold">{item.count}</span> results
-                      </p>
-                    </div>
-                  ))
-                )}
-              </div>
-            </section>
-          </>
+          <SearchSettings />
         ) : activeSection === 'Notifications' ? (
           <>
             <h1 className="text-[28px] font-bold tracking-[-0.02em] text-[#111827]">

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { listAllDecisions, type DecisionOut, type DecisionRecordType } from '../lib/api'
 
 type PulseSection = {
   count: number
@@ -13,35 +14,32 @@ type TeamPulseData = {
   blockers: PulseSection
 }
 
-const FALLBACK_PULSE: TeamPulseData = {
-  decisions: {
-    count: 5,
-    description: 'Top 3 by confidence and recency — 2 more below',
-    items: [
-      'Q3 ship date moved to July 29 after the design review conflict surfaced',
-      'Engineering confirmed the two-week buffer is enough — no scope cuts needed',
-      'Client will be told proactively about the date change, not at next check-in',
-    ],
-  },
-  actionItems: {
-    count: 3,
-    description: 'All 3 captured this week shown',
-    items: [
-      'Notify client services of the revised July 29 launch date',
-      'Update sprint calendar to reflect shifted milestones',
-      'Update public release notes once the date is finalized internally',
-    ],
-  },
-  blockers: {
-    count: 1,
-    description: 'Only blocker still active as of Sunday night',
-    items: ['Design review still blocked pending legal sign-off on new copy'],
-  },
+const SECTION_LABELS: Record<DecisionRecordType, { singular: string; plural: string }> = {
+  decision: { singular: 'decision', plural: 'decisions' },
+  action_item: { singular: 'action item', plural: 'action items' },
+  blocker: { singular: 'blocker', plural: 'blockers' },
+}
+
+function sectionDescription(type: DecisionRecordType, total: number, shown: number) {
+  const { singular, plural } = SECTION_LABELS[type]
+  if (total === 0) return `No ${plural} in this range`
+  if (total <= shown) return `All ${total} ${total === 1 ? singular : plural} shown`
+  return `Top ${shown} by confidence and recency — ${total - shown} more not shown`
+}
+
+function buildSection(decisions: DecisionOut[], type: DecisionRecordType): PulseSection {
+  const matches = decisions
+    .filter((decision) => decision.record_type === type)
+    .sort((a, b) => b.confidence - a.confidence)
+  const shown = matches.slice(0, 3)
+  return {
+    count: matches.length,
+    description: sectionDescription(type, matches.length, shown.length),
+    items: shown.map((decision) => decision.decision_statement),
+  }
 }
 
 const DAY_IN_MS = 24 * 60 * 60 * 1000
-const TEAM_PULSE_ENDPOINT =
-  import.meta.env.VITE_TEAM_PULSE_API_URL || '/api/team-pulse'
 
 function startOfWeek(date: Date) {
   const result = new Date(date.getFullYear(), date.getMonth(), date.getDate())
@@ -87,27 +85,6 @@ function getIsoWeek(date: Date) {
   target.setUTCDate(target.getUTCDate() + 4 - dayNumber)
   const yearStart = new Date(Date.UTC(target.getUTCFullYear(), 0, 1))
   return Math.ceil(((target.getTime() - yearStart.getTime()) / DAY_IN_MS + 1) / 7)
-}
-
-function isPulseSection(value: unknown): value is PulseSection {
-  if (!value || typeof value !== 'object') return false
-  const section = value as Partial<PulseSection>
-  return (
-    typeof section.count === 'number' &&
-    typeof section.description === 'string' &&
-    Array.isArray(section.items) &&
-    section.items.every((item) => typeof item === 'string')
-  )
-}
-
-function isTeamPulseData(value: unknown): value is TeamPulseData {
-  if (!value || typeof value !== 'object') return false
-  const pulse = value as Partial<TeamPulseData>
-  return (
-    isPulseSection(pulse.decisions) &&
-    isPulseSection(pulse.actionItems) &&
-    isPulseSection(pulse.blockers)
-  )
 }
 
 function PulseGroup({
@@ -172,7 +149,9 @@ export default function TeamPulse() {
   const [draftStart, setDraftStart] = useState(toInputDate(currentWeekStart))
   const [draftEnd, setDraftEnd] = useState(toInputDate(currentWeekEnd))
   const [isRangePickerOpen, setIsRangePickerOpen] = useState(false)
-  const [pulse, setPulse] = useState(FALLBACK_PULSE)
+  const [pulse, setPulse] = useState<TeamPulseData | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [loadError, setLoadError] = useState('')
   const [feedback, setFeedback] = useState<'up' | 'down' | null>(null)
   const rangeDays = Math.round((rangeEnd.getTime() - rangeStart.getTime()) / DAY_IN_MS) + 1
   const isFullWeek = rangeDays === 7 && rangeStart.getDay() === 1
@@ -185,27 +164,42 @@ export default function TeamPulse() {
       ? 'Selected Week'
       : 'Selected Date Range'
 
+  // Real backend has no per-range digest endpoint (GET /digest only covers a
+  // fixed trailing 7 days), so this pulls every decision the tenant has via
+  // GET /api/v1/decisions and filters by record_type + created_at client
+  // side — real data for whatever range the picker above selects, not just
+  // the current week.
   useEffect(() => {
-    const controller = new AbortController()
-    const params = new URLSearchParams({
-      start_date: toInputDate(rangeStart),
-      end_date: toInputDate(rangeEnd),
-    })
+    let active = true
+    setIsLoading(true)
+    setLoadError('')
 
-    void fetch(`${TEAM_PULSE_ENDPOINT}?${params}`, { signal: controller.signal })
-      .then((response) => {
-        if (!response.ok) throw new Error('Team Pulse data is unavailable')
-        return response.json() as Promise<unknown>
+    const rangeStartMs = rangeStart.getTime()
+    const rangeEndMs = addDays(rangeEnd, 1).getTime()
+
+    void listAllDecisions()
+      .then((decisions) => {
+        if (!active) return
+        const inRange = decisions.filter((decision) => {
+          const createdAt = new Date(decision.created_at).getTime()
+          return createdAt >= rangeStartMs && createdAt < rangeEndMs
+        })
+        setPulse({
+          decisions: buildSection(inRange, 'decision'),
+          actionItems: buildSection(inRange, 'action_item'),
+          blockers: buildSection(inRange, 'blocker'),
+        })
       })
-      .then((data) => {
-        if (isTeamPulseData(data)) setPulse(data)
+      .catch(() => {
+        if (active) setLoadError('Unable to load Team Pulse data.')
       })
-      .catch((error: unknown) => {
-        if (error instanceof DOMException && error.name === 'AbortError') return
-        setPulse(FALLBACK_PULSE)
+      .finally(() => {
+        if (active) setIsLoading(false)
       })
 
-    return () => controller.abort()
+    return () => {
+      active = false
+    }
   }, [rangeEnd, rangeStart])
 
   const moveRange = (amount: number) => {
@@ -341,9 +335,19 @@ export default function TeamPulse() {
           </header>
 
           <div className="min-h-[405px] space-y-7 px-6 py-5">
-            <PulseGroup title="Decisions" color="#5644DF" section={pulse.decisions} />
-            <PulseGroup title="Action items" color="#9CDD24" section={pulse.actionItems} />
-            <PulseGroup title="Blockers" color="#F3464B" section={pulse.blockers} />
+            {isLoading ? (
+              <p className="text-[14px] text-[#858B9B]">Loading Team Pulse…</p>
+            ) : loadError ? (
+              <p role="alert" className="text-[14px] text-[#B4232C]">
+                {loadError}
+              </p>
+            ) : pulse ? (
+              <>
+                <PulseGroup title="Decisions" color="#5644DF" section={pulse.decisions} />
+                <PulseGroup title="Action items" color="#9CDD24" section={pulse.actionItems} />
+                <PulseGroup title="Blockers" color="#F3464B" section={pulse.blockers} />
+              </>
+            ) : null}
           </div>
 
           <footer className="flex h-[58px] items-center justify-between border-t border-[#E6E7EC] px-6">
