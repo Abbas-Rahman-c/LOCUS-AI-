@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { getAuthCallbackUrl, getAppOrigin } from '../src/lib/appUrl'
+import { getAuthCallbackUrl } from '../src/lib/appUrl'
 import { getSupabaseClient, isSupabaseConfigured } from '../src/lib/supabase'
 import { GoogleIcon } from './components/GoogleIcon'
 import { LocusLogo } from './components/LocusLogo'
@@ -28,43 +28,6 @@ export default function WelcomePage() {
       })
   }, [navigate])
 
-  useEffect(() => {
-    const handleAuthMessage = async (event: MessageEvent) => {
-      const allowedOrigins = new Set([window.location.origin, getAppOrigin()])
-      if (
-        !allowedOrigins.has(event.origin) ||
-        event.data?.type !== 'locus:google-auth'
-      ) {
-        return
-      }
-
-      if (!event.data.success) {
-        setIsSigningIn(false)
-        setAuthError(event.data.error ?? 'Unable to complete Google sign in.')
-        return
-      }
-
-      try {
-        if (event.data.access_token && event.data.refresh_token) {
-          const { error } = await getSupabaseClient().auth.setSession({
-            access_token: event.data.access_token,
-            refresh_token: event.data.refresh_token,
-          })
-          if (error) throw error
-        }
-        navigate('/connect-workspaces', { replace: true })
-      } catch (error) {
-        setIsSigningIn(false)
-        setAuthError(
-          error instanceof Error ? error.message : 'Unable to complete Google sign in.',
-        )
-      }
-    }
-
-    window.addEventListener('message', handleAuthMessage)
-    return () => window.removeEventListener('message', handleAuthMessage)
-  }, [navigate])
-
   const handleContinueWithGoogle = async () => {
     setAuthError(null)
     setIsSigningIn(true)
@@ -77,36 +40,22 @@ export default function WelcomePage() {
       return
     }
 
-    const popup = window.open(
-      'about:blank',
-      'locus-google-oauth',
-      'popup=yes,width=520,height=680,top=100,left=100',
-    )
-
-    if (!popup) {
-      setIsSigningIn(false)
-      setAuthError('Please allow popups for this site and try again.')
-      return
-    }
-
     try {
+      // Same-window redirect so Google always returns to the Vercel app,
+      // then OAuthCallback sends the user to Connect Workspaces.
       const { data, error } = await getSupabaseClient().auth.signInWithOAuth({
         provider: 'google',
         options: {
-          // Always return to the Vercel app — locusaiapp.com still serves GoDaddy.
           redirectTo: getAuthCallbackUrl(),
-          skipBrowserRedirect: true,
+          skipBrowserRedirect: false,
           queryParams: { prompt: 'select_account' },
         },
       })
 
-      if (error || !data.url) {
-        throw error ?? new Error('Google sign in could not be started.')
-      }
-
-      popup.location.href = data.url
+      if (error) throw error
+      if (!data.url) throw new Error('Google sign in could not be started.')
+      // Browser navigates away via Supabase redirect.
     } catch (error) {
-      popup.close()
       setIsSigningIn(false)
       setAuthError(
         error instanceof Error ? error.message : 'Unable to start Google sign in.',
@@ -152,7 +101,7 @@ export default function WelcomePage() {
             className="mt-10 flex w-full items-center justify-center gap-3 rounded-full bg-[#C8E619] px-6 py-3.5 text-[15px] font-semibold text-[#111827] transition-opacity hover:opacity-90 disabled:cursor-wait disabled:opacity-70"
           >
             <GoogleIcon />
-            {isSigningIn ? 'Opening…' : 'Continue with Google'}
+            {isSigningIn ? 'Redirecting…' : 'Continue with Google'}
           </button>
 
           {authError && (
