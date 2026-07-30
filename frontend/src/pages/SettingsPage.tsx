@@ -1,4 +1,5 @@
 import { useMemo, useState, type ReactNode } from 'react'
+import AccountSettings from './AccountSettings'
 
 type SettingsSection =
   | 'Account'
@@ -278,6 +279,9 @@ export default function SettingsPage() {
   const [excludeDms, setExcludeDms] = useState(false)
   const [saveSearchHistory, setSaveSearchHistory] = useState(false)
   const [recentSearches, setRecentSearches] = useState(INITIAL_SEARCHES)
+  const [weeklyPulse, setWeeklyPulse] = useState(true)
+  const [emailNotifications, setEmailNotifications] = useState(true)
+  const [inAppNotifications, setInAppNotifications] = useState(true)
 
   const visibleChannels = useMemo(() => {
     if (sourceFilter === 'All') return channels
@@ -363,7 +367,9 @@ export default function SettingsPage() {
       </aside>
 
       <main className="min-w-0 flex-1">
-        {activeSection === 'Connected Sources' ? (
+        {activeSection === 'Account' ? (
+          <AccountSettings />
+        ) : activeSection === 'Connected Sources' ? (
           <>
             <h1 className="text-[28px] font-bold tracking-[-0.02em] text-[#111827]">
               Connected Sources
@@ -946,6 +952,69 @@ export default function SettingsPage() {
                     </div>
                   ))
                 )}
+              </div>
+            </section>
+          </>
+        ) : activeSection === 'Notifications' ? (
+          <>
+            <h1 className="text-[28px] font-bold tracking-[-0.02em] text-[#111827]">
+              Notifications
+            </h1>
+            <p className="mt-1 text-[14px] text-[#6B7280]">
+              Control how and when Locus reaches you.
+            </p>
+
+            <div className="mt-8 rounded-2xl border border-[#E8E8ED] bg-white p-5 shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-[15px] font-semibold text-[#111827]">
+                    Send Weekly Pulse
+                  </p>
+                  <p className="mt-1 text-[13px] leading-relaxed text-[#6B7280]">
+                    Receive your Pulse summary on a recurring schedule.
+                  </p>
+                </div>
+                <Toggle
+                  checked={weeklyPulse}
+                  onChange={() => setWeeklyPulse((value) => !value)}
+                  label="Send Weekly Pulse"
+                />
+              </div>
+            </div>
+
+            <section className="mt-8">
+              <h3 className="mb-3 text-[11px] font-semibold tracking-[0.08em] text-[#9CA3AF] uppercase">
+                Delivery Channels
+              </h3>
+              <div className="overflow-hidden rounded-2xl border border-[#E8E8ED] bg-white shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
+                <div className="flex items-start justify-between gap-4 border-b border-[#F0F0F4] px-5 py-4">
+                  <div className="min-w-0">
+                    <p className="text-[15px] font-semibold text-[#111827]">Email</p>
+                    <p className="mt-1 text-[13px] leading-relaxed text-[#6B7280]">
+                      Send digest and system alerts to{' '}
+                      <span className="text-[#6B7280]">jordan@acme.com</span>.
+                    </p>
+                  </div>
+                  <Toggle
+                    checked={emailNotifications}
+                    onChange={() => setEmailNotifications((value) => !value)}
+                    label="Email notifications"
+                  />
+                </div>
+                <div className="flex items-start justify-between gap-4 px-5 py-4">
+                  <div className="min-w-0">
+                    <p className="text-[15px] font-semibold text-[#111827]">In App</p>
+                    <p className="mt-1 max-w-[560px] text-[13px] leading-relaxed text-[#6B7280]">
+                      Show a notification badge in the Locus dashboard when new
+                      captures arrive.
+                    </p>
+                  </div>
+                  <Toggle
+                    checked={inAppNotifications}
+                    onChange={() => setInAppNotifications((value) => !value)}
+                    label="In app notifications"
+                  />
+                </div>
               </div>
             </section>
           </>
