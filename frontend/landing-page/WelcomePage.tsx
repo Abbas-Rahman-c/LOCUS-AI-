@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { getAuthCallbackUrl, getAppOrigin } from '../src/lib/appUrl'
 import { getSupabaseClient, isSupabaseConfigured } from '../src/lib/supabase'
 import { GoogleIcon } from './components/GoogleIcon'
 import { LocusLogo } from './components/LocusLogo'
@@ -29,8 +30,9 @@ export default function WelcomePage() {
 
   useEffect(() => {
     const handleAuthMessage = async (event: MessageEvent) => {
+      const allowedOrigins = new Set([window.location.origin, getAppOrigin()])
       if (
-        event.origin !== window.location.origin ||
+        !allowedOrigins.has(event.origin) ||
         event.data?.type !== 'locus:google-auth'
       ) {
         return
@@ -91,7 +93,8 @@ export default function WelcomePage() {
       const { data, error } = await getSupabaseClient().auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: `${window.location.origin}/?auth_callback=1`,
+          // Always return to the Vercel app — locusaiapp.com still serves GoDaddy.
+          redirectTo: getAuthCallbackUrl(),
           skipBrowserRedirect: true,
           queryParams: { prompt: 'select_account' },
         },
