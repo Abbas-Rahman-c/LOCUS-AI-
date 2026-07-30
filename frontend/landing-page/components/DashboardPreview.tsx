@@ -49,12 +49,12 @@ function SourceIcon({ label }: { label: string }) {
   )
 }
 
-const NAV_ITEMS = ['How it works', 'Dashboard', 'Decision Log', 'Pulse', 'Settings']
+const NAV_ITEMS = ['How it works', 'Dashboard', 'Memory Explorer', 'Pulse', 'Settings']
 
 const RECENT_SEARCHES = [
-  'What did we decide about onboarding flow?',
+  'What do we know about the onboarding flow?',
   'Who owns the legal sign-off blocker?',
-  'Who owns the legal sign-off blocker?',
+  'What context exists around pricing changes?',
 ]
 
 const SOURCES = ['Slack', 'Notion', 'Gmail']
@@ -102,7 +102,7 @@ export function DashboardPreview() {
           <div className="mt-2.5 flex items-center gap-2 rounded-lg border border-[#e5e7eb] bg-[#fafafa] px-3 py-2">
             <SearchIcon />
             <span className="text-[11.5px] text-[#9ca3af]">
-              Ask about a decision, blocker, or thread...
+              Ask anything your organization already knows.
             </span>
           </div>
 
@@ -113,7 +113,7 @@ export function DashboardPreview() {
                 key={i}
                 className="rounded-full border border-[#e5e7eb] bg-white px-2.5 py-1 text-[10px] text-[#6b7280]"
               >
-                What did we decide about the Q3 timeline?
+                What does our org already know about the Q3 timeline?
               </span>
             ))}
           </div>
@@ -168,7 +168,7 @@ export function DashboardPreview() {
           <div className="mt-3 grid grid-cols-2 gap-2.5">
             <div className="rounded-lg border border-[#e8e8ee] p-2.5">
               <p className="text-[9.5px] font-semibold uppercase tracking-[0.06em] text-[#9ca3af]">
-                Sources
+                Memory Sources
               </p>
               <ul className="mt-2 space-y-2">
                 {SOURCES.map((source) => (
@@ -189,13 +189,13 @@ export function DashboardPreview() {
                 type="button"
                 className="mt-2.5 text-[10.5px] font-medium text-[#5b52e8]"
               >
-                + Add New Source
+                + Add Memory Source
               </button>
             </div>
 
             <div className="rounded-lg border border-[#e8e8ee] p-2.5">
               <p className="text-[9.5px] font-semibold uppercase tracking-[0.06em] text-[#9ca3af]">
-                Recent Captures
+                Build Memory
               </p>
               <ul className="mt-2 space-y-2">
                 {CAPTURES.map((capture, index) => (

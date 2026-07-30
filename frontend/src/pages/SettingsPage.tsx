@@ -4,7 +4,7 @@ import AccountSettings from './AccountSettings'
 type SettingsSection =
   | 'Account'
   | 'Connected Sources'
-  | 'Capture Controls'
+  | 'Build Memory'
   | 'Privacy'
   | 'Search'
   | 'Notifications'
@@ -37,7 +37,7 @@ type RecentSearch = {
 const SIDEBAR_ITEMS: { id: SettingsSection; label: string }[] = [
   { id: 'Account', label: 'Account' },
   { id: 'Connected Sources', label: 'Connected Sources' },
-  { id: 'Capture Controls', label: 'Capture Controls' },
+  { id: 'Build Memory', label: 'Build Memory' },
   { id: 'Privacy', label: 'Privacy' },
   { id: 'Search', label: 'Search' },
   { id: 'Notifications', label: 'Notifications' },
@@ -259,7 +259,7 @@ function statusMeta(status: SourceStatus) {
 const SIDEBAR_ICONS: Record<SettingsSection, ReactNode> = {
   Account: <AccountIcon />,
   'Connected Sources': <LightningIcon />,
-  'Capture Controls': <HashIcon />,
+  'Build Memory': <HashIcon />,
   Privacy: <ShieldIcon />,
   Search: <SearchIcon />,
   Notifications: <BellIcon />,
@@ -375,7 +375,7 @@ export default function SettingsPage() {
               Connected Sources
             </h1>
             <p className="mt-1 text-[14px] text-[#6B7280]">
-              Manage the tools Locus reads to capture decisions and actions.
+              Manage the tools Locus reads to build organizational memory.
             </p>
 
             <div className="mt-8 overflow-hidden rounded-2xl border border-[#E8E8ED] bg-white shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
@@ -461,36 +461,36 @@ export default function SettingsPage() {
               })}
             </div>
           </>
-        ) : activeSection === 'Capture Controls' ? (
+        ) : activeSection === 'Build Memory' ? (
           <>
             <h1 className="text-[28px] font-bold tracking-[-0.02em] text-[#111827]">
-              Capture Controls
+              Build Memory
             </h1>
             <p className="mt-1 text-[14px] text-[#6B7280]">
-              Control what Locus reads, from where, and when.
+              Control what Locus learns from, from where, and when.
             </p>
 
             <section className="mt-8">
               <h3 className="mb-3 text-[11px] font-semibold tracking-[0.08em] text-[#9CA3AF] uppercase">
-                Capture Mode
+                Memory Mode
               </h3>
 
               <div className="rounded-2xl border border-[#E8E8ED] bg-white p-5 shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
                 <div className="flex items-start justify-between gap-4">
                   <div>
                     <p className="text-[15px] font-semibold text-[#111827]">
-                      Pause all capture
+                      Pause all learning
                     </p>
                     <p className="mt-1 max-w-[520px] text-[13px] leading-relaxed text-[#6B7280]">
                       Temporarily stop Locus from reading new messages. All
-                      existing captures are preserved and search remains
+                      existing memory is preserved and search remains
                       available.
                     </p>
                   </div>
                   <Toggle
                     checked={pauseCapture}
                     onChange={() => setPauseCapture((value) => !value)}
-                    label="Pause all capture"
+                    label="Pause all learning"
                   />
                 </div>
               </div>
@@ -518,12 +518,12 @@ export default function SettingsPage() {
                       ) : null}
                     </span>
                     <span className="text-[14px] font-semibold text-[#111827]">
-                      Decisions+ Actions
+                      Full context
                     </span>
                   </div>
                   <p className="text-[13px] leading-relaxed text-[#6B7280]">
-                    Also capture action items and blockers. Recommended for
-                    full team visibility.
+                    Also learn action items and blockers. Recommended for
+                    full team understanding.
                   </p>
                 </button>
 
@@ -549,11 +549,11 @@ export default function SettingsPage() {
                       ) : null}
                     </span>
                     <span className="text-[14px] font-semibold text-[#111827]">
-                      Decisions only
+                      Core knowledge only
                     </span>
                   </div>
                   <p className="text-[13px] leading-relaxed text-[#6B7280]">
-                    Only capture explicit decisions and conclusions. Lower
+                    Only learn explicit conclusions and agreements. Lower
                     volume, higher precision.
                   </p>
                 </button>
@@ -562,7 +562,7 @@ export default function SettingsPage() {
 
             <section className="mt-8">
               <h3 className="mb-3 text-[11px] font-semibold tracking-[0.08em] text-[#9CA3AF] uppercase">
-                Channels & Source Rules
+                Channels & Memory Source Rules
               </h3>
 
               <div className="mb-3 flex flex-wrap gap-2">
@@ -685,9 +685,9 @@ export default function SettingsPage() {
                     Raw message retention: 24 hours
                   </p>
                   <p className="mt-1 text-[13px] leading-relaxed text-[#6B7280]">
-                    Locus reads messages to extract structured captures, then
+                    Locus reads messages to build structured memory, then
                     permanently deletes the raw content within 24 hours. Only the
-                    extracted decision, action item, or blocker is stored — never
+                    extracted context summary is stored — never
                     the full message thread.
                   </p>
                   <div className="mt-5">
@@ -868,7 +868,7 @@ export default function SettingsPage() {
               Search
             </h1>
             <p className="mt-1 text-[14px] text-[#6B7280]">
-              Review and manage your search history
+              Ask anything your organization already knows
             </p>
 
             <div className="mt-8 rounded-2xl border border-[#E8E8ED] bg-white p-5 shadow-[0_1px_2px_rgba(16,24,40,0.04)]">

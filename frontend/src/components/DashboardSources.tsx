@@ -111,7 +111,7 @@ export function DashboardSources() {
   return (
     <section>
       <h2 className="mb-3 text-[11px] font-semibold tracking-[0.08em] text-[#9CA3AF] uppercase">
-        Sources
+        Memory Sources
       </h2>
       <div className="overflow-hidden rounded-2xl border border-[#E8E8ED] bg-white shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
         <ul>
@@ -154,7 +154,7 @@ export function DashboardSources() {
             className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-[#C7C7D1] py-2.5 text-[13px] font-semibold text-[#5A45FF] transition-colors hover:bg-[#F8F7FF]"
           >
             <span className="text-[16px] leading-none">+</span>
-            Add New Source
+            Add Memory Source
           </button>
         </div>
       </div>

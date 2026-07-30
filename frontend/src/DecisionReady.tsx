@@ -71,7 +71,7 @@ const StepRow: React.FC<StepRowProps> = ({ step, isLast }) => {
 
 const defaultSteps: DecisionStep[] = [
   { label: "Pulling your recent messages and pages", status: "complete" },
-  { label: "Classifying decisions, action items, and blockers", status: "complete" },
+  { label: "Classifying context into memory records", status: "complete" },
   { label: "Done", status: "complete" },
 ];
 
@@ -102,7 +102,7 @@ const DecisionReady: React.FC<DecisionReadyProps> = ({
       <div className="w-full max-w-md text-center">
         <LocusLogo />
         <h1 className="mt-10 text-2xl font-bold text-gray-900 sm:text-3xl">
-          Getting your decisions ready
+          Getting your memory ready
         </h1>
         <p className="mx-auto mt-3 max-w-sm text-sm text-gray-500">
           This usually takes under a minute. Feel free to wait, or head to your

@@ -6,13 +6,13 @@ const steps = [
   },
   {
     number: 2,
-    title: 'Locus captures decisions',
-    description: 'Runs quietly in the background',
+    title: 'Locus builds memory',
+    description: 'Learn continuously in the background',
   },
   {
     number: 3,
-    title: 'Search with citations',
-    description: 'Answers with links to sources',
+    title: 'Ask with citations',
+    description: 'Answers with links to memory sources',
   },
 ]
 

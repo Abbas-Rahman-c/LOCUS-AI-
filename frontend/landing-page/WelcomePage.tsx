@@ -7,8 +7,8 @@ import { GoogleIcon } from './components/GoogleIcon'
 import { LocusLogo } from './components/LocusLogo'
 
 const BENEFITS = [
-  'Ask anything about your project history.',
-  'Automatically captures memory.',
+  'Ask anything your organization already knows.',
+  'Learn continuously from everyday work.',
   'A weekly digest of everything that mattered.',
 ]
 
@@ -97,7 +97,7 @@ export default function WelcomePage() {
             Welcome to Locus
           </h2>
           <p className="mt-3 text-[15px] leading-relaxed text-[#6b7280]">
-            Connect your tools and never lose a decision again.
+            Connect your tools and turn everyday work into organizational memory.
           </p>
 
           <button

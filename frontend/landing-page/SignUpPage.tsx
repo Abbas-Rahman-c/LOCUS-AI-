@@ -11,15 +11,14 @@ export function SignUpPage() {
       <main className="flex min-h-[calc(100vh-64px)] px-10 pb-6">
         <section className="flex w-[44%] shrink-0 flex-col pt-4">
           <h1 className="text-[40px] font-bold leading-[1.15] tracking-[-0.025em] text-[#111827]">
-            Never lose a{' '}
-            <span className="text-[#5b52e8]">team decision</span>
-            {' '}again.
+            Turn everyday work into{' '}
+            <span className="text-[#5b52e8]">organizational memory.</span>
           </h1>
 
           <p className="mt-4 max-w-[390px] text-[14.5px] leading-[1.65] text-[#6b7280]">
-            Locus automatically captures decisions from your Slack and Notion
-            workspaces so you can find them in seconds—with links back to the
-            original messages.
+            Locus continuously builds memory from your Slack and Notion
+            workspaces so your team can ask anything it already knows—with
+            links back to the original context.
           </p>
 
           <button
@@ -32,7 +31,7 @@ export function SignUpPage() {
 
           <p className="mt-2.5 max-w-[370px] text-[12.5px] leading-[1.55] text-[#9ca3af]">
             We&apos;ll connect Slack and Notion next so Locus can start
-            capturing decisions.
+            building memory.
           </p>
 
           <ProcessStepper />

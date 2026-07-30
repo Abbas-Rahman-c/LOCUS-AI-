@@ -5,8 +5,8 @@ type StepId = 1 | 2 | 3
 
 const STEPS: { id: StepId; label: string }[] = [
   { id: 1, label: '1. Connect tools' },
-  { id: 2, label: '2. Capture what matters' },
-  { id: 3, label: '3. Find any decisions' },
+  { id: 2, label: '2. Build memory' },
+  { id: 3, label: '3. Ask anything' },
 ]
 
 function CheckIcon() {
@@ -133,7 +133,7 @@ function ConnectToolsPanel() {
         <p className="mt-4 max-w-[420px] text-[15px] leading-[1.7] text-[#6b7280]">
           Authorize Locus to read from the tools your team already lives in. No
           exports, no copy-paste, no new workflows. Locus sits quietly in the
-          background and starts listening from day one.
+          background and starts building organizational memory from day one.
         </p>
         <ul className="mt-6 space-y-3">
           {[
@@ -209,7 +209,7 @@ function CapturePanel() {
   ]
 
   const highlights = [
-    { label: 'Decisions', detail: 'Final calls and agreements extracted automatically', className: 'bg-[#eee8ff] text-[#5b52e8]' },
+    { label: 'Context', detail: 'Agreements and conclusions turned into lasting memory', className: 'bg-[#eee8ff] text-[#5b52e8]' },
     { label: 'Action items', detail: 'Tasks assigned or implied in conversations', className: 'bg-[#ecfccb] text-[#65a30d]' },
     { label: 'Blockers', detail: 'Flagged dependencies and open risks', className: 'bg-[#fee2e2] text-[#dc2626]' },
   ]
@@ -250,21 +250,21 @@ function CapturePanel() {
           ))}
         </div>
         <div className="flex items-center justify-between bg-[#f8f7ff] px-4 py-2.5 text-[12px]">
-          <span className="text-[#6b7280]">3 items captured today</span>
+          <span className="text-[#6b7280]">3 items learned today</span>
           <button type="button" className="font-medium text-[#5b52e8]">
-            View decision log →
+            View Memory Explorer →
           </button>
         </div>
       </div>
 
       <div>
         <h2 className="text-[28px] font-bold tracking-[-0.02em] text-[#111827]">
-          Locus captures <span className="text-[#5b52e8]">what matters.</span>
+          Locus builds <span className="text-[#5b52e8]">memory continuously.</span>
         </h2>
         <p className="mt-4 max-w-[420px] text-[15px] leading-[1.7] text-[#6b7280]">
           As your team communicates normally, Locus reads the signal. It
-          identifies decisions, action items, and blockers using context-aware
-          AI — and logs each one with a source link, owner, and timestamp.
+          turns everyday work into organizational memory — context, knowledge,
+          and understanding — each with a source link, owner, and timestamp.
         </p>
         <div className="mt-6 space-y-3">
           {highlights.map((item) => (
@@ -318,19 +318,20 @@ function FindDecisionsPanel() {
     <div className="mt-12 grid items-start gap-12 lg:grid-cols-2">
       <div>
         <h2 className="text-[28px] font-bold tracking-[-0.02em] text-[#111827]">
-          Find any decision <span className="text-[#5b52e8]">in seconds.</span>
+          Ask anything your organization{' '}
+          <span className="text-[#5b52e8]">already knows.</span>
         </h2>
         <p className="mt-4 max-w-[420px] text-[15px] leading-[1.7] text-[#6b7280]">
-          Search across your full decision history with natural-language
+          Search across your full organizational memory with natural-language
           queries. Filter by owner, date, team, or tag. Every result links back
           to the original Slack thread or Notion page so you always have full
           context.
         </p>
         <ul className="mt-6 space-y-3">
           {[
-            'Full-text semantic search across all decisions',
+            'Full-text semantic search across all organizational memory',
             'Filter by team, owner, date range, or tag',
-            'One-click jump to the original source',
+            'One-click jump to the original memory source',
             'Export to CSV or Notion with a single click',
           ].map((item) => (
             <li key={item} className="flex items-start gap-3 text-[14.5px] text-[#374151]">
@@ -379,7 +380,7 @@ function FindDecisionsPanel() {
           ))}
         </div>
         <div className="flex items-center justify-between bg-[#f8f7ff] px-4 py-2.5 text-[12px]">
-          <span className="text-[#6b7280]">Showing 4 of 284 decisions</span>
+          <span className="text-[#6b7280]">Showing 4 of 284 memory records</span>
           <button type="button" className="font-medium text-[#5b52e8]">
             View all →
           </button>
@@ -403,9 +404,10 @@ export default function HowItWorks() {
           <span className="text-[#5b52e8]">shared memory.</span>
         </h1>
         <p className="mt-4 max-w-[640px] text-[15px] leading-[1.7] text-[#6b7280]">
-          Locus connects to Slack, Notion, and your other tools — automatically
-          extracting decisions, surfacing patterns, and giving your whole team a
-          searchable record of everything that was ever agreed upon.
+          Locus connects to Slack, Notion, and your other tools — continuously
+          building organizational memory, surfacing context, and giving your
+          whole team a searchable understanding of what the organization
+          already knows.
         </p>
 
         <Stepper active={activeStep} onChange={setActiveStep} />

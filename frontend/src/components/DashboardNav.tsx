@@ -6,7 +6,7 @@ import { DEMO_EMAIL_KEY, WORKSPACES_DONE_KEY } from '../lib/sessionKeys'
 const NAV_LINKS = [
   { label: 'How it works', to: '/how-it-works' },
   { label: 'Dashboard', to: '/dashboard' },
-  { label: 'Decision Log', to: '/decision-log' },
+  { label: 'Memory Explorer', to: '/decision-log' },
   { label: 'Team Pulse', to: '/team-pulse', badge: true },
   { label: 'Settings', to: '/settings' },
 ] as const

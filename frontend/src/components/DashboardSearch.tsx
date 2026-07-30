@@ -1,12 +1,12 @@
 const SUGGESTIONS = [
-  'What did we decide about the Q3 timeline?',
-  'What did we decide about the Q3 timeline?',
+  'What does our org already know about the Q3 timeline?',
+  'What context do we have on the onboarding flow?',
 ]
 
 const RECENT_SEARCHES = [
-  { query: 'What did we decide about onboarding flow?', time: '2h ago' },
+  { query: 'What do we know about the onboarding flow?', time: '2h ago' },
   { query: 'Who owns the legal sign-off blocker?', time: '1d ago' },
-  { query: 'Who owns the legal sign-off blocker?', time: '1d ago' },
+  { query: 'What context exists around pricing changes?', time: '1d ago' },
 ]
 
 export function DashboardSearch() {
@@ -36,7 +36,7 @@ export function DashboardSearch() {
           </svg>
           <input
             type="text"
-            placeholder="Ask about a decision, blocker, or thread..."
+            placeholder="Ask anything your organization already knows."
             className="h-full w-full bg-transparent text-[15px] text-[#111827] outline-none placeholder:text-[#9CA3AF]"
           />
           <button

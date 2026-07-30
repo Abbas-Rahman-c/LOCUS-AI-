@@ -370,7 +370,7 @@ export default function TeamPulse() {
               to="/decision-log"
               className="text-[14px] font-medium text-[#5544E6] hover:text-[#4030CA]"
             >
-              View full Decision Log
+              View full Memory Explorer
             </Link>
           </footer>
         </article>

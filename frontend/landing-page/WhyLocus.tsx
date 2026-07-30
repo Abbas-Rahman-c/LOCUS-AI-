@@ -123,35 +123,35 @@ const FEATURES = [
   {
     title: 'Zero manual entry',
     description:
-      'Every failed workaround failed because it required effort. Locus asks for none — it runs in the background from day one.',
+      'Every failed workaround failed because it required effort. Locus asks for none — it learns continuously in the background from day one.',
     icon: <SparkleIcon />,
     iconBg: 'bg-[#eee8ff]',
   },
   {
     title: 'Always cited',
     description:
-      'Every decision links directly to its source — the Slack thread, the Notion doc, the Gmail thread. No context lost in translation.',
+      'Every memory record links directly to its source — the Slack thread, the Notion doc, the Gmail thread. No context lost in translation.',
     icon: <ExternalLinkIcon />,
     iconBg: 'bg-[#eee8ff]',
   },
   {
-    title: 'Full decision lifecycle',
+    title: 'Full memory lifecycle',
     description:
-      'When a decision gets reversed, both records stay — with a link between them. See exactly when and why your team changed its mind.',
+      'When understanding changes, both records stay — with a link between them. See exactly when and why your team updated its context.',
     icon: <TrendIcon />,
     iconBg: 'bg-[#e8f9e8]',
   },
   {
     title: 'Private by design',
     description:
-      'Read-only access. Raw content is encrypted and purged after 30 days. Only structured decisions persist long-term.',
+      'Read-only access. Raw content is encrypted and purged after 30 days. Only structured organizational memory persists long-term.',
     icon: <LockIcon />,
     iconBg: 'bg-[#f3f4f6]',
   },
   {
     title: 'Useful solo, powerful as a team',
     description:
-      'Get value on day one. Invite your team and decisions become shared institutional memory — searchable by everyone.',
+      'Get value on day one. Invite your team and knowledge becomes shared institutional memory — searchable by everyone.',
     icon: <UsersIcon />,
     iconBg: 'bg-[#e8f9e8]',
   },
@@ -178,9 +178,9 @@ export default function WhyLocus() {
           <span className="text-[#5b52e8]">missing.</span>
         </h1>
         <p className="mt-4 max-w-[620px] text-[15px] leading-[1.7] text-[#6b7280]">
-          Existing tools are good at finding documents. Locus captures the
-          decision itself — what was decided, by whom, why, and what it
-          superseded.
+          Existing tools are good at finding documents. Locus turns everyday
+          work into organizational memory — context, knowledge, and
+          understanding your team can ask for anytime.
         </p>
 
         <div className="mt-12 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
@@ -230,9 +230,9 @@ export default function WhyLocus() {
             <div className="max-w-[380px]">
               <FooterLogo />
               <p className="mt-4 text-[13.5px] leading-[1.7] text-[#9ca3af]">
-                Locus captures every decision, action item, and blocker from
-                your Slack, Notion, and Gmail — so you never lose context on
-                what your team decided.
+                Locus turns everyday work into organizational memory from your
+                Slack, Notion, and Gmail — so your team can ask anything it
+                already knows.
               </p>
             </div>
             <nav className="flex gap-8 text-[14px] text-white">

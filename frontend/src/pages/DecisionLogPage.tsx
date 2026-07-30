@@ -46,11 +46,11 @@ export default function DecisionLogPage() {
   return (
     <main className="mx-auto max-w-[1120px] px-8 py-8">
         <h1 className="text-[32px] font-bold leading-tight tracking-[-0.02em] text-[#111827]">
-          Decision Log
+          Memory Explorer
         </h1>
         <p className="mt-2 text-[15px] text-[#6B7280]">
-          Every captured decision, action item, and blocker — searchable and
-          cited.
+          Every piece of organizational memory — searchable, cited, and ready
+          for context.
         </p>
 
         <div className="mt-6 flex flex-wrap gap-2.5" role="radiogroup" aria-label="Filter by type">
@@ -82,7 +82,7 @@ export default function DecisionLogPage() {
           <table className="w-full border-collapse text-left">
             <thead>
               <tr className="border-b border-[#F0F0F4]">
-                {['Type', 'Summary', 'Source', 'Date', 'Status'].map((heading) => (
+                {['Type', 'Context Summary', 'Memory Source', 'Date', 'Status'].map((heading) => (
                   <th
                     key={heading}
                     className="px-5 py-3.5 text-[12px] font-semibold tracking-[0.02em] text-[#9CA3AF]"

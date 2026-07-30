@@ -46,12 +46,12 @@ function RocketIcon() {
 }
 
 const CORE_PLAN_FEATURES = [
-  'Own sources (Slack, Notion, Gmail — with SharePoint/OneDrive/Teams on the roadmap)',
-  'Own decision register (private, not shared)',
+  'Own memory sources (Slack, Notion, Gmail — with SharePoint/OneDrive/Teams on the roadmap)',
+  'Own memory register (private, not shared)',
   'Context Search with saved search history',
-  'Personal Pulse — weekly digest of your own decisions, action items, and blockers',
+  'Personal Pulse — weekly digest of your own organizational memory',
   'Catch-Up Brief — self-serve, parameterized by scope and time window',
-  'Capture refresh rate: 6 hours',
+  'Memory refresh rate: 6 hours',
   'MCP access — search_team_context, get_team_pulse, get_onboarding_brief callable from Claude',
 ]
 
@@ -572,7 +572,7 @@ export default function AccountSettings() {
           <div className="min-w-0">
             <h2 className="text-[15px] font-semibold text-[#24242A]">Export Data</h2>
             <p className="mt-1.5 text-[14px] leading-5 text-[#7A8292]">
-              Download all your captured decisions, action items, and blockers as JSON.
+              Download all your organizational memory as JSON.
             </p>
             {exportError ? (
               <p role="alert" className="mt-1.5 text-[13px] text-[#B4232C]">
@@ -689,7 +689,7 @@ export default function AccountSettings() {
             </h2>
             <p className="mt-3 text-[15px] leading-6 text-[#7A8292]">
               {confirmation === 'delete'
-                ? 'This will permanently delete your account and all associated decisions, action items, and data. This action cannot be undone.'
+                ? 'This will permanently delete your account and all associated organizational memory and data. This action cannot be undone.'
                 : "You'll be signed out of your account on this device. Your data and settings will be saved."}
             </p>
             {accountActionError ? (

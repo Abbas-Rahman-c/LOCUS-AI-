@@ -17,21 +17,21 @@ const tools: Tool[] = [
     id: 'slack',
     name: 'Slack',
     description:
-      "Capture memory from channels and threads you're already in. Locus listens — you stay focused.",
+      "Build memory from channels and threads you're already in. Locus learns — you stay focused.",
     iconSrc: '/slack-logo.png',
   },
   {
     id: 'notion',
     name: 'Notion',
     description:
-      "Capture memory from channels and threads you're already in. Locus listens — you stay focused.",
+      "Build memory from channels and threads you're already in. Locus learns — you stay focused.",
     iconSrc: '/notion-logo.png',
   },
   {
     id: 'gmail',
     name: 'Gmail',
     description:
-      "Capture memory from channels and threads you're already in. Locus listens — you stay focused.",
+      "Build memory from channels and threads you're already in. Locus learns — you stay focused.",
     iconSrc: '/gmail-logo.png',
   },
 ]
@@ -103,7 +103,7 @@ export default function ConnectWorkspaces({
           </h1>
           <p className="mx-auto mt-3 max-w-[660px] text-[15px] leading-[1.45] text-[#7a8190] sm:text-[17px]">
             Your Locus account is ready. Next: connect Slack, Notion, and
-            <br className="hidden sm:block" /> Gmail so we can start capturing decisions.
+            <br className="hidden sm:block" /> Gmail so we can start building organizational memory.
           </p>
           <div className="mt-2 flex flex-wrap items-center justify-center gap-2 text-[14px] text-[#7a8190]">
             <GoogleIcon />

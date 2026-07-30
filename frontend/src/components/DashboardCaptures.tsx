@@ -38,7 +38,7 @@ export function DashboardCaptures() {
   return (
     <section>
       <h2 className="mb-3 text-[11px] font-semibold tracking-[0.08em] text-[#9CA3AF] uppercase">
-        Recent Captures
+        Build Memory
       </h2>
       <div className="overflow-hidden rounded-2xl border border-[#E8E8ED] bg-white shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
         <ul>
