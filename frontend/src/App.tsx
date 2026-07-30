@@ -12,14 +12,13 @@ import WelcomePage from '../landing-page/WelcomePage'
 import ConnectWorkspaces from './ConnectWorkspaces'
 import OAuthCallback from './OAuthCallback'
 import { getSupabaseClient, isSupabaseConfigured } from './lib/supabase'
+import { DEMO_EMAIL_KEY, WORKSPACES_DONE_KEY } from './lib/sessionKeys'
 import DecisionReady from './DecisionReady'
 import { DashboardShell } from './components/DashboardShell'
 import MainDashboardEntry from './pages/MainDashboardEntry'
 import DecisionLogPage from './pages/DecisionLogPage'
 import TeamPulse from './pages/TeamPulse'
 import SettingsPage from './pages/SettingsPage'
-
-const WORKSPACES_DONE_KEY = 'locus:workspaces-connected'
 
 /** Full marketing page: Get Started → How it works → Why Locus (scrollable). */
 function HowItWorksMarketing() {
@@ -31,6 +30,13 @@ function useAuthEmail() {
   const [authReady, setAuthReady] = useState(false)
 
   useEffect(() => {
+    const demoEmail = sessionStorage.getItem(DEMO_EMAIL_KEY)
+    if (demoEmail) {
+      setUserEmail(demoEmail)
+      setAuthReady(true)
+      return
+    }
+
     if (!isSupabaseConfigured()) {
       setAuthReady(true)
       return

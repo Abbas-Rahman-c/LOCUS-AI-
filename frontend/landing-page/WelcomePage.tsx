@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getAuthCallbackUrl } from '../src/lib/appUrl'
+import { DEMO_EMAIL_KEY, WORKSPACES_DONE_KEY } from '../src/lib/sessionKeys'
 import { getSupabaseClient, isSupabaseConfigured } from '../src/lib/supabase'
 import { GoogleIcon } from './components/GoogleIcon'
 import { LocusLogo } from './components/LocusLogo'
@@ -17,6 +18,11 @@ export default function WelcomePage() {
   const [authError, setAuthError] = useState<string | null>(null)
 
   useEffect(() => {
+    if (sessionStorage.getItem(DEMO_EMAIL_KEY)) {
+      navigate('/connect-workspaces', { replace: true })
+      return
+    }
+
     if (!isSupabaseConfigured()) return
 
     void getSupabaseClient()
@@ -102,6 +108,18 @@ export default function WelcomePage() {
           >
             <GoogleIcon />
             {isSigningIn ? 'Redirecting…' : 'Continue with Google'}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              sessionStorage.setItem(DEMO_EMAIL_KEY, 'youremail@gmail.com')
+              sessionStorage.removeItem(WORKSPACES_DONE_KEY)
+              navigate('/connect-workspaces', { replace: true })
+            }}
+            className="mt-3 w-full rounded-full border border-[#d1d5db] bg-white px-6 py-3 text-[14px] font-semibold text-[#111827] transition-colors hover:bg-[#f9fafb]"
+          >
+            Continue to Connect Workspaces (demo)
           </button>
 
           {authError && (
