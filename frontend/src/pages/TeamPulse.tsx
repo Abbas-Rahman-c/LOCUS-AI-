@@ -1,5 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
+import {
+  MemoryRecordDetail,
+  createDefaultMemoryRecord,
+  type MemoryRecord,
+  type MemoryRecordType,
+} from '../components/MemoryRecordDetail'
 
 type PulseSection = {
   count: number
@@ -110,15 +116,39 @@ function isTeamPulseData(value: unknown): value is TeamPulseData {
   )
 }
 
+function pulseItemToRecord(
+  item: string,
+  index: number,
+  type: MemoryRecordType,
+): MemoryRecord {
+  return createDefaultMemoryRecord({
+    id: `pulse-${type}-${index}`,
+    type,
+    title: item,
+    summary: item,
+    meta: 'Slack · this week',
+    confidence:
+      type === 'Blocker'
+        ? '0.81 — open blocker'
+        : type === 'Action Item'
+          ? '0.88 — assigned action'
+          : '0.92 — confirmed decision',
+  })
+}
+
 function PulseGroup({
   title,
   color,
   section,
+  recordType,
 }: {
   title: string
   color: string
   section: PulseSection
+  recordType: MemoryRecordType
 }) {
+  const [expandedId, setExpandedId] = useState<string | null>(null)
+
   return (
     <section className="flex gap-3">
       <span
@@ -126,7 +156,7 @@ function PulseGroup({
         style={{ backgroundColor: color }}
         aria-hidden="true"
       />
-      <div>
+      <div className="min-w-0 flex-1">
         <h2 className="text-[14px] font-medium text-[#242334]">
           {title} <span className="font-normal text-[#8B91A1]">{section.count}</span>
         </h2>
@@ -134,14 +164,38 @@ function PulseGroup({
           {section.description}
         </p>
         <ul className="mt-2 space-y-1.5">
-          {section.items.map((item) => (
-            <li key={item} className="flex text-[13px] leading-5 text-[#30303E]">
-              <span className="mr-2.5 text-[#9197A5]" aria-hidden="true">
-                —
-              </span>
-              <span>{item}</span>
-            </li>
-          ))}
+          {section.items.map((item, index) => {
+            const record = pulseItemToRecord(item, index, recordType)
+            const isExpanded = expandedId === record.id
+            return (
+              <li key={record.id}>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setExpandedId((current) =>
+                      current === record.id ? null : record.id,
+                    )
+                  }
+                  className={`flex w-full text-left text-[13px] leading-5 transition-colors ${
+                    isExpanded
+                      ? 'font-medium text-[#5143DB]'
+                      : 'text-[#30303E] hover:text-[#5143DB]'
+                  }`}
+                  aria-expanded={isExpanded}
+                >
+                  <span className="mr-2.5 text-[#9197A5]" aria-hidden="true">
+                    —
+                  </span>
+                  <span>{item}</span>
+                </button>
+                {isExpanded ? (
+                  <div className="mt-2 rounded-xl border border-[#E8E8ED] bg-[#FAFAFB] p-4">
+                    <MemoryRecordDetail record={record} />
+                  </div>
+                ) : null}
+              </li>
+            )
+          })}
         </ul>
       </div>
     </section>
@@ -341,9 +395,24 @@ export default function TeamPulse() {
           </header>
 
           <div className="min-h-[405px] space-y-7 px-6 py-5">
-            <PulseGroup title="Decisions" color="#5644DF" section={pulse.decisions} />
-            <PulseGroup title="Action items" color="#9CDD24" section={pulse.actionItems} />
-            <PulseGroup title="Blockers" color="#F3464B" section={pulse.blockers} />
+            <PulseGroup
+              title="Decisions"
+              color="#5644DF"
+              section={pulse.decisions}
+              recordType="Decision"
+            />
+            <PulseGroup
+              title="Action items"
+              color="#9CDD24"
+              section={pulse.actionItems}
+              recordType="Action Item"
+            />
+            <PulseGroup
+              title="Blockers"
+              color="#F3464B"
+              section={pulse.blockers}
+              recordType="Blocker"
+            />
           </div>
 
           <footer className="flex h-[58px] items-center justify-between border-t border-[#E6E7EC] px-6">
