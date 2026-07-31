@@ -93,7 +93,6 @@ function PulseGroup({
   title,
   color,
   section,
-  recordType,
 }: {
   title: string
   color: string
