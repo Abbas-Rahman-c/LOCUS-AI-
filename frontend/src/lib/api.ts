@@ -1,4 +1,5 @@
 import { getSupabaseClient } from './supabase'
+import { DEMO_EMAIL_KEY } from './sessionKeys'
 
 /**
  * Shared client for the FastAPI backend (not Supabase Edge Functions).
@@ -49,7 +50,22 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * Demo sessions (WelcomePage's "demo" button) never have a real Supabase
+ * session, but nothing about entering demo mode clears a *previous* real
+ * session's cache if one exists in the same tab — without this check, a
+ * user who signed in for real and later clicked into a demo session in the
+ * same tab would silently keep hitting the backend as their real tenant.
+ * Demo mode must never reach the real backend, full stop.
+ */
+function assertNotDemoMode(): void {
+  if (sessionStorage.getItem(DEMO_EMAIL_KEY)) {
+    throw new ApiError('Demo session has no backend account', 401)
+  }
+}
+
 async function exchangeForBackendSession(): Promise<BackendSession> {
+  assertNotDemoMode()
   const supabase = getSupabaseClient()
   const { data } = await supabase.auth.getSession()
   const supabaseToken = data.session?.access_token
@@ -88,6 +104,7 @@ async function exchangeForBackendSession(): Promise<BackendSession> {
 
 /** Returns a valid backend token, exchanging (or re-exchanging) as needed. */
 async function getBackendToken(): Promise<string> {
+  assertNotDemoMode()
   if (cachedSession && cachedSession.expiresAt > Date.now()) {
     return cachedSession.token
   }
@@ -108,6 +125,7 @@ export function clearBackendSession(): void {
 
 /** Returns the caller's tenant_id, exchanging (or re-exchanging) a backend session as needed. */
 export async function getTenantId(): Promise<string> {
+  assertNotDemoMode()
   if (cachedSession && cachedSession.expiresAt > Date.now()) {
     return cachedSession.tenantId
   }

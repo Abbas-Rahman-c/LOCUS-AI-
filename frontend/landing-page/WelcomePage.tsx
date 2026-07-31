@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getAuthCallbackUrl } from '../src/lib/appUrl'
+import { clearBackendSession } from '../src/lib/api'
 import { DEMO_EMAIL_KEY, WORKSPACES_DONE_KEY } from '../src/lib/sessionKeys'
 import { getSupabaseClient, isSupabaseConfigured } from '../src/lib/supabase'
 import { GoogleIcon } from './components/GoogleIcon'
@@ -113,6 +114,13 @@ export default function WelcomePage() {
           <button
             type="button"
             onClick={() => {
+              // A real session may still be signed in from earlier in this
+              // tab - fully separate demo mode from it so demo screens never
+              // silently read or write a previous real account's data.
+              clearBackendSession()
+              if (isSupabaseConfigured()) {
+                void getSupabaseClient().auth.signOut()
+              }
               sessionStorage.setItem(DEMO_EMAIL_KEY, 'youremail@gmail.com')
               sessionStorage.removeItem(WORKSPACES_DONE_KEY)
               navigate('/connect-workspaces', { replace: true })

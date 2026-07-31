@@ -15,6 +15,7 @@ import OAuthCallback from './OAuthCallback'
 import SourceOAuthCallback from './SourceOAuthCallback'
 import { getSupabaseClient, isSupabaseConfigured } from './lib/supabase'
 import { DEMO_EMAIL_KEY, WORKSPACES_DONE_KEY } from './lib/sessionKeys'
+import { fetchSourceConnections } from './lib/sourceConnections'
 import DecisionReady from './DecisionReady'
 import { DashboardShell } from './components/DashboardShell'
 import MainDashboardEntry from './pages/MainDashboardEntry'
@@ -62,25 +63,69 @@ function useAuthEmail() {
   return { userEmail, authReady }
 }
 
-function useWorkspacesConnected() {
+/**
+ * The WORKSPACES_DONE_KEY sessionStorage flag only covers the current tab's
+ * session, so a returning real user in a fresh tab (new browser, reopened
+ * window) would otherwise get sent through onboarding again even though
+ * their account already has connections. For a real (non-demo) session,
+ * once auth is ready this checks the real backend once as a fallback -
+ * demo sessions keep using sessionStorage only, since they have no backend
+ * account to check against.
+ */
+function useWorkspacesConnected(userEmail: string | null, authReady: boolean) {
   const [workspacesConnected, setWorkspacesConnected] = useState(
     () => sessionStorage.getItem(WORKSPACES_DONE_KEY) === '1',
   )
+  const [checked, setChecked] = useState(
+    () => sessionStorage.getItem(WORKSPACES_DONE_KEY) === '1',
+  )
+
+  useEffect(() => {
+    if (!authReady || !userEmail || workspacesConnected) {
+      if (authReady) setChecked(true)
+      return
+    }
+    if (sessionStorage.getItem(DEMO_EMAIL_KEY)) {
+      setChecked(true)
+      return
+    }
+
+    let active = true
+    fetchSourceConnections()
+      .then((rows) => {
+        if (!active) return
+        if (rows.some((row) => row.status === 'active')) {
+          sessionStorage.setItem(WORKSPACES_DONE_KEY, '1')
+          setWorkspacesConnected(true)
+        }
+      })
+      .catch(() => {
+        // No existing connections (or a transient error) - fall through to
+        // the normal connect-workspaces screen, same as before this check existed.
+      })
+      .finally(() => {
+        if (active) setChecked(true)
+      })
+
+    return () => {
+      active = false
+    }
+  }, [authReady, userEmail, workspacesConnected])
 
   const markConnected = () => {
     sessionStorage.setItem(WORKSPACES_DONE_KEY, '1')
     setWorkspacesConnected(true)
   }
 
-  return { workspacesConnected, markConnected }
+  return { workspacesConnected, markConnected, checked }
 }
 
 function ConnectWorkspacesRoute() {
   const navigate = useNavigate()
   const { userEmail, authReady } = useAuthEmail()
-  const { workspacesConnected, markConnected } = useWorkspacesConnected()
+  const { workspacesConnected, markConnected, checked } = useWorkspacesConnected(userEmail, authReady)
 
-  if (!authReady) {
+  if (!authReady || (userEmail && !checked)) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-white text-sm text-[#6B7280]">
         Loading…
@@ -109,7 +154,7 @@ function AuthRoutes() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const { userEmail, authReady } = useAuthEmail()
-  const { workspacesConnected } = useWorkspacesConnected()
+  const { workspacesConnected, checked } = useWorkspacesConnected(userEmail, authReady)
 
   const isOAuthCallback =
     searchParams.has('auth_callback') ||
@@ -120,7 +165,7 @@ function AuthRoutes() {
     return <OAuthCallback />
   }
 
-  if (!authReady) {
+  if (!authReady || (userEmail && !checked)) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-white text-sm text-[#6B7280]">
         Loading…

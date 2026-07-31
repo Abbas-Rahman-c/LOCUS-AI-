@@ -170,3 +170,31 @@ export async function connectSource(sourceId: SourceId): Promise<{ success: bool
     })()
   })
 }
+
+/**
+ * Disconnects a source. When deleteHistory is true, also permanently
+ * deletes every decision and raw event captured from that source for this
+ * tenant - irreversible, callers must confirm with the user first.
+ */
+export async function disconnectSource(
+  sourceId: SourceId,
+  deleteHistory: boolean,
+): Promise<{ success: boolean; error?: string }> {
+  const { data: sessionData } = await getSupabaseClient().auth.getSession()
+  const accessToken = sessionData.session?.access_token
+  if (!accessToken) {
+    return { success: false, error: 'Not signed in.' }
+  }
+
+  const { data, error } = await getSupabaseClient().functions.invoke('capture-source-rules', {
+    body: { action: deleteHistory ? 'disconnect_and_delete' : 'disconnect', source: sourceId },
+  })
+
+  if (error) {
+    return { success: false, error: error.message }
+  }
+  if (data?.error) {
+    return { success: false, error: String(data.error) }
+  }
+  return { success: true }
+}

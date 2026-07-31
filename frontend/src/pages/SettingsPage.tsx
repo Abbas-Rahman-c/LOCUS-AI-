@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import AccountSettings from './AccountSettings'
 import { getSupabaseClient } from '../lib/supabase'
-import { connectSource, fetchSourceConnections, type SourceId } from '../lib/sourceConnections'
+import { connectSource, disconnectSource, fetchSourceConnections, type SourceId } from '../lib/sourceConnections'
 
 type SettingsSection =
   | 'Account'
@@ -471,6 +471,11 @@ function ConnectedSourcesSettings() {
   const [connectingId, setConnectingId] = useState<SourceId | null>(null)
   const [error, setError] = useState('')
 
+  const [disconnectTarget, setDisconnectTarget] = useState<SourceId | null>(null)
+  const [deleteHistoryChoice, setDeleteHistoryChoice] = useState(false)
+  const [isDisconnecting, setIsDisconnecting] = useState(false)
+  const [disconnectError, setDisconnectError] = useState('')
+
   useEffect(() => {
     let active = true
     fetchSourceConnections()
@@ -511,6 +516,32 @@ function ConnectedSourcesSettings() {
     }
     setConnectingId(null)
   }
+
+  const openDisconnectConfirm = (sourceId: SourceId) => {
+    setDisconnectTarget(sourceId)
+    setDeleteHistoryChoice(false)
+    setDisconnectError('')
+  }
+
+  const handleDisconnect = async () => {
+    if (!disconnectTarget) return
+    setIsDisconnecting(true)
+    setDisconnectError('')
+
+    const result = await disconnectSource(disconnectTarget, deleteHistoryChoice)
+    if (result.success) {
+      setConnections((current) => ({
+        ...current,
+        [disconnectTarget]: { status: 'revoked', lastSyncedAt: null },
+      }))
+      setDisconnectTarget(null)
+    } else {
+      setDisconnectError(result.error ?? 'Unable to disconnect.')
+    }
+    setIsDisconnecting(false)
+  }
+
+  const disconnectTargetMeta = CONNECTED_SOURCE_META.find((s) => s.id === disconnectTarget)
 
   return (
     <>
@@ -567,6 +598,15 @@ function ConnectedSourcesSettings() {
                   >
                     {connectingId === source.id ? 'Connecting...' : isActive ? 'Reconnect' : 'Connect'}
                   </button>
+                  {isActive ? (
+                    <button
+                      type="button"
+                      onClick={() => openDisconnectConfirm(source.id)}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-[#FECACA] bg-white px-3 py-1.5 text-[13px] font-semibold text-[#DC2626] transition-colors hover:bg-[#FEF2F2]"
+                    >
+                      Disconnect
+                    </button>
+                  ) : null}
                 </div>
               </div>
             )
@@ -578,6 +618,90 @@ function ConnectedSourcesSettings() {
         <p role="alert" className="mt-3 text-[13px] text-[#B4232C]">
           {error}
         </p>
+      ) : null}
+
+      {disconnectTarget && disconnectTargetMeta ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/35 px-4"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget && !isDisconnecting) setDisconnectTarget(null)
+          }}
+        >
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="disconnect-source-title"
+            className="w-full max-w-[440px] rounded-[12px] bg-white p-6 shadow-[0_20px_55px_rgba(17,24,39,0.22)]"
+          >
+            <h2 id="disconnect-source-title" className="text-[18px] font-semibold text-[#111827]">
+              Disconnect {disconnectTargetMeta.name}?
+            </h2>
+            <p className="mt-2 text-[14px] leading-5 text-[#6B7280]">
+              Locus will stop reading new content from {disconnectTargetMeta.name}. Choose what
+              happens to the decisions already captured from it.
+            </p>
+
+            <div className="mt-4 flex flex-col gap-2">
+              <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-[#E5E7EB] p-3 has-[:checked]:border-[#5A45FF] has-[:checked]:bg-[#F8F7FF]">
+                <input
+                  type="radio"
+                  name="disconnect-history-choice"
+                  checked={!deleteHistoryChoice}
+                  onChange={() => setDeleteHistoryChoice(false)}
+                  className="mt-0.5"
+                />
+                <span>
+                  <span className="block text-[14px] font-semibold text-[#111827]">Keep the history</span>
+                  <span className="block text-[13px] text-[#6B7280]">
+                    Disconnect but keep everything already captured from {disconnectTargetMeta.name}.
+                  </span>
+                </span>
+              </label>
+              <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-[#E5E7EB] p-3 has-[:checked]:border-[#B4232C] has-[:checked]:bg-[#FFF7F7]">
+                <input
+                  type="radio"
+                  name="disconnect-history-choice"
+                  checked={deleteHistoryChoice}
+                  onChange={() => setDeleteHistoryChoice(true)}
+                  className="mt-0.5"
+                />
+                <span>
+                  <span className="block text-[14px] font-semibold text-[#B4232C]">Delete the history</span>
+                  <span className="block text-[13px] text-[#6B7280]">
+                    Permanently delete every decision captured from {disconnectTargetMeta.name}. This
+                    cannot be undone.
+                  </span>
+                </span>
+              </label>
+            </div>
+
+            {disconnectError ? (
+              <p role="alert" className="mt-3 text-[13px] text-[#B4232C]">
+                {disconnectError}
+              </p>
+            ) : null}
+
+            <div className="mt-5 grid grid-cols-2 gap-3">
+              <button
+                type="button"
+                disabled={isDisconnecting}
+                onClick={() => setDisconnectTarget(null)}
+                className="h-10 rounded-lg border border-[#DEE1E8] bg-white text-[14px] font-semibold text-[#4B3BD4] hover:bg-[#F8F7FF] disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isDisconnecting}
+                onClick={() => void handleDisconnect()}
+                className="h-10 rounded-lg bg-[#B4232C] text-[14px] font-semibold text-white hover:bg-[#981D24] disabled:cursor-wait disabled:opacity-60"
+              >
+                {isDisconnecting ? 'Disconnecting...' : 'Disconnect'}
+              </button>
+            </div>
+          </section>
+        </div>
       ) : null}
     </>
   )
