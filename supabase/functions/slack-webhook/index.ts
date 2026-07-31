@@ -100,38 +100,43 @@ Deno.serve(async (req: Request) => {
     return new Response("OK", { status: 200 });
   }
 
-  // Look up the real tenant via the source_connections row OAuth created,
-  // matching on the Slack team ID that comes with every event payload.
+  // Look up every tenant with an active connection to this Slack workspace,
+  // matching on the team ID that comes with every event payload. A single
+  // Slack workspace can legitimately be connected by more than one tenant
+  // (e.g. several people on the same team each connecting Locus
+  // independently) - every one of them should get their own separate
+  // capture of the same message, not just whichever connection happens to
+  // be returned first.
   const teamId = String(payload.team_id ?? "");
-  const connection = await withAdmin(async (sql) => {
-    const rows = await sql`
+  const connections = await withAdmin(async (sql) => {
+    return await sql`
       select tenant_id
       from public.source_connections
       where source = 'slack'
         and external_workspace_id = ${teamId}
-      limit 1
+        and status = 'active'
     `;
-    return rows[0] ?? null;
   });
 
-  if (!connection) {
-    // No matching connection — can't attribute this event to a tenant.
+  if (connections.length === 0) {
+    // No matching connection — can't attribute this event to any tenant.
     // Acknowledge so Slack doesn't retry, but don't enqueue.
     return new Response("OK (no matching connection)", { status: 200 });
   }
 
-  const tenantId = connection.tenant_id;
-
-  await enqueueEvent({
-    tenant_id: tenantId,
-    source: "slack",
-    source_id: String(event.ts ?? payload.event_id ?? crypto.randomUUID()),
-    actor: String(event.user ?? "unknown"),
-    thread_ref: String(event.thread_ts ?? event.channel ?? ""),
-    permission_scope: event.channel ? [String(event.channel)] : [],
-    raw_content: { text: String(event.text ?? "") },
-    received_at: new Date().toISOString(),
-  });
+  const sourceId = String(event.ts ?? payload.event_id ?? crypto.randomUUID());
+  for (const connection of connections) {
+    await enqueueEvent({
+      tenant_id: connection.tenant_id,
+      source: "slack",
+      source_id: sourceId,
+      actor: String(event.user ?? "unknown"),
+      thread_ref: String(event.thread_ts ?? event.channel ?? ""),
+      permission_scope: event.channel ? [String(event.channel)] : [],
+      raw_content: { text: String(event.text ?? "") },
+      received_at: new Date().toISOString(),
+    });
+  }
 
   return new Response("OK", { status: 200 });
 });
