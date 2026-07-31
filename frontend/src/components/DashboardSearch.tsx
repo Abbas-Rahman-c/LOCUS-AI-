@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { getSupabaseClient } from '../lib/supabase'
 import { ApiError, searchDecisions, type SearchResponse } from '../lib/api'
+import { DEMO_EMAIL_KEY } from '../lib/sessionKeys'
 
 /**
  * Fire-and-forget: logs a completed search to search_history via the
@@ -49,6 +50,12 @@ export function DashboardSearch() {
   const [recentSearches, setRecentSearches] = useState<RecentSearch[]>([])
 
   useEffect(() => {
+    const demoEmail = sessionStorage.getItem(DEMO_EMAIL_KEY)
+    if (demoEmail) {
+      setGreetingName(firstName(demoEmail, null))
+      return
+    }
+
     const supabase = getSupabaseClient()
     void supabase.auth.getSession().then(({ data }) => {
       const user = data.session?.user
