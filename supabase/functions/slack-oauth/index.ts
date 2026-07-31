@@ -36,7 +36,10 @@ Deno.serve(async (req: Request) => {
       slackAuthUrl.searchParams.set("client_id", CLIENT_ID ?? "");
       slackAuthUrl.searchParams.set(
         "scope",
-        "channels:history,groups:history,im:history,mpim:history,chat:write",
+        // read scopes added so conversations.list works (Capture Controls'
+        // real channel listing) - existing connections need to reconnect to
+        // pick these up, a token from before this change won't have them.
+        "channels:history,groups:history,im:history,mpim:history,chat:write,channels:read,groups:read,mpim:read,im:read",
       );
       slackAuthUrl.searchParams.set("redirect_uri", REDIRECT_URI ?? "");
       slackAuthUrl.searchParams.set("state", tenantId);

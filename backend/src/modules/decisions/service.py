@@ -21,7 +21,9 @@ from modules.security.tenant_guard import assert_tenant_scope
 log = logging.getLogger(__name__)
 
 
-def _build_decision_out(row: dict, actors: list, source_links: list) -> DecisionOut:
+def _build_decision_out(
+    row: dict, actors: list, source_links: list, source_platforms: list | None = None,
+) -> DecisionOut:
     """Construct a DecisionOut from a DB row plus pre-fetched actors and source links."""
     return DecisionOut(
         id=row["id"],
@@ -36,6 +38,7 @@ def _build_decision_out(row: dict, actors: list, source_links: list) -> Decision
         scope=row["scope"],
         confidence=float(row["confidence"]),
         source_links=source_links,
+        source_platforms=source_platforms or [],
         created_at=row["created_at"],
         updated_at=row["updated_at"],
     )
@@ -54,7 +57,8 @@ async def list_decisions(
         rows = await conn.fetch(
             """
             SELECT id, tenant_id, record_type, decision_statement, rationale,
-                   alternatives_considered, status, superseded_by, scope, confidence, created_at, updated_at
+                   alternatives_considered, status, superseded_by, scope, confidence,
+                   origin_raw_event_id, created_at, updated_at
             FROM decisions
             WHERE tenant_id = $1
             ORDER BY created_at DESC
@@ -72,6 +76,7 @@ async def list_decisions(
         decision_ids = [r["id"] for r in rows]
         actors_by_dec: dict = {}
         sources_by_dec: dict = {}
+        platforms_by_dec: dict = {}
 
         if decision_ids:
             actor_rows = await conn.fetch(
@@ -106,6 +111,34 @@ async def list_decisions(
                 assert_tenant_scope(sr["tenant_id"], tenant_id)
                 sources_by_dec.setdefault(sr["decision_id"], []).append(sr["permalink"])
 
+            # source_platforms comes straight from decisions.origin_raw_event_id ->
+            # raw_events.source - always populated for every real ingested
+            # decision, unlike decision_sources (which only gets a row when a
+            # connector supplies source_permalink, which none currently do).
+            origin_ids = [
+                r["origin_raw_event_id"] for r in rows
+                if "origin_raw_event_id" in r.keys() and r["origin_raw_event_id"]
+            ]
+            if origin_ids:
+                platform_rows = await conn.fetch(
+                    """
+                    SELECT id, tenant_id, source
+                    FROM raw_events
+                    WHERE id = ANY($1) AND tenant_id = $2
+                    """,
+                    origin_ids, tenant_id,
+                )
+                platform_by_origin = {}
+                for pr in platform_rows:
+                    assert_tenant_scope(pr["tenant_id"], tenant_id)
+                    platform_by_origin[pr["id"]] = pr["source"]
+                for row in rows:
+                    if "origin_raw_event_id" not in row.keys():
+                        continue
+                    origin_id = row["origin_raw_event_id"]
+                    if origin_id and origin_id in platform_by_origin:
+                        platforms_by_dec[row["id"]] = [platform_by_origin[origin_id]]
+
     items = []
     for row in rows:
         assert_tenant_scope(row["tenant_id"], tenant_id)
@@ -113,6 +146,7 @@ async def list_decisions(
             dict(row),
             actors=actors_by_dec.get(row["id"], []),
             source_links=sources_by_dec.get(row["id"], []),
+            source_platforms=platforms_by_dec.get(row["id"], []),
         ))
 
     return DecisionListResponse(items=items, total=total)
@@ -137,7 +171,8 @@ async def get_decision(
         row = await conn.fetchrow(
             """
             SELECT id, tenant_id, record_type, decision_statement, rationale,
-                   alternatives_considered, status, superseded_by, scope, confidence, created_at, updated_at
+                   alternatives_considered, status, superseded_by, scope, confidence,
+                   origin_raw_event_id, created_at, updated_at
             FROM decisions
             WHERE id = $1 AND tenant_id = $2
             """,
@@ -181,7 +216,22 @@ async def get_decision(
             assert_tenant_scope(sr["tenant_id"], tenant_id)
             source_links.append(sr["permalink"])
 
-    return _build_decision_out(dict(row), actors=actors, source_links=source_links)
+        # source_platforms comes from decisions.origin_raw_event_id ->
+        # raw_events.source directly - always populated, unlike
+        # decision_sources (only written when source_permalink is given,
+        # which no connector currently provides).
+        source_platforms: list[str] = []
+        if "origin_raw_event_id" in row.keys() and row["origin_raw_event_id"]:
+            platform = await conn.fetchval(
+                "SELECT source FROM raw_events WHERE id = $1 AND tenant_id = $2",
+                row["origin_raw_event_id"], tenant_id,
+            )
+            if platform:
+                source_platforms.append(platform)
+
+    return _build_decision_out(
+        dict(row), actors=actors, source_links=source_links, source_platforms=source_platforms,
+    )
 
 
 async def create_decision(

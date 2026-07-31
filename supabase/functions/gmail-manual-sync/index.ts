@@ -3,6 +3,56 @@ import { enqueueEvent, IngestionEnvelope } from "../_shared/queue.ts";
 
 console.log("Gmail manual sync started!");
 
+const GMAIL_CLIENT_ID = Deno.env.get("GMAIL_CLIENT_ID");
+const GMAIL_CLIENT_SECRET = Deno.env.get("GMAIL_CLIENT_SECRET");
+
+/**
+ * Google access tokens expire in ~1 hour; oauth_token_ref goes stale fast.
+ * Refreshes it up front using the refresh_token captured at connect time
+ * (stored in cursor_state by gmail-oauth's callback), and persists the new
+ * access token so later syncs don't need to refresh again until it expires.
+ */
+// deno-lint-ignore no-explicit-any
+async function refreshAccessToken(source: any): Promise<string | null> {
+  const refreshToken = (source.cursor_state as Record<string, unknown> | null)?.refresh_token as
+    | string
+    | undefined;
+  if (!refreshToken) {
+    console.error(`No refresh_token stored for source ${source.id}; cannot refresh.`);
+    return null;
+  }
+
+  const resp = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      client_id: GMAIL_CLIENT_ID ?? "",
+      client_secret: GMAIL_CLIENT_SECRET ?? "",
+      refresh_token: refreshToken,
+      grant_type: "refresh_token",
+    }),
+  });
+
+  if (!resp.ok) {
+    console.error(`Gmail token refresh failed for source ${source.id}:`, await resp.text());
+    return null;
+  }
+
+  const data = await resp.json();
+  const newAccessToken = data.access_token as string | undefined;
+  if (!newAccessToken) return null;
+
+  await withTenant(String(source.tenant_id), async (sql) => {
+    await sql`
+      update public.source_connections
+      set oauth_token_ref = ${newAccessToken}
+      where id = ${source.id}
+    `;
+  });
+
+  return newAccessToken;
+}
+
 Deno.serve(async (_req) => {
   // Cross-tenant list of active Gmail connections (admin / bypass)
   const sources = await withAdmin(async (sql) => {
@@ -20,9 +70,9 @@ Deno.serve(async (_req) => {
     try {
       console.log(`Syncing Gmail: ${source.external_workspace_id}`);
 
-      const accessToken = source.oauth_token_ref;
+      const accessToken = await refreshAccessToken(source);
       if (!accessToken) {
-        console.error(`No access token for source ${source.id}`);
+        console.error(`Unable to obtain a valid access token for source ${source.id}`);
         continue;
       }
 
@@ -84,15 +134,15 @@ Deno.serve(async (_req) => {
           source_id: rawMsg.id,
           actor: actor || "unknown",
           thread_ref: rawMsg.threadId,
-          permission_scope: source.external_workspace_id,
-          raw_content: JSON.stringify({
+          permission_scope: source.external_workspace_id ? [String(source.external_workspace_id)] : [],
+          raw_content: {
             subject: getHeader("Subject"),
             body,
             from: fromHeader,
             to: getHeader("To"),
             date: getHeader("Date"),
             snippet: rawMsg.snippet,
-          }),
+          },
           received_at: new Date().toISOString(),
         };
 

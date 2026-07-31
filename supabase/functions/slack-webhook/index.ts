@@ -128,8 +128,8 @@ Deno.serve(async (req: Request) => {
     source_id: String(event.ts ?? payload.event_id ?? crypto.randomUUID()),
     actor: String(event.user ?? "unknown"),
     thread_ref: String(event.thread_ts ?? event.channel ?? ""),
-    permission_scope: String(event.channel ?? ""),
-    raw_content: String(event.text ?? ""),
+    permission_scope: event.channel ? [String(event.channel)] : [],
+    raw_content: { text: String(event.text ?? "") },
     received_at: new Date().toISOString(),
   });
 

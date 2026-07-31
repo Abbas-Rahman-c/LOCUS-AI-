@@ -9,8 +9,10 @@ import {
 } from 'react-router-dom'
 import LandingPage from '../landing-page/LandingPage'
 import WelcomePage from '../landing-page/WelcomePage'
+import HowItWorks from '../landing-page/HowItWorks'
 import ConnectWorkspaces from './ConnectWorkspaces'
 import OAuthCallback from './OAuthCallback'
+import SourceOAuthCallback from './SourceOAuthCallback'
 import { getSupabaseClient, isSupabaseConfigured } from './lib/supabase'
 import { DEMO_EMAIL_KEY, WORKSPACES_DONE_KEY } from './lib/sessionKeys'
 import DecisionReady from './DecisionReady'
@@ -154,12 +156,20 @@ function App() {
         {/* Full 3-section landing (Get Started + How it works + Why Locus) */}
         <Route path="/how-it-works" element={<HowItWorksMarketing />} />
 
+        {/* Slack/Notion/Gmail OAuth popup lands here after the provider redirects back */}
+        <Route path="/oauth/source-callback" element={<SourceOAuthCallback />} />
+
         {/* Dashboard pages share one shell / one localhost */}
         <Route element={<DashboardShell />}>
           <Route path="/dashboard" element={<MainDashboardEntry />} />
           <Route path="/decision-log" element={<DecisionLogPage />} />
           <Route path="/team-pulse" element={<TeamPulse />} />
           <Route path="/settings" element={<SettingsPage />} />
+          {/* In-app "How it works" — keeps the dashboard nav/session visible,
+              unlike the marketing /how-it-works route which is the full
+              pre-login landing page and would otherwise strand a logged-in
+              user with no way back. */}
+          <Route path="/dashboard/how-it-works" element={<HowItWorks />} />
         </Route>
 
         <Route path="*" element={<Navigate to="/" replace />} />
