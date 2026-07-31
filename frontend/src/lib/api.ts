@@ -198,6 +198,11 @@ export interface SearchResponse {
 
 export type DecisionRecordType = 'decision' | 'action_item' | 'blocker'
 
+export interface ActorRef {
+  id: string
+  role: string
+}
+
 export interface DecisionOut {
   id: string
   tenant_id: string
@@ -205,6 +210,7 @@ export interface DecisionOut {
   decision_statement: string
   rationale: string | null
   alternatives_considered: string[]
+  actors: ActorRef[]
   status: string
   superseded_by: string | null
   scope: string

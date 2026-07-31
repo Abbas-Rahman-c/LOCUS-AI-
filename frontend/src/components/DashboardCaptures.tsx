@@ -1,41 +1,13 @@
 import { useEffect, useState } from 'react'
-import { ApiError, listDecisions, type DecisionOut, type DecisionRecordType } from '../lib/api'
-
-const TAG_LABELS: Record<DecisionRecordType, string> = {
-  decision: 'Decision',
-  action_item: 'Action Item',
-  blocker: 'Blocker',
-}
-
-const TAG_STYLES: Record<DecisionRecordType, string> = {
-  decision: 'bg-[#EEEBFF] text-[#5A45FF]',
-  blocker: 'bg-[#FEE2E2] text-[#DC2626]',
-  action_item: 'bg-[#ECFCCB] text-[#4D7C0F]',
-}
-
-const PLATFORM_LABELS: Record<string, string> = {
-  gmail: 'Gmail',
-  slack: 'Slack',
-  notion: 'Notion',
-}
-
-function isKnownRecordType(value: string): value is DecisionRecordType {
-  return value === 'decision' || value === 'action_item' || value === 'blocker'
-}
-
-function timeAgo(iso: string, now = Date.now()) {
-  const elapsedMs = Math.max(0, now - new Date(iso).getTime())
-  const hours = Math.floor(elapsedMs / 3_600_000)
-  if (hours < 1) return 'just now'
-  if (hours < 24) return `${hours}h ago`
-  const days = Math.floor(hours / 24)
-  return `${days}d ago`
-}
+import { ApiError, listDecisions, type DecisionOut } from '../lib/api'
+import { decisionToMemoryRecord } from '../lib/memoryRecord'
+import { MemoryRecordDetail, TYPE_STYLES } from './MemoryRecordDetail'
 
 export function DashboardCaptures() {
   const [captures, setCaptures] = useState<DecisionOut[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState('')
+  const [expandedId, setExpandedId] = useState<string | null>(null)
 
   useEffect(() => {
     let active = true
@@ -57,7 +29,7 @@ export function DashboardCaptures() {
   return (
     <section>
       <h2 className="mb-3 text-[11px] font-semibold tracking-[0.08em] text-[#9CA3AF] uppercase">
-        Build Memory
+        Memory Feed
       </h2>
       <div className="overflow-hidden rounded-2xl border border-[#E8E8ED] bg-white shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
         {isLoading ? (
@@ -69,29 +41,35 @@ export function DashboardCaptures() {
         ) : (
           <ul>
             {captures.map((capture, i) => {
-              const recordType = isKnownRecordType(capture.record_type)
-                ? capture.record_type
-                : 'decision'
+              const record = decisionToMemoryRecord(capture)
+              const isExpanded = expandedId === capture.id
               return (
                 <li
                   key={capture.id}
-                  className={`flex items-center gap-3 px-4 py-3.5 ${
-                    i < captures.length - 1 ? 'border-b border-[#F0F0F4]' : ''
-                  }`}
+                  className={i < captures.length - 1 ? 'border-b border-[#F0F0F4]' : ''}
                 >
-                  <span
-                    className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold ${TAG_STYLES[recordType]}`}
-                  >
-                    {TAG_LABELS[recordType]}
-                  </span>
-                  <p className="min-w-0 flex-1 truncate text-[14px] text-[#111827]">
-                    {capture.decision_statement}
-                  </p>
-                  <span className="shrink-0 text-[12px] text-[#9CA3AF]">
-                    {capture.source_platforms[0]
-                      ? `${PLATFORM_LABELS[capture.source_platforms[0]] ?? capture.source_platforms[0]} · ${timeAgo(capture.created_at)}`
-                      : timeAgo(capture.created_at)}
-                  </span>
+                  {isExpanded ? (
+                    <div className="bg-white px-4 py-4">
+                      <MemoryRecordDetail record={record} onHeaderClick={() => setExpandedId(null)} />
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setExpandedId(capture.id)}
+                      className="flex w-full items-center gap-3 px-4 py-3.5 text-left transition-colors hover:bg-[#FAFAFB]"
+                      aria-expanded={false}
+                    >
+                      <span
+                        className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold ${TYPE_STYLES[record.type]}`}
+                      >
+                        {record.type}
+                      </span>
+                      <p className="min-w-0 flex-1 truncate text-[14px] text-[#111827]">
+                        {record.title}
+                      </p>
+                      <span className="shrink-0 text-[12px] text-[#9CA3AF]">{record.meta}</span>
+                    </button>
+                  )}
                 </li>
               )
             })}

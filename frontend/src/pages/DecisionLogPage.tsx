@@ -1,10 +1,17 @@
-import { useEffect, useMemo, useState } from 'react'
+import { Fragment, useEffect, useMemo, useState } from 'react'
 import {
   ApiError,
   listDecisions,
   type DecisionOut,
   type DecisionRecordType,
 } from '../lib/api'
+import { decisionToMemoryRecord } from '../lib/memoryRecord'
+import {
+  MemoryRecordDetail,
+  STATUS_STYLES,
+  TYPE_STYLES,
+  type MemoryRecordType,
+} from '../components/MemoryRecordDetail'
 
 type FilterType = 'All Types' | DecisionRecordType
 
@@ -15,16 +22,10 @@ const FILTERS: { id: FilterType; label: string }[] = [
   { id: 'blocker', label: 'Blocker' },
 ]
 
-const TYPE_LABELS: Record<DecisionRecordType, string> = {
+const TYPE_LABELS: Record<DecisionRecordType, MemoryRecordType> = {
   decision: 'Decision',
   action_item: 'Action Item',
   blocker: 'Blocker',
-}
-
-const TYPE_STYLES: Record<DecisionRecordType, string> = {
-  decision: 'bg-[#EEEBFF] text-[#5A45FF]',
-  action_item: 'bg-[#ECFCCB] text-[#4D7C0F]',
-  blocker: 'bg-[#FEE2E2] text-[#DC2626]',
 }
 
 const PAGE_SIZE = 12
@@ -72,6 +73,7 @@ export default function DecisionLogPage() {
   const [total, setTotal] = useState(0)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState('')
+  const [expandedId, setExpandedId] = useState<string | null>(null)
 
   useEffect(() => {
     let active = true
@@ -100,7 +102,7 @@ export default function DecisionLogPage() {
 
   // The backend does not support filtering by record_type server side
   // (GET /api/v1/decisions only takes limit/offset), so this filters within
-  // the currently loaded page only, not across the full 274+ record archive.
+  // the currently loaded page only, not across the full archive.
   // "Showing X of Y" below reflects that: Y is this page's real count, not a
   // globally-filtered total.
   const filteredEntries = useMemo(() => {
@@ -116,8 +118,7 @@ export default function DecisionLogPage() {
         Memory Explorer
       </h1>
       <p className="mt-2 text-[15px] text-[#6B7280]">
-        Every piece of organizational memory — searchable, cited, and ready
-        for context.
+        Every captured decision, action item, and blocker — searchable and cited.
       </p>
 
       <div
@@ -133,7 +134,10 @@ export default function DecisionLogPage() {
               type="button"
               role="radio"
               aria-checked={isSelected}
-              onClick={() => setSelectedType(filter.id)}
+              onClick={() => {
+                setSelectedType(filter.id)
+                setCurrentPage(1)
+              }}
               className={`rounded-full px-4 py-2 text-[13px] font-semibold transition-colors ${
                 isSelected
                   ? 'bg-[#5A45FF] text-white'
@@ -156,7 +160,7 @@ export default function DecisionLogPage() {
         <table className="w-full border-collapse text-left">
           <thead>
             <tr className="border-b border-[#F0F0F4]">
-              {['Type', 'Context Summary', 'Memory Source', 'Date', 'Status'].map((heading) => (
+              {['Type', 'Summary', 'Source', 'Date', 'Status'].map((heading) => (
                 <th
                   key={heading}
                   className="px-5 py-3.5 text-[12px] font-semibold tracking-[0.02em] text-[#9CA3AF]"
@@ -184,44 +188,57 @@ export default function DecisionLogPage() {
                 const recordType = isKnownRecordType(entry.record_type)
                   ? entry.record_type
                   : 'decision'
-                const isSuperseded = entry.status === 'superseded'
+                const isSuperseded = Boolean(entry.superseded_by)
+                const isExpanded = expandedId === entry.id
                 return (
-                  <tr
-                    key={entry.id}
-                    className={
-                      index < filteredEntries.length - 1
-                        ? 'border-b border-[#F0F0F4]'
-                        : ''
-                    }
-                  >
-                    <td className="px-5 py-3.5">
-                      <span
-                        className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold ${TYPE_STYLES[recordType]}`}
-                      >
-                        {TYPE_LABELS[recordType]}
-                      </span>
-                    </td>
-                    <td className="max-w-[360px] truncate px-5 py-3.5 text-[14px] text-[#111827]">
-                      {entry.decision_statement}
-                    </td>
-                    <td className="whitespace-nowrap px-5 py-3.5">
-                      <SourceCell sourceLinks={entry.source_links} sourcePlatforms={entry.source_platforms} />
-                    </td>
-                    <td className="whitespace-nowrap px-5 py-3.5 text-[14px] text-[#6B7280]">
-                      {formatDate(entry.created_at)}
-                    </td>
-                    <td className="px-5 py-3.5">
-                      <span
-                        className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold ${
-                          isSuperseded
-                            ? 'bg-[#F3F4F6] text-[#6B7280]'
-                            : 'bg-[#EEEBFF] text-[#5A45FF]'
-                        }`}
-                      >
-                        {isSuperseded ? 'Superseded' : 'Current'}
-                      </span>
-                    </td>
-                  </tr>
+                  <Fragment key={entry.id}>
+                    <tr
+                      onClick={() =>
+                        setExpandedId((current) => (current === entry.id ? null : entry.id))
+                      }
+                      className={`cursor-pointer transition-colors hover:bg-[#FAFAFB] ${
+                        isExpanded ? 'bg-[#FAFAFB]' : ''
+                      } ${
+                        index < filteredEntries.length - 1 || isExpanded
+                          ? 'border-b border-[#F0F0F4]'
+                          : ''
+                      }`}
+                      aria-expanded={isExpanded}
+                    >
+                      <td className="px-5 py-3.5">
+                        <span
+                          className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold ${TYPE_STYLES[TYPE_LABELS[recordType]]}`}
+                        >
+                          {TYPE_LABELS[recordType]}
+                        </span>
+                      </td>
+                      <td className="max-w-[360px] truncate px-5 py-3.5 text-[14px] text-[#111827]">
+                        {entry.decision_statement}
+                      </td>
+                      <td className="whitespace-nowrap px-5 py-3.5">
+                        <SourceCell sourceLinks={entry.source_links} sourcePlatforms={entry.source_platforms} />
+                      </td>
+                      <td className="whitespace-nowrap px-5 py-3.5 text-[14px] text-[#6B7280]">
+                        {formatDate(entry.created_at)}
+                      </td>
+                      <td className="px-5 py-3.5">
+                        <span
+                          className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold ${
+                            STATUS_STYLES[isSuperseded ? 'Superseded' : 'Current']
+                          }`}
+                        >
+                          {isSuperseded ? 'Superseded' : 'Current'}
+                        </span>
+                      </td>
+                    </tr>
+                    {isExpanded ? (
+                      <tr className="border-b border-[#F0F0F4]">
+                        <td colSpan={5} className="bg-[#F7F7F9] px-5 py-5">
+                          <MemoryRecordDetail record={decisionToMemoryRecord(entry)} compactHeader />
+                        </td>
+                      </tr>
+                    ) : null}
+                  </Fragment>
                 )
               })
             )}

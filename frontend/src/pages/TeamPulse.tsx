@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { listAllDecisions, type DecisionOut, type DecisionRecordType } from '../lib/api'
+import { decisionToMemoryRecord } from '../lib/memoryRecord'
+import { MemoryRecordDetail } from '../components/MemoryRecordDetail'
 
 type PulseSection = {
   count: number
   description: string
-  items: string[]
+  items: DecisionOut[]
 }
 
 type TeamPulseData = {
@@ -35,7 +37,7 @@ function buildSection(decisions: DecisionOut[], type: DecisionRecordType): Pulse
   return {
     count: matches.length,
     description: sectionDescription(type, matches.length, shown.length),
-    items: shown.map((decision) => decision.decision_statement),
+    items: shown,
   }
 }
 
@@ -91,11 +93,14 @@ function PulseGroup({
   title,
   color,
   section,
+  recordType,
 }: {
   title: string
   color: string
   section: PulseSection
 }) {
+  const [expandedId, setExpandedId] = useState<string | null>(null)
+
   return (
     <section className="flex gap-3">
       <span
@@ -103,7 +108,7 @@ function PulseGroup({
         style={{ backgroundColor: color }}
         aria-hidden="true"
       />
-      <div>
+      <div className="min-w-0 flex-1">
         <h2 className="text-[14px] font-medium text-[#242334]">
           {title} <span className="font-normal text-[#8B91A1]">{section.count}</span>
         </h2>
@@ -111,14 +116,38 @@ function PulseGroup({
           {section.description}
         </p>
         <ul className="mt-2 space-y-1.5">
-          {section.items.map((item) => (
-            <li key={item} className="flex text-[13px] leading-5 text-[#30303E]">
-              <span className="mr-2.5 text-[#9197A5]" aria-hidden="true">
-                —
-              </span>
-              <span>{item}</span>
-            </li>
-          ))}
+          {section.items.map((decision) => {
+            const record = decisionToMemoryRecord(decision)
+            const isExpanded = expandedId === decision.id
+            return (
+              <li key={decision.id}>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setExpandedId((current) =>
+                      current === decision.id ? null : decision.id,
+                    )
+                  }
+                  className={`flex w-full text-left text-[13px] leading-5 transition-colors ${
+                    isExpanded
+                      ? 'font-medium text-[#5143DB]'
+                      : 'text-[#30303E] hover:text-[#5143DB]'
+                  }`}
+                  aria-expanded={isExpanded}
+                >
+                  <span className="mr-2.5 text-[#9197A5]" aria-hidden="true">
+                    —
+                  </span>
+                  <span>{decision.decision_statement}</span>
+                </button>
+                {isExpanded ? (
+                  <div className="mt-2 rounded-xl border border-[#E8E8ED] bg-[#FAFAFB] p-4">
+                    <MemoryRecordDetail record={record} />
+                  </div>
+                ) : null}
+              </li>
+            )
+          })}
         </ul>
       </div>
     </section>
