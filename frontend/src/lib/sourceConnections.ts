@@ -162,6 +162,7 @@ export async function connectSource(sourceId: SourceId): Promise<{ success: bool
         const authorizeUrl = new URL(`${SUPABASE_URL}/functions/v1/${sourceId}-oauth/authorize`)
         authorizeUrl.searchParams.set('tenant_id', tenantId)
         authorizeUrl.searchParams.set('access_token', accessToken)
+        authorizeUrl.searchParams.set('redirect_origin', window.location.origin)
         popup.location.href = authorizeUrl.toString()
       } catch (error) {
         settle({ success: false, error: error instanceof Error ? error.message : 'Unable to start connection.' })
