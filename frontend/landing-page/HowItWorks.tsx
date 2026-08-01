@@ -122,7 +122,7 @@ function ConnectToolsPanel() {
         <ul className="mt-6 space-y-3">
           {[
             'One-click OAuth authorization',
-            'Read-only access — we never post on your behalf',
+            'Read-only access. We never post on your behalf',
             'Works alongside your existing tools with zero friction',
           ].map((item) => (
             <li key={item} className="flex items-start gap-3 text-[14.5px] text-[#374151]">
@@ -165,7 +165,7 @@ function CapturePanel() {
       initials: 'MC',
       channel: '#product-decisions',
       time: '2:14 PM',
-      message: "We agreed — shipping v2 without the custom fields feature. That's the call.",
+      message: "We agreed to ship v2 without the custom fields feature. That's the call.",
       tag: 'Decision',
       tagClass: 'bg-[#eee8ff] text-[#5b52e8]',
       avatarClass: 'bg-[#ddd6fe] text-[#5b52e8]',
@@ -247,8 +247,8 @@ function CapturePanel() {
         </h2>
         <p className="mt-4 max-w-[420px] text-[15px] leading-[1.7] text-[#6b7280]">
           As your team communicates normally, Locus reads the signal. It
-          turns everyday work into organizational memory — context, knowledge,
-          and understanding — each with a source link, owner, and timestamp.
+          turns everyday work into organizational memory: context, knowledge,
+          and understanding, each with a source link, owner, and timestamp.
         </p>
         <div className="mt-6 space-y-3">
           {highlights.map((item) => (
@@ -403,14 +403,14 @@ export default function HowItWorks() {
     <div className="bg-white px-6 py-16 sm:px-10 lg:px-16 lg:py-20">
       <div className="mx-auto max-w-[980px]">
         <p className="text-[12px] font-semibold tracking-[0.08em] text-[#5b52e8]">
-          — HOW IT WORKS
+          HOW IT WORKS
         </p>
         <h1 className="mt-3 max-w-[720px] text-[36px] font-bold leading-[1.15] tracking-[-0.03em] text-[#111827] sm:text-[42px]">
           See how Locus turns your team&apos;s activity into{' '}
           <span className="text-[#5b52e8]">shared memory.</span>
         </h1>
         <p className="mt-4 max-w-[640px] text-[15px] leading-[1.7] text-[#6b7280]">
-          Locus connects to Slack, Notion, and your other tools — continuously
+          Locus connects to Slack, Notion, and your other tools, continuously
           building organizational memory, surfacing context, and giving your
           whole team a searchable understanding of what the organization
           already knows.

@@ -45,7 +45,7 @@ export default function DecisionLogPage() {
         Memory Explorer
       </h1>
       <p className="mt-2 text-[15px] text-[#6B7280]">
-        Every captured decision, action item, and blocker — searchable and cited.
+        Every captured decision, action item, and blocker is searchable and cited.
       </p>
 
       {activeFilter ? (
@@ -164,7 +164,7 @@ export default function DecisionLogPage() {
 
       <div className="mt-5 flex items-center justify-between">
         <p className="text-[13px] text-[#9CA3AF]">
-          Showing 1-{filteredEntries.length} of 100 Results
+          Showing 1 to {filteredEntries.length} of 100 Results
         </p>
 
         <div className="flex items-center gap-1.5">
