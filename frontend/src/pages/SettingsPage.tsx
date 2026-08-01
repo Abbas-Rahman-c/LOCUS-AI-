@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useNavigate } from 'react-router-dom'
 import AccountSettings from './AccountSettings'
 import { getSupabaseClient } from '../lib/supabase'
+import { DEMO_EMAIL_KEY, WORKSPACES_DONE_KEY } from '../lib/sessionKeys'
 import { connectSource, disconnectSource, fetchSourceConnections, type SourceId } from '../lib/sourceConnections'
 
 type SettingsSection =
@@ -1018,6 +1020,7 @@ function CaptureControlsSettings() {
 }
 
 export default function SettingsPage() {
+  const navigate = useNavigate()
   const [activeSection, setActiveSection] = useState<SettingsSection>('Account')
   const [blockCookies, setBlockCookies] = useState(false)
   const [excludePrivate, setExcludePrivate] = useState(false)
@@ -1025,10 +1028,29 @@ export default function SettingsPage() {
   const [weeklyPulse, setWeeklyPulse] = useState(true)
   const [emailNotifications, setEmailNotifications] = useState(true)
   const [inAppNotifications, setInAppNotifications] = useState(true)
+  const [signedInEmail, setSignedInEmail] = useState('')
 
-  const clearCookies = () => {
+  useEffect(() => {
+    const demoEmail = sessionStorage.getItem(DEMO_EMAIL_KEY)
+    if (demoEmail) {
+      setSignedInEmail(demoEmail)
+      return
+    }
+    void getSupabaseClient()
+      .auth.getSession()
+      .then(({ data }) => setSignedInEmail(data.session?.user.email ?? ''))
+  }, [])
+
+  const clearCookies = async () => {
+    // "Clear cookies" promises an immediate logout - it only reset a local
+    // toggle before and never touched the real session, so the button did
+    // not do what its own label said.
     setBlockCookies(false)
-    window.alert('Cookies cleared. You will need to sign in again on next visit.')
+    sessionStorage.removeItem(DEMO_EMAIL_KEY)
+    sessionStorage.removeItem(WORKSPACES_DONE_KEY)
+    sessionStorage.removeItem('locus:connected-tools')
+    await getSupabaseClient().auth.signOut()
+    navigate('/', { replace: true })
   }
 
   return (
@@ -1080,11 +1102,11 @@ export default function SettingsPage() {
                 <ClockIcon />
                 <div className="min-w-0 flex-1">
                   <p className="text-[15px] font-semibold text-[#111827]">
-                    Raw message retention: 24 hours
+                    Raw message retention: 30 days
                   </p>
                   <p className="mt-1 text-[13px] leading-relaxed text-[#6B7280]">
                     Locus reads messages to build structured memory, then
-                    permanently deletes the raw content within 24 hours. Only the
+                    permanently deletes the raw content within 30 days. Only the
                     extracted context summary is stored — never
                     the full message thread.
                   </p>
@@ -1140,7 +1162,7 @@ export default function SettingsPage() {
                   </div>
                   <button
                     type="button"
-                    onClick={clearCookies}
+                    onClick={() => void clearCookies()}
                     className="shrink-0 rounded-lg border border-[#E5E7EB] bg-white px-3.5 py-2 text-[13px] font-semibold text-[#5A45FF] transition-colors hover:bg-[#F8F7FF]"
                   >
                     Clear Cookies
@@ -1299,7 +1321,7 @@ export default function SettingsPage() {
                     <p className="text-[15px] font-semibold text-[#111827]">Email</p>
                     <p className="mt-1 text-[13px] leading-relaxed text-[#6B7280]">
                       Send digest and system alerts to{' '}
-                      <span className="text-[#6B7280]">jordan@acme.com</span>.
+                      <span className="text-[#6B7280]">{signedInEmail || 'your account email'}</span>.
                     </p>
                   </div>
                   <Toggle

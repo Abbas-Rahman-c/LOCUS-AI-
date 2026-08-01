@@ -100,6 +100,17 @@ Deno.serve(async (req: Request) => {
     return new Response("OK", { status: 200 });
   }
 
+  // The Privacy settings page states as an unconditional commitment that
+  // DMs and group DMs are never read or captured - channel_type is "im"
+  // for a 1:1 DM and "mpim" for a group DM (vs "channel"/"group" for
+  // regular and private channels). Nothing enforced that claim before;
+  // if the Slack app ever had im:history/mpim:history granted, a DM would
+  // have been captured exactly like a channel message.
+  const channelType = String(event.channel_type ?? "");
+  if (channelType === "im" || channelType === "mpim") {
+    return new Response("OK (DM excluded)", { status: 200 });
+  }
+
   // Look up every tenant with an active connection to this Slack workspace,
   // matching on the team ID that comes with every event payload. A single
   // Slack workspace can legitimately be connected by more than one tenant
