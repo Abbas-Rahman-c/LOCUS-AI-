@@ -3,7 +3,13 @@ import { useNavigate } from 'react-router-dom'
 import AccountSettings from './AccountSettings'
 import { getSupabaseClient } from '../lib/supabase'
 import { DEMO_EMAIL_KEY, WORKSPACES_DONE_KEY } from '../lib/sessionKeys'
-import { connectSource, disconnectSource, fetchSourceConnections, type SourceId } from '../lib/sourceConnections'
+import {
+  connectSource,
+  disconnectSource,
+  fetchSourceConnections,
+  type SourceId,
+  type SyncMode,
+} from '../lib/sourceConnections'
 
 type SettingsSection =
   | 'Account'
@@ -478,6 +484,11 @@ function ConnectedSourcesSettings() {
   const [isDisconnecting, setIsDisconnecting] = useState(false)
   const [disconnectError, setDisconnectError] = useState('')
 
+  // Only Notion's poller actually has a real backfill mechanism to choose
+  // between (see lib/sourceConnections.ts's SyncMode doc) - Gmail and Slack
+  // skip straight to handleConnect with no choice prompt.
+  const [syncModeTarget, setSyncModeTarget] = useState<SourceId | null>(null)
+
   useEffect(() => {
     let active = true
     fetchSourceConnections()
@@ -502,12 +513,13 @@ function ConnectedSourcesSettings() {
     }
   }, [])
 
-  const handleConnect = async (sourceId: SourceId) => {
+  const handleConnect = async (sourceId: SourceId, syncMode?: SyncMode) => {
     if (connectingId) return
     setConnectingId(sourceId)
     setError('')
+    setSyncModeTarget(null)
 
-    const result = await connectSource(sourceId)
+    const result = await connectSource(sourceId, syncMode)
     if (result.success) {
       setConnections((current) => ({
         ...current,
@@ -517,6 +529,17 @@ function ConnectedSourcesSettings() {
       setError(result.error ?? 'Connection failed.')
     }
     setConnectingId(null)
+  }
+
+  const openConnect = (sourceId: SourceId) => {
+    // A genuine reconnect (a Notion connection existed before and was
+    // disconnected) - a first-time connect has no history to choose
+    // between, so it skips straight to a full sync.
+    if (sourceId === 'notion' && connections.notion?.status === 'revoked') {
+      setSyncModeTarget(sourceId)
+      return
+    }
+    void handleConnect(sourceId)
   }
 
   const openDisconnectConfirm = (sourceId: SourceId) => {
@@ -595,7 +618,7 @@ function ConnectedSourcesSettings() {
                   <button
                     type="button"
                     disabled={connectingId === source.id}
-                    onClick={() => void handleConnect(source.id)}
+                    onClick={() => openConnect(source.id)}
                     className="inline-flex items-center gap-1.5 rounded-lg border border-[#C4B5FD] bg-white px-3 py-1.5 text-[13px] font-semibold text-[#5A45FF] transition-colors hover:bg-[#F8F7FF] disabled:cursor-wait disabled:opacity-60"
                   >
                     {connectingId === source.id ? 'Connecting...' : isActive ? 'Reconnect' : 'Connect'}
@@ -702,6 +725,61 @@ function ConnectedSourcesSettings() {
                 {isDisconnecting ? 'Disconnecting...' : 'Disconnect'}
               </button>
             </div>
+          </section>
+        </div>
+      ) : null}
+
+      {syncModeTarget ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/35 px-4"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setSyncModeTarget(null)
+          }}
+        >
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="sync-mode-title"
+            className="w-full max-w-[440px] rounded-[12px] bg-white p-6 shadow-[0_20px_55px_rgba(17,24,39,0.22)]"
+          >
+            <h2 id="sync-mode-title" className="text-[18px] font-semibold text-[#111827]">
+              Reconnecting Notion
+            </h2>
+            <p className="mt-2 text-[14px] leading-5 text-[#6B7280]">
+              What should Locus read on this connection?
+            </p>
+
+            <div className="mt-4 flex flex-col gap-2">
+              <button
+                type="button"
+                onClick={() => void handleConnect('notion', 'full')}
+                className="flex flex-col items-start gap-1 rounded-lg border border-[#E5E7EB] p-3 text-left hover:border-[#5A45FF] hover:bg-[#F8F7FF]"
+              >
+                <span className="text-[14px] font-semibold text-[#111827]">Full history</span>
+                <span className="text-[13px] text-[#6B7280]">
+                  Read everything in the workspace again, from the beginning.
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleConnect('notion', 'new')}
+                className="flex flex-col items-start gap-1 rounded-lg border border-[#E5E7EB] p-3 text-left hover:border-[#5A45FF] hover:bg-[#F8F7FF]"
+              >
+                <span className="text-[14px] font-semibold text-[#111827]">From now on</span>
+                <span className="text-[13px] text-[#6B7280]">
+                  Only capture pages edited after this reconnect.
+                </span>
+              </button>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setSyncModeTarget(null)}
+              className="mt-4 h-10 w-full rounded-lg border border-[#DEE1E8] bg-white text-[14px] font-semibold text-[#4B3BD4] hover:bg-[#F8F7FF]"
+            >
+              Cancel
+            </button>
           </section>
         </div>
       ) : null}

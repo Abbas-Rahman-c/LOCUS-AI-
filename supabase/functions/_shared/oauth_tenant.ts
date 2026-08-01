@@ -101,27 +101,37 @@ export function resolveRedirectOrigin(url: URL): string {
   return DEFAULT_FRONTEND_URL;
 }
 
-/** Carries tenant_id + the resolved redirect origin through the provider's OAuth `state` round trip. */
-export function encodeState(tenantId: string, redirectOrigin: string): string {
-  return btoa(JSON.stringify({ t: tenantId, o: redirectOrigin }));
+// "full" backfills everything a poller can see (the existing default -
+// last_synced_at gets cleared so the next poll treats it as never-synced).
+// "new" only picks up content from the moment of (re)connecting onward.
+// Only meaningful for poll-based connectors (Notion, Gmail) - Slack is
+// pure push/webhook with no backfill mechanism at all, so slack-oauth
+// never reads this field even though it flows through the same state.
+export type SyncMode = "full" | "new";
+
+/** Carries tenant_id + the resolved redirect origin (+ optional sync mode) through the provider's OAuth `state` round trip. */
+export function encodeState(tenantId: string, redirectOrigin: string, syncMode?: SyncMode): string {
+  return btoa(JSON.stringify({ t: tenantId, o: redirectOrigin, m: syncMode }));
 }
 
-/** Read and validate tenant_id + redirect origin carried in the provider OAuth `state` param. */
+/** Read and validate tenant_id + redirect origin (+ optional sync mode) carried in the provider OAuth `state` param. */
 export function parseTenantState(
   state: string | null,
-): { tenantId: string; redirectOrigin: string } {
+): { tenantId: string; redirectOrigin: string; syncMode: SyncMode } {
   if (!state) {
     throw new OAuthTenantError("Missing OAuth state");
   }
 
   let tenantId = "";
   let redirectOrigin = DEFAULT_FRONTEND_URL;
+  let syncMode: SyncMode = "full";
   try {
-    const parsed = JSON.parse(atob(state)) as { t?: string; o?: string };
+    const parsed = JSON.parse(atob(state)) as { t?: string; o?: string; m?: string };
     tenantId = parsed.t?.trim() ?? "";
     if (parsed.o && ALLOWED_FRONTEND_ORIGINS.includes(parsed.o)) {
       redirectOrigin = parsed.o;
     }
+    if (parsed.m === "new") syncMode = "new";
   } catch {
     // Back-compat: older links encoded state as a bare tenant_id UUID.
     tenantId = state.trim();
@@ -130,7 +140,7 @@ export function parseTenantState(
   if (!tenantId || !isUuid(tenantId)) {
     throw new OAuthTenantError("Missing or invalid OAuth state (tenant_id)");
   }
-  return { tenantId, redirectOrigin };
+  return { tenantId, redirectOrigin, syncMode };
 }
 
 /**

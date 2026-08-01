@@ -59,7 +59,22 @@ export async function fetchSourceConnections(): Promise<SourceConnectionRow[]> {
  * signal (and to self-close the popup) — that only depends on the callback
  * having written to the database, not on postMessage succeeding.
  */
-export async function connectSource(sourceId: SourceId): Promise<{ success: boolean; error?: string }> {
+/**
+ * "full" backfills everything the connector can see (the default, and the
+ * only real option for a first-time connect - there's no history to choose
+ * between yet). "new" only picks up content from this moment forward.
+ * Only Notion's poller actually honors this today (see notion-oauth's
+ * callback) - Gmail's connector re-fetches its 10 most recent messages
+ * every cycle with no date-range query at all, so there's no real
+ * "full history" mode to toggle there yet, and Slack is pure push/webhook
+ * with no backfill mechanism whatsoever.
+ */
+export type SyncMode = 'full' | 'new'
+
+export async function connectSource(
+  sourceId: SourceId,
+  syncMode?: SyncMode,
+): Promise<{ success: boolean; error?: string }> {
   if (!SUPABASE_URL) {
     return { success: false, error: 'Supabase is not configured.' }
   }
@@ -163,6 +178,7 @@ export async function connectSource(sourceId: SourceId): Promise<{ success: bool
         authorizeUrl.searchParams.set('tenant_id', tenantId)
         authorizeUrl.searchParams.set('access_token', accessToken)
         authorizeUrl.searchParams.set('redirect_origin', window.location.origin)
+        if (syncMode) authorizeUrl.searchParams.set('sync_mode', syncMode)
         popup.location.href = authorizeUrl.toString()
       } catch (error) {
         settle({ success: false, error: error instanceof Error ? error.message : 'Unable to start connection.' })
