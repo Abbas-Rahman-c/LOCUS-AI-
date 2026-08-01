@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import {
   BrowserRouter,
   Navigate,
+  Outlet,
   Route,
   Routes,
   useNavigate,
@@ -14,6 +15,7 @@ import ConnectWorkspaces from './ConnectWorkspaces'
 import OAuthCallback from './OAuthCallback'
 import SourceOAuthCallback from './SourceOAuthCallback'
 import { getSupabaseClient, isSupabaseConfigured } from './lib/supabase'
+import { rememberAccountFromSession } from './lib/accountRegistry'
 import { DEMO_EMAIL_KEY, WORKSPACES_DONE_KEY } from './lib/sessionKeys'
 import { fetchSourceConnections } from './lib/sourceConnections'
 import DecisionReady from './DecisionReady'
@@ -50,11 +52,13 @@ function useAuthEmail() {
     void supabase.auth.getSession().then(({ data }) => {
       setUserEmail(data.session?.user.email ?? null)
       setAuthReady(true)
+      if (data.session) rememberAccountFromSession(data.session)
     })
 
     const { data } = supabase.auth.onAuthStateChange((_event, session) => {
       setUserEmail(session?.user.email ?? null)
       setAuthReady(true)
+      if (session) rememberAccountFromSession(session)
     })
 
     return () => data.subscription.unsubscribe()
@@ -118,6 +122,32 @@ function useWorkspacesConnected(userEmail: string | null, authReady: boolean) {
   }
 
   return { workspacesConnected, markConnected, checked }
+}
+
+/**
+ * Every /dashboard/* route rendered <DashboardShell /> and its nav
+ * unconditionally, with no check that anyone was actually signed in - a
+ * logged-out visitor hitting /dashboard directly (bookmark, typed URL,
+ * shared link) saw the full dashboard chrome instead of being sent to
+ * /welcome. Wraps the whole DashboardShell route group with the same
+ * demo-or-Supabase-session check every other protected route already uses.
+ */
+function RequireAuth() {
+  const { userEmail, authReady } = useAuthEmail()
+
+  if (!authReady) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-white text-sm text-[#6B7280]">
+        Loading…
+      </main>
+    )
+  }
+
+  if (!userEmail) {
+    return <Navigate to="/welcome" replace />
+  }
+
+  return <Outlet />
 }
 
 function ConnectWorkspacesRoute() {
@@ -204,17 +234,20 @@ function App() {
         {/* Slack/Notion/Gmail OAuth popup lands here after the provider redirects back */}
         <Route path="/oauth/source-callback" element={<SourceOAuthCallback />} />
 
-        {/* Dashboard pages share one shell / one localhost */}
-        <Route element={<DashboardShell />}>
-          <Route path="/dashboard" element={<MainDashboardEntry />} />
-          <Route path="/decision-log" element={<DecisionLogPage />} />
-          <Route path="/team-pulse" element={<TeamPulse />} />
-          <Route path="/settings" element={<SettingsPage />} />
-          {/* In-app "How it works" — keeps the dashboard nav/session visible,
-              unlike the marketing /how-it-works route which is the full
-              pre-login landing page and would otherwise strand a logged-in
-              user with no way back. */}
-          <Route path="/dashboard/how-it-works" element={<HowItWorks />} />
+        {/* Dashboard pages share one shell / one localhost - and require a
+            real (or demo) session before any of them render. */}
+        <Route element={<RequireAuth />}>
+          <Route element={<DashboardShell />}>
+            <Route path="/dashboard" element={<MainDashboardEntry />} />
+            <Route path="/decision-log" element={<DecisionLogPage />} />
+            <Route path="/team-pulse" element={<TeamPulse />} />
+            <Route path="/settings" element={<SettingsPage />} />
+            {/* In-app "How it works" — keeps the dashboard nav/session visible,
+                unlike the marketing /how-it-works route which is the full
+                pre-login landing page and would otherwise strand a logged-in
+                user with no way back. */}
+            <Route path="/dashboard/how-it-works" element={<HowItWorks />} />
+          </Route>
         </Route>
 
         <Route path="*" element={<Navigate to="/" replace />} />

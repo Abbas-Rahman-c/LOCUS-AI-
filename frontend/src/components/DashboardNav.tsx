@@ -1,6 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 import { getSupabaseClient, isSupabaseConfigured } from '../lib/supabase'
+import { getAuthCallbackUrl } from '../lib/appUrl'
+import {
+  forgetAccount,
+  listOtherAccounts,
+  rememberAccountFromSession,
+  type KnownAccount,
+} from '../lib/accountRegistry'
 import { DEMO_EMAIL_KEY, WORKSPACES_DONE_KEY } from '../lib/sessionKeys'
 
 const NAV_LINKS = [
@@ -12,16 +19,11 @@ const NAV_LINKS = [
 ] as const
 
 type ProfileUser = {
+  userId: string | null
   name: string
   email: string
   initials: string
 }
-
-const OTHER_ACCOUNTS = [
-  { name: 'Jun Zhou', email: 'junzhou@gmail.com', initials: 'JZ' },
-  { name: 'Jun Zhou', email: 'junzhou@gmail.com', initials: 'JZ' },
-  { name: 'Jun Zhou', email: 'junzhou@gmail.com', initials: 'JZ' },
-]
 
 function clearLocalSession() {
   sessionStorage.removeItem(DEMO_EMAIL_KEY)
@@ -42,20 +44,27 @@ export function DashboardNav() {
   const navigate = useNavigate()
   const [menuOpen, setMenuOpen] = useState(false)
   const [profile, setProfile] = useState<ProfileUser>({
-    name: 'Jun Zhou',
-    email: 'junzhou@gmail.com',
-    initials: 'JZ',
+    userId: null,
+    name: '',
+    email: '',
+    initials: '',
   })
+  const [otherAccounts, setOtherAccounts] = useState<KnownAccount[]>([])
+  const [switching, setSwitching] = useState<string | null>(null)
+  const [switchError, setSwitchError] = useState<string | null>(null)
   const menuRef = useRef<HTMLDivElement>(null)
+  const isDemo = Boolean(sessionStorage.getItem(DEMO_EMAIL_KEY))
 
   useEffect(() => {
     const demoEmail = sessionStorage.getItem(DEMO_EMAIL_KEY)
     if (demoEmail) {
       setProfile({
+        userId: null,
         name: 'Locus User',
         email: demoEmail,
         initials: 'LU',
       })
+      setOtherAccounts(listOtherAccounts(null))
       return
     }
 
@@ -63,17 +72,20 @@ export function DashboardNav() {
 
     const supabase = getSupabaseClient()
     void supabase.auth.getSession().then(({ data }) => {
-      const user = data.session?.user
-      if (!user) return
-      const email = user.email ?? 'junzhou@gmail.com'
-      const name =
-        String(
-          user.user_metadata.full_name ||
-            user.user_metadata.name ||
-            user.user_metadata.display_name ||
-            'Jun Zhou',
-        )
-      setProfile({ name, email, initials: getInitials(name) || 'JZ' })
+      const session = data.session
+      const user = session?.user
+      if (!user || !session) return
+      const email = user.email ?? ''
+      const name = String(
+        user.user_metadata.full_name ||
+          user.user_metadata.name ||
+          user.user_metadata.display_name ||
+          email ||
+          'Account',
+      )
+      setProfile({ userId: user.id, name, email, initials: getInitials(name) || '?' })
+      rememberAccountFromSession(session)
+      setOtherAccounts(listOtherAccounts(user.id))
     })
   }, [])
 
@@ -105,6 +117,62 @@ export function DashboardNav() {
     }
     setMenuOpen(false)
     navigate('/', { replace: true })
+  }
+
+  const switchToAccount = async (account: KnownAccount) => {
+    if (!isSupabaseConfigured()) return
+    setSwitchError(null)
+    setSwitching(account.userId)
+    try {
+      const { error } = await getSupabaseClient().auth.setSession({
+        access_token: account.accessToken,
+        refresh_token: account.refreshToken,
+      })
+      if (error) throw error
+      clearLocalSession()
+      // Full reload rather than client-side nav - every dashboard page's
+      // in-memory state (decisions, source connections, profile) was built
+      // for the account we're leaving, not the one we're switching to.
+      window.location.href = '/dashboard'
+    } catch {
+      // Most likely cause: the stored refresh token was revoked (e.g. that
+      // account signed out elsewhere) - it can't be switched to silently,
+      // so drop it from the list instead of leaving a dead entry behind.
+      forgetAccount(account.userId)
+      setOtherAccounts((accounts) => accounts.filter((a) => a.userId !== account.userId))
+      setSwitchError(`Couldn't switch to ${account.email} - try signing in again.`)
+      setSwitching(null)
+    }
+  }
+
+  const removeAccount = (userId: string) => {
+    forgetAccount(userId)
+    setOtherAccounts((accounts) => accounts.filter((a) => a.userId !== userId))
+  }
+
+  const addAnotherAccount = async () => {
+    if (!isSupabaseConfigured()) return
+    setSwitchError(null)
+    try {
+      const { data, error } = await getSupabaseClient().auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: getAuthCallbackUrl(),
+          skipBrowserRedirect: false,
+          queryParams: { prompt: 'select_account' },
+        },
+      })
+      if (error) throw error
+      if (!data.url) throw new Error('Google sign in could not be started.')
+      // Browser navigates away via Supabase redirect - the account signed
+      // into right now is already saved in the registry (recorded on every
+      // session resolve), so it'll be waiting in "Other Accounts" once the
+      // new one finishes signing in.
+    } catch (error) {
+      setSwitchError(
+        error instanceof Error ? error.message : 'Unable to start Google sign in.',
+      )
+    }
   }
 
   return (
@@ -198,29 +266,60 @@ export function DashboardNav() {
                 <p className="mt-0.5 text-[13px] text-[#6B7280]">{profile.email}</p>
               </div>
 
-              <div className="border-t border-[#E8E8ED] px-4 pt-3 pb-2">
-                <p className="px-1 text-[14px] font-bold text-[#111827]">Other Accounts</p>
-                <ul className="mt-2">
-                  {OTHER_ACCOUNTS.map((account, index) => (
-                    <li
-                      key={`${account.email}-${index}`}
-                      className={`flex items-center gap-3 px-1 py-3 ${
-                        index < OTHER_ACCOUNTS.length - 1 ? 'border-b border-[#F0F0F4]' : ''
-                      }`}
-                    >
-                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#EEEBFF] text-[12px] font-semibold text-[#5A45FF]">
-                        {account.initials}
-                      </div>
-                      <div className="min-w-0">
-                        <p className="truncate text-[14px] font-semibold text-[#111827]">
-                          {account.name}
-                        </p>
-                        <p className="truncate text-[12px] text-[#6B7280]">{account.email}</p>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              </div>
+              {otherAccounts.length > 0 || !isDemo ? (
+                <div className="border-t border-[#E8E8ED] px-4 pt-3 pb-2">
+                  <p className="px-1 text-[14px] font-bold text-[#111827]">Other Accounts</p>
+                  {switchError ? (
+                    <p className="mt-1 px-1 text-[12px] text-red-600">{switchError}</p>
+                  ) : null}
+                  {otherAccounts.length > 0 ? (
+                    <ul className="mt-2">
+                      {otherAccounts.map((account, index) => (
+                        <li
+                          key={account.userId}
+                          className={`group flex items-center gap-3 py-3 pl-1 pr-1 ${
+                            index < otherAccounts.length - 1 ? 'border-b border-[#F0F0F4]' : ''
+                          }`}
+                        >
+                          <button
+                            type="button"
+                            role="menuitem"
+                            disabled={switching !== null}
+                            onClick={() => void switchToAccount(account)}
+                            className="flex min-w-0 flex-1 items-center gap-3 text-left disabled:opacity-50"
+                          >
+                            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#EEEBFF] text-[12px] font-semibold text-[#5A45FF]">
+                              {account.initials}
+                            </div>
+                            <div className="min-w-0">
+                              <p className="truncate text-[14px] font-semibold text-[#111827]">
+                                {switching === account.userId ? 'Switching…' : account.name}
+                              </p>
+                              <p className="truncate text-[12px] text-[#6B7280]">{account.email}</p>
+                            </div>
+                          </button>
+                          <button
+                            type="button"
+                            aria-label={`Remove ${account.email}`}
+                            onClick={() => removeAccount(account.userId)}
+                            className="shrink-0 rounded-full px-2 py-1 text-[12px] text-[#9CA3AF] opacity-0 transition-opacity hover:text-[#111827] group-hover:opacity-100"
+                          >
+                            ✕
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => void addAnotherAccount()}
+                    className="mt-1 w-full rounded-lg px-1 py-2.5 text-left text-[13px] font-semibold text-[#5A45FF] hover:bg-[#F7F7FA]"
+                  >
+                    + Add another account
+                  </button>
+                </div>
+              ) : null}
 
               <div className="border-t border-[#E8E8ED] p-4">
                 <button
