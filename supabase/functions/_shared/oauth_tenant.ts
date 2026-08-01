@@ -75,13 +75,62 @@ async function assertMembership(
   }
 }
 
-/** Read and validate tenant_id carried in the provider OAuth `state` param. */
-export function parseTenantState(state: string | null): string {
-  const tenantId = state?.trim() ?? "";
+const DEFAULT_FRONTEND_URL = Deno.env.get("FRONTEND_URL") ?? "http://localhost:5173";
+
+// Comma-separated allowlist of frontend origins that are allowed to receive
+// the OAuth popup redirect (Supabase secret ALLOWED_FRONTEND_ORIGINS). Every
+// independent deployment (the team's shared Vercel app, a contributor's own
+// fork's Vercel project, local dev) needs its origin listed here to complete
+// the source-connect flow - this is a public redirect target, so an
+// unvalidated caller-supplied origin would be an open redirect.
+const ALLOWED_FRONTEND_ORIGINS = (Deno.env.get("ALLOWED_FRONTEND_ORIGINS") ?? "")
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
+
+/**
+ * Resolves which frontend origin the OAuth popup should redirect back to,
+ * from the `redirect_origin` query param the frontend sends on /authorize
+ * (see frontend/src/lib/sourceConnections.ts). Falls back to
+ * FRONTEND_URL/localhost for any missing or non-allowlisted value rather
+ * than failing outright, so an old cached link still lands somewhere valid.
+ */
+export function resolveRedirectOrigin(url: URL): string {
+  const candidate = url.searchParams.get("redirect_origin")?.trim();
+  if (candidate && ALLOWED_FRONTEND_ORIGINS.includes(candidate)) return candidate;
+  return DEFAULT_FRONTEND_URL;
+}
+
+/** Carries tenant_id + the resolved redirect origin through the provider's OAuth `state` round trip. */
+export function encodeState(tenantId: string, redirectOrigin: string): string {
+  return btoa(JSON.stringify({ t: tenantId, o: redirectOrigin }));
+}
+
+/** Read and validate tenant_id + redirect origin carried in the provider OAuth `state` param. */
+export function parseTenantState(
+  state: string | null,
+): { tenantId: string; redirectOrigin: string } {
+  if (!state) {
+    throw new OAuthTenantError("Missing OAuth state");
+  }
+
+  let tenantId = "";
+  let redirectOrigin = DEFAULT_FRONTEND_URL;
+  try {
+    const parsed = JSON.parse(atob(state)) as { t?: string; o?: string };
+    tenantId = parsed.t?.trim() ?? "";
+    if (parsed.o && ALLOWED_FRONTEND_ORIGINS.includes(parsed.o)) {
+      redirectOrigin = parsed.o;
+    }
+  } catch {
+    // Back-compat: older links encoded state as a bare tenant_id UUID.
+    tenantId = state.trim();
+  }
+
   if (!tenantId || !isUuid(tenantId)) {
     throw new OAuthTenantError("Missing or invalid OAuth state (tenant_id)");
   }
-  return tenantId;
+  return { tenantId, redirectOrigin };
 }
 
 /**
@@ -93,18 +142,16 @@ export function parseTenantState(state: string | null): string {
  * to text/plain (confirmed live: the Response object here can set whatever
  * Content-Type it wants, the platform overrides it regardless), so an
  * inline <script> never executes and the popup never closes itself. This
- * redirects to FRONTEND_URL instead, where the page is a normal SPA route
- * with no such restriction.
- *
- * FRONTEND_URL must be set as a Supabase secret pointing at the real
- * deployed frontend origin (defaults to localhost for local dev).
+ * redirects to the caller's own origin instead (resolved via
+ * resolveRedirectOrigin/parseTenantState against ALLOWED_FRONTEND_ORIGINS),
+ * where the page is a normal SPA route with no such restriction.
  */
 export function popupCallbackResponse(
   source: SourceKind,
   options: { success: boolean; error?: string; status?: number },
+  redirectOrigin: string = DEFAULT_FRONTEND_URL,
 ): Response {
-  const frontendUrl = Deno.env.get("FRONTEND_URL") ?? "http://localhost:5173";
-  const redirectUrl = new URL("/oauth/source-callback", frontendUrl);
+  const redirectUrl = new URL("/oauth/source-callback", redirectOrigin);
   redirectUrl.searchParams.set("source", source);
   redirectUrl.searchParams.set("success", String(options.success));
   if (options.error) redirectUrl.searchParams.set("error", options.error);
@@ -115,13 +162,14 @@ export function popupCallbackResponse(
 export function authorizeErrorResponse(
   source: SourceKind,
   err: unknown,
+  redirectOrigin: string = DEFAULT_FRONTEND_URL,
 ): Response {
   if (err instanceof OAuthTenantError) {
     return popupCallbackResponse(source, {
       success: false,
       error: err.message,
       status: err.status,
-    });
+    }, redirectOrigin);
   }
 
   const message = err instanceof Error ? err.message : String(err);
@@ -129,5 +177,5 @@ export function authorizeErrorResponse(
     success: false,
     error: message,
     status: 500,
-  });
+  }, redirectOrigin);
 }

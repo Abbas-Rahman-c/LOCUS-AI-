@@ -14,8 +14,10 @@
 import { withTenant } from "../_shared/db.ts";
 import {
   authorizeErrorResponse,
+  encodeState,
   parseTenantState,
   popupCallbackResponse,
+  resolveRedirectOrigin,
   resolveTenantFromAuthorize,
 } from "../_shared/oauth_tenant.ts";
 
@@ -29,6 +31,7 @@ Deno.serve(async (req: Request) => {
   const url = new URL(req.url);
 
   if (url.pathname.endsWith("/authorize")) {
+    const redirectOrigin = resolveRedirectOrigin(url);
     try {
       const tenantId = await resolveTenantFromAuthorize(url);
 
@@ -42,20 +45,21 @@ Deno.serve(async (req: Request) => {
         "channels:history,groups:history,im:history,mpim:history,chat:write,channels:read,groups:read,mpim:read,im:read",
       );
       slackAuthUrl.searchParams.set("redirect_uri", REDIRECT_URI ?? "");
-      slackAuthUrl.searchParams.set("state", tenantId);
+      slackAuthUrl.searchParams.set("state", encodeState(tenantId, redirectOrigin));
 
       return Response.redirect(slackAuthUrl.toString(), 302);
     } catch (err) {
-      return authorizeErrorResponse(SOURCE, err);
+      return authorizeErrorResponse(SOURCE, err, redirectOrigin);
     }
   }
 
   if (url.pathname.endsWith("/callback")) {
     let tenantId: string;
+    let redirectOrigin: string;
     try {
-      tenantId = parseTenantState(url.searchParams.get("state"));
+      ({ tenantId, redirectOrigin } = parseTenantState(url.searchParams.get("state")));
     } catch (err) {
-      return authorizeErrorResponse(SOURCE, err);
+      return authorizeErrorResponse(SOURCE, err, resolveRedirectOrigin(url));
     }
 
     const code = url.searchParams.get("code");
@@ -64,7 +68,7 @@ Deno.serve(async (req: Request) => {
         success: false,
         error: "Missing authorization code",
         status: 400,
-      });
+      }, redirectOrigin);
     }
 
     const tokenResponse = await fetch("https://slack.com/api/oauth.v2.access", {
@@ -85,7 +89,7 @@ Deno.serve(async (req: Request) => {
         success: false,
         error: `Slack OAuth failed: ${tokenData.error ?? "unknown error"}`,
         status: 400,
-      });
+      }, redirectOrigin);
     }
 
     try {
@@ -117,10 +121,10 @@ Deno.serve(async (req: Request) => {
         success: false,
         error: `Failed to store token: ${message}`,
         status: 500,
-      });
+      }, redirectOrigin);
     }
 
-    return popupCallbackResponse(SOURCE, { success: true });
+    return popupCallbackResponse(SOURCE, { success: true }, redirectOrigin);
   }
 
   return new Response("Not found", { status: 404 });
