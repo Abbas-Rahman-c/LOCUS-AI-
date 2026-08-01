@@ -201,6 +201,7 @@ export type DecisionRecordType = 'decision' | 'action_item' | 'blocker'
 export interface ActorRef {
   id: string
   role: string
+  name: string | null
 }
 
 export interface DecisionOut {

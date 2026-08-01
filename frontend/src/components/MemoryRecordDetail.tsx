@@ -11,7 +11,6 @@ export type MemoryRecord = {
   summary: string
   participants: string
   source: string
-  confidence: string
   status: MemoryStatus
   date?: string
   listSource?: string
@@ -168,7 +167,6 @@ export function MemoryRecordDetail({
           <span className="text-[#5A45FF]">{record.participants}</span>
         </DetailRow>
         <DetailRow label="SOURCE">{record.source}</DetailRow>
-        <DetailRow label="CONFIDENCE">{record.confidence}</DetailRow>
         <DetailRow label="STATUS">
           <span
             className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold ${STATUS_STYLES[record.status]}`}
@@ -228,7 +226,6 @@ export function createDefaultMemoryRecord(
       'Adopt PostgreSQL for the context layer persistence over vector-only stores',
     participants: '@jwest, @priya, @mtanaka',
     source: 'Notion · #product-planning · Mar 12, 9:41am',
-    confidence: '0.92 — confirmed decision',
     status: 'Current',
     listSource: 'Slack #engineering',
     date: 'Aug 24, 2026',

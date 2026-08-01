@@ -76,6 +76,9 @@ Deno.serve(async (_req) => {
           thread_ref: page.id,
           permission_scope: source.external_workspace_id ? [String(source.external_workspace_id)] : [],
           raw_content: page,
+          // Notion's Search API already returns the page's real URL - no
+          // extra lookup needed, unlike Slack/Gmail.
+          source_permalink: typeof page.url === "string" ? page.url : undefined,
           received_at: new Date().toISOString(),
         };
         await enqueueEvent(envelope);

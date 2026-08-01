@@ -18,6 +18,11 @@ export interface IngestionEnvelope {
   permission_scope: string[];
   raw_content: Record<string, unknown>;
   received_at: string; // ISO timestamp
+  // A real deep link back to the original message/page. Read by
+  // modules.ai.pipeline.service.process_and_persist_event() and written to
+  // decision_sources - this is what "View Original" in the frontend opens.
+  // No connector set this before, so the button was always disabled.
+  source_permalink?: string;
 }
 
 export async function enqueueEvent(envelope: IngestionEnvelope) {

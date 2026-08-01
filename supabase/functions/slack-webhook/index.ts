@@ -137,6 +137,13 @@ Deno.serve(async (req: Request) => {
 
   const sourceId = String(event.ts ?? payload.event_id ?? crypto.randomUUID());
   const receivedAt = new Date().toISOString();
+  // Slack's real https:// permalink (chat.getPermalink) needs a bot token
+  // and an extra API round trip per message; this slack:// deep link needs
+  // neither - it's built entirely from data already on the event and opens
+  // straight to the message in the Slack app.
+  const slackDeepLink = event.channel && event.ts
+    ? `slack://channel?team=${encodeURIComponent(teamId)}&id=${encodeURIComponent(String(event.channel))}&message=${encodeURIComponent(String(event.ts))}`
+    : undefined;
   for (const connection of connections) {
     await enqueueEvent({
       tenant_id: connection.tenant_id,
@@ -146,6 +153,7 @@ Deno.serve(async (req: Request) => {
       thread_ref: String(event.thread_ts ?? event.channel ?? ""),
       permission_scope: event.channel ? [String(event.channel)] : [],
       raw_content: { text: String(event.text ?? "") },
+      source_permalink: slackDeepLink,
       received_at: receivedAt,
     });
   }

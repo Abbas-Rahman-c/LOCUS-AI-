@@ -13,6 +13,22 @@ export const PLATFORM_LABELS: Record<string, string> = {
   notion: 'Notion',
 }
 
+const ROLE_LABELS: Record<string, string> = {
+  decided_by: 'decided by',
+  mentioned: 'mentioned',
+}
+
+function formatParticipants(actors: DecisionOut['actors']): string {
+  if (actors.length === 0) return 'Not recorded'
+  return actors
+    .map((actor) => {
+      const who = actor.name || 'Unknown'
+      const roleLabel = ROLE_LABELS[actor.role] ?? actor.role
+      return `${who} (${roleLabel})`
+    })
+    .join(', ')
+}
+
 export function timeAgo(iso: string, now = Date.now()): string {
   const elapsedMs = Math.max(0, now - new Date(iso).getTime())
   const hours = Math.floor(elapsedMs / 3_600_000)
@@ -43,9 +59,8 @@ export function decisionToMemoryRecord(decision: DecisionOut): MemoryRecord {
     title: decision.decision_statement,
     meta: `${platformLabel} · ${timeAgo(decision.created_at)}`,
     summary: decision.rationale || decision.decision_statement,
-    participants: decision.actors.length > 0 ? decision.actors.map((a) => a.role).join(', ') : 'Not recorded',
+    participants: formatParticipants(decision.actors),
     source: platformLabel,
-    confidence: `${decision.confidence.toFixed(2)} — ${decision.status}`,
     status: decision.superseded_by ? 'Superseded' : 'Current',
     listSource: platformLabel,
     date: formatDate(decision.created_at),

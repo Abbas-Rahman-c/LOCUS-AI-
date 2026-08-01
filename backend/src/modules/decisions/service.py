@@ -9,10 +9,42 @@ Every read and write path:
 from __future__ import annotations
 
 import logging
+import re
 import uuid
 from datetime import datetime, timezone
 
 import asyncpg
+
+_UUID_RE = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.IGNORECASE)
+_SLACK_USER_ID_RE = re.compile(r"^U[A-Z0-9]{6,}$")
+
+
+def _guess_actor_name(
+    display_name: str | None,
+    email: str | None,
+    notion_user_id: str | None,
+    slack_user_id: str | None,
+) -> str | None:
+    """Best-effort human name for an actor.
+
+    display_name is essentially never populated today - extraction only
+    captures ActorReference.source_actor_id (see modules.ai.extraction.
+    schemas), which Claude fills with whatever it can find in the message
+    text: sometimes a real provider user id (a Notion page UUID, a Slack
+    "U..." id), sometimes literally the person's name as written, since raw
+    text often has no real id to extract at all. That means the identifier
+    columns frequently already hold a usable name - filtered here to skip
+    the cases that are clearly a real machine id, not a name.
+    """
+    if display_name:
+        return display_name
+    if email:
+        return email
+    if notion_user_id and not _UUID_RE.match(notion_user_id):
+        return notion_user_id
+    if slack_user_id and not _SLACK_USER_ID_RE.match(slack_user_id):
+        return slack_user_id
+    return None
 
 from database.tenant_connection import tenant_conn
 from modules.decisions.schemas import DecisionCreate, DecisionListResponse, DecisionOut, RadarCorrectionFeedback
@@ -81,9 +113,12 @@ async def list_decisions(
         if decision_ids:
             actor_rows = await conn.fetch(
                 """
-                SELECT tenant_id, decision_id, actor_id, role
-                FROM decision_actors
-                WHERE decision_id = ANY($1) AND tenant_id = $2
+                SELECT da.tenant_id, da.decision_id, da.actor_id, da.role,
+                       a.display_name, a.email, a.notion_user_id, a.slack_user_id
+                FROM decision_actors da
+                LEFT JOIN public.actors a
+                  ON a.id = da.actor_id AND a.tenant_id = da.tenant_id
+                WHERE da.decision_id = ANY($1) AND da.tenant_id = $2
                 """,
                 decision_ids, tenant_id,
             )
@@ -92,8 +127,12 @@ async def list_decisions(
                 if "actor_id" not in ar.keys():
                     continue
                 assert_tenant_scope(ar["tenant_id"], tenant_id)
+                name = _guess_actor_name(
+                    ar["display_name"], ar["email"],
+                    ar["notion_user_id"], ar["slack_user_id"],
+                )
                 actors_by_dec.setdefault(ar["decision_id"], []).append(
-                    {"id": str(ar["actor_id"]), "role": ar["role"]}
+                    {"id": str(ar["actor_id"]), "role": ar["role"], "name": name}
                 )
 
             source_rows = await conn.fetch(
@@ -188,9 +227,12 @@ async def get_decision(
 
         actor_rows = await conn.fetch(
             """
-            SELECT tenant_id, actor_id, role
-            FROM decision_actors
-            WHERE decision_id = $1 AND tenant_id = $2
+            SELECT da.tenant_id, da.actor_id, da.role,
+                   a.display_name, a.email, a.notion_user_id, a.slack_user_id
+            FROM decision_actors da
+            LEFT JOIN public.actors a
+              ON a.id = da.actor_id AND a.tenant_id = da.tenant_id
+            WHERE da.decision_id = $1 AND da.tenant_id = $2
             """,
             decision_id, tenant_id,
         )
@@ -199,7 +241,10 @@ async def get_decision(
             if "actor_id" not in ar.keys():
                 continue
             assert_tenant_scope(ar["tenant_id"], tenant_id)
-            actors.append({"id": str(ar["actor_id"]), "role": ar["role"]})
+            name = _guess_actor_name(
+                ar["display_name"], ar["email"], ar["notion_user_id"], ar["slack_user_id"],
+            )
+            actors.append({"id": str(ar["actor_id"]), "role": ar["role"], "name": name})
 
         source_rows = await conn.fetch(
             """

@@ -143,6 +143,9 @@ Deno.serve(async (_req) => {
             date: getHeader("Date"),
             snippet: rawMsg.snippet,
           },
+          // #all/{id} works regardless of which label the message is
+          // filed under (inbox, archived, etc.), unlike #inbox/{id}.
+          source_permalink: `https://mail.google.com/mail/u/0/#all/${rawMsg.id}`,
           received_at: new Date().toISOString(),
         };
 

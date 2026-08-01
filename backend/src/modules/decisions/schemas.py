@@ -11,9 +11,10 @@ from pydantic import BaseModel, Field
 
 
 class ActorRef(BaseModel):
-    """A decision actor with their role."""
+    """A decision actor with their role and, when known, a real name."""
     id: str
     role: str
+    name: Optional[str] = None
 
 
 class DecisionOut(BaseModel):
