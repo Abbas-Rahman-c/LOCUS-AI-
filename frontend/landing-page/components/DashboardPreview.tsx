@@ -1,4 +1,5 @@
 import { LocusLogo } from './LocusLogo'
+import { SourceLogo, type SourceName } from '../../src/components/SourceLogo'
 
 function SearchIcon() {
   return (
@@ -36,19 +37,6 @@ function BlockerIcon() {
   )
 }
 
-function SourceIcon({ label }: { label: string }) {
-  const colors: Record<string, string> = {
-    Slack: 'bg-[#4A154B]',
-    Notion: 'bg-[#111827]',
-    Gmail: 'bg-[#EA4335]',
-  }
-  return (
-    <div className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[9px] font-bold text-white ${colors[label] ?? 'bg-gray-700'}`}>
-      {label[0]}
-    </div>
-  )
-}
-
 const NAV_ITEMS = ['How it works', 'Dashboard', 'Memory Explorer', 'Pulse', 'Settings']
 
 const RECENT_SEARCHES = [
@@ -57,7 +45,7 @@ const RECENT_SEARCHES = [
   'What context exists around pricing changes?',
 ]
 
-const SOURCES = ['Slack', 'Notion', 'Gmail']
+const SOURCES: SourceName[] = ['Slack', 'Notion', 'Gmail']
 
 const CAPTURES = [
   { tag: 'Decision', tagClass: 'bg-[#eee8ff] text-[#5b52e8]', text: 'Adopt PostgreSQL for the context layer' },
@@ -173,7 +161,7 @@ export function DashboardPreview() {
               <ul className="mt-2 space-y-2">
                 {SOURCES.map((source) => (
                   <li key={source} className="flex items-center gap-2">
-                    <SourceIcon label={source} />
+                    <SourceLogo source={source} className="h-6 w-6 shrink-0 rounded-[4px]" />
                     <div className="min-w-0 flex-1">
                       <p className="text-[11px] font-semibold text-[#111827]">{source}</p>
                       <p className="text-[9.5px] text-[#9ca3af]">Synced today 9:00 am</p>
