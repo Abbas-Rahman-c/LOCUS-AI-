@@ -125,6 +125,7 @@ Deno.serve(async (req: Request) => {
   }
 
   const sourceId = String(event.ts ?? payload.event_id ?? crypto.randomUUID());
+  const receivedAt = new Date().toISOString();
   for (const connection of connections) {
     await enqueueEvent({
       tenant_id: connection.tenant_id,
@@ -134,9 +135,24 @@ Deno.serve(async (req: Request) => {
       thread_ref: String(event.thread_ts ?? event.channel ?? ""),
       permission_scope: event.channel ? [String(event.channel)] : [],
       raw_content: { text: String(event.text ?? "") },
-      received_at: new Date().toISOString(),
+      received_at: receivedAt,
     });
   }
+
+  // Slack is push-based - there's no poll cycle to timestamp the way
+  // Notion/Gmail have, so last_synced_at was never set here and every
+  // Slack connection showed "Not yet synced" in the UI forever, even with
+  // messages actively arriving. Stamping it on every received event makes
+  // the same "Synced Xm ago" display accurate for Slack too.
+  await withAdmin(async (sql) => {
+    await sql`
+      update public.source_connections
+      set last_synced_at = ${receivedAt}
+      where source = 'slack'
+        and external_workspace_id = ${teamId}
+        and status = 'active'
+    `;
+  });
 
   return new Response("OK", { status: 200 });
 });
