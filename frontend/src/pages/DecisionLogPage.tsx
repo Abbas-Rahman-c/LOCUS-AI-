@@ -118,7 +118,7 @@ export default function DecisionLogPage() {
         Memory Explorer
       </h1>
       <p className="mt-2 text-[15px] text-[#6B7280]">
-        Every captured decision, action item, and blocker — searchable and cited.
+        Every captured decision, action item, and blocker is searchable and cited.
       </p>
 
       <div
@@ -249,7 +249,7 @@ export default function DecisionLogPage() {
       <div className="mt-5 flex items-center justify-between">
         <p className="text-[13px] text-[#9CA3AF]">
           {total > 0
-            ? `Showing ${(currentPage - 1) * PAGE_SIZE + 1}-${Math.min(currentPage * PAGE_SIZE, total)} of ${total} results`
+            ? `Showing ${(currentPage - 1) * PAGE_SIZE + 1} to ${Math.min(currentPage * PAGE_SIZE, total)} of ${total} results`
             : isLoading
               ? 'Loading...'
               : 'No results'}

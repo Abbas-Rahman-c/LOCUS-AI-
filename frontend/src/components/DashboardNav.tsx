@@ -40,14 +40,21 @@ function getInitials(name: string) {
     .join('')
 }
 
+function getNameFromEmail(email: string) {
+  const emailName = email.split('@')[0]?.replace(/[._-]+/g, ' ').trim()
+  if (!emailName) return 'Locus User'
+
+  return emailName.replace(/\b\w/g, (letter) => letter.toUpperCase())
+}
+
 export function DashboardNav() {
   const navigate = useNavigate()
   const [menuOpen, setMenuOpen] = useState(false)
   const [profile, setProfile] = useState<ProfileUser>({
     userId: null,
-    name: '',
+    name: 'Locus User',
     email: '',
-    initials: '',
+    initials: 'LU',
   })
   const [otherAccounts, setOtherAccounts] = useState<KnownAccount[]>([])
   const [switching, setSwitching] = useState<string | null>(null)
@@ -80,10 +87,9 @@ export function DashboardNav() {
         user.user_metadata.full_name ||
           user.user_metadata.name ||
           user.user_metadata.display_name ||
-          email ||
-          'Account',
+          getNameFromEmail(email),
       )
-      setProfile({ userId: user.id, name, email, initials: getInitials(name) || '?' })
+      setProfile({ userId: user.id, name, email, initials: getInitials(name) || 'LU' })
       rememberAccountFromSession(session)
       setOtherAccounts(listOtherAccounts(user.id))
     })
@@ -263,7 +269,9 @@ export function DashboardNav() {
                   </svg>
                 </div>
                 <p className="mt-3 text-[16px] font-bold text-[#111827]">{profile.name}</p>
-                <p className="mt-0.5 text-[13px] text-[#6B7280]">{profile.email}</p>
+                {profile.email ? (
+                  <p className="mt-0.5 text-[13px] text-[#6B7280]">{profile.email}</p>
+                ) : null}
               </div>
 
               {otherAccounts.length > 0 || !isDemo ? (

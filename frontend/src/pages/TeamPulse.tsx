@@ -26,7 +26,7 @@ function sectionDescription(type: DecisionRecordType, total: number, shown: numb
   const { singular, plural } = SECTION_LABELS[type]
   if (total === 0) return `No ${plural} in this range`
   if (total <= shown) return `All ${total} ${total === 1 ? singular : plural} shown`
-  return `Top ${shown} by confidence and recency — ${total - shown} more not shown`
+  return `Top ${shown} by confidence and recency, with ${total - shown} more not shown`
 }
 
 function buildSection(decisions: DecisionOut[], type: DecisionRecordType): PulseSection {
@@ -78,7 +78,7 @@ function formatWeekTitle(start: Date, end: Date) {
     month: 'short',
     day: 'numeric',
   })
-  return `${startText} – ${endText}`
+  return `${startText} to ${endText}`
 }
 
 function getIsoWeek(date: Date) {
@@ -135,7 +135,7 @@ function PulseGroup({
                   aria-expanded={isExpanded}
                 >
                   <span className="mr-2.5 text-[#9197A5]" aria-hidden="true">
-                    —
+                    •
                   </span>
                   <span>{decision.decision_statement}</span>
                 </button>
@@ -299,7 +299,7 @@ export default function TeamPulse() {
                   className="flex h-8 w-full items-center justify-center gap-2 rounded-[16px] border border-[#E0E2E8] px-2 text-[11px] text-[#3F424C] hover:bg-[#F7F7FA] sm:gap-3 sm:px-4 sm:text-[13px]"
                 >
                   <span>{formatNumericDate(rangeStart)}</span>
-                  <span className="text-[#8B91A0]">–</span>
+                  <span className="text-[#8B91A0]">to</span>
                   <span>{formatNumericDate(rangeEnd)}</span>
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                     <path d="M7 3v3M17 3v3M4 9h16M5 5h14a1 1 0 0 1 1 1v14H4V6a1 1 0 0 1 1-1Z" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />

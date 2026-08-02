@@ -33,3 +33,78 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
+
+@keyframes how-it-works-progress {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+@keyframes how-it-works-panel-enter {
+  from {
+    opacity: 0;
+    transform: translateX(24px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes how-it-works-step-outgoing {
+  from {
+    border-color: #5b52e8;
+    background-color: #5b52e8;
+    color: #ffffff;
+    box-shadow: 0 1px 2px rgb(0 0 0 / 0.08);
+  }
+  to {
+    border-color: #d8d6f5;
+    background-color: #ffffff;
+    color: #8b85d8;
+    box-shadow: 0 0 0 rgb(0 0 0 / 0);
+  }
+}
+
+@keyframes how-it-works-step-incoming {
+  from {
+    border-color: #d8d6f5;
+    background-color: #ffffff;
+    color: #8b85d8;
+    box-shadow: 0 0 0 rgb(0 0 0 / 0);
+  }
+  to {
+    border-color: #5b52e8;
+    background-color: #5b52e8;
+    color: #ffffff;
+    box-shadow: 0 1px 2px rgb(0 0 0 / 0.08);
+  }
+}
+
+.how-it-works-progress {
+  animation: how-it-works-progress 1s linear forwards;
+}
+
+.how-it-works-step-outgoing {
+  animation: how-it-works-step-outgoing 500ms ease-in-out 500ms both;
+}
+
+.how-it-works-step-incoming {
+  animation: how-it-works-step-incoming 500ms ease-in-out 500ms both;
+}
+
+.how-it-works-panel-enter {
+  animation: how-it-works-panel-enter 500ms ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .how-it-works-progress,
+  .how-it-works-step-outgoing,
+  .how-it-works-step-incoming,
+  .how-it-works-panel-enter {
+    animation-duration: 1ms;
+  }
+}
