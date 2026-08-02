@@ -1,0 +1,1014 @@
+// supabase/functions/api/index.ts
+//
+// Deno port of the FastAPI backend's live-traffic routes (backend/src/modules/
+// auth, decisions, search, digest, billing). Railway's account ran out of
+// credits a second time and took down the API service itself (not just the
+// worker - see ai-worker/index.ts for that earlier migration), breaking every
+// dashboard feature at once since they all depend on /auth/session first.
+// This finishes the migration: the frontend now talks to this function
+// instead of Railway, and Railway stops being a dependency entirely.
+//
+// One exception, disclosed rather than silently dropped: POST /search's
+// cross-encoder reranking step (modules.retrieval.reranking.cross_encoder,
+// sentence_transformers/torch) has no Deno/Edge-Function equivalent - no
+// local ML model runtime exists here. That module already fails OPEN on any
+// error (falls back to input order), so skipping it here reproduces exactly
+// that fallback path, always, rather than emulating a Python-only dependency.
+// metadata.reranked is set to false so this is visible in the response, not
+// hidden. Retrieval quality still benefits from hybrid RRF fusion (vector +
+// keyword) - only the extra cross-encoder re-ordering pass is missing.
+//
+// The Stripe webhook receiver (POST /billing/webhook) is NOT ported here -
+// it's called by Stripe itself (not the frontend), needs signature
+// verification against STRIPE_WEBHOOK_SECRET, and Stripe's dashboard would
+// need to be repointed at a new URL. Only POST /billing/checkout (the
+// frontend-initiated call) is ported.
+
+import { withAdmin, withTenant } from "../_shared/db.ts";
+import * as jose from "npm:jose@5";
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "GET, POST, PATCH, OPTIONS",
+};
+
+function jsonResponse(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
+
+function errorResponse(status: number, detail: string): Response {
+  return jsonResponse({ detail }, status);
+}
+
+function requireEnv(name: string): string {
+  const value = Deno.env.get(name);
+  if (!value) throw new Error(`${name} is not set - add it to Edge Function secrets`);
+  return value;
+}
+
+// ── fetch() with a hard timeout (same rationale as ai-worker/index.ts:
+// plain fetch() never times out on its own, which caused stuck invocations
+// there - applying the same guard here for the same reason) ────────────────
+async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: number): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } catch (err) {
+    if (err instanceof Error && err.name === "AbortError") {
+      throw new Error(`Request to ${url} timed out after ${timeoutMs}ms`);
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// ── Auth: Supabase token verification + tenant-scoped JWT issuance ────────
+// Mirrors backend/src/modules/auth/service.py + supabase_verifier.py exactly:
+// verify the Supabase-issued access_token via JWKS, look up the caller's
+// first membership row via the admin (bypass-RLS) connection, then sign a
+// tenant-scoped HS256 JWT with the same claim shape
+// (iss=locus-ai, sub=user_id, tenant_id, role, iat, exp).
+
+let _jwks: ReturnType<typeof jose.createRemoteJWKSet> | null = null;
+function getSupabaseJwks() {
+  if (_jwks) return _jwks;
+  const base = requireEnv("SUPABASE_URL").replace(/\/$/, "");
+  _jwks = jose.createRemoteJWKSet(new URL(`${base}/auth/v1/.well-known/jwks.json`));
+  return _jwks;
+}
+
+async function verifySupabaseToken(token: string): Promise<string> {
+  const { payload } = await jose.jwtVerify(token, getSupabaseJwks(), { audience: "authenticated" });
+  if (!payload.sub) throw new Error("Supabase JWT missing 'sub' claim");
+  return payload.sub;
+}
+
+const TENANT_JWT_ISSUER = "locus-ai";
+const TENANT_JWT_TTL_SECONDS = 86_400;
+
+async function signTenantJwt(userId: string, tenantId: string, role: string): Promise<string> {
+  const secret = new TextEncoder().encode(requireEnv("APP_SECRET_KEY"));
+  const now = Math.floor(Date.now() / 1000);
+  return await new jose.SignJWT({ tenant_id: tenantId, role })
+    .setProtectedHeader({ alg: "HS256" })
+    .setIssuer(TENANT_JWT_ISSUER)
+    .setSubject(userId)
+    .setIssuedAt(now)
+    .setExpirationTime(now + TENANT_JWT_TTL_SECONDS)
+    .sign(secret);
+}
+
+type TenantContext = { userId: string; tenantId: string; role: string };
+
+async function verifyTenantJwt(token: string): Promise<TenantContext> {
+  const secret = new TextEncoder().encode(requireEnv("APP_SECRET_KEY"));
+  const { payload } = await jose.jwtVerify(token, secret, { issuer: TENANT_JWT_ISSUER });
+  if (!payload.tenant_id) throw new Error("JWT missing tenant_id claim");
+  return {
+    userId: String(payload.sub),
+    tenantId: String(payload.tenant_id),
+    role: String(payload.role ?? "member"),
+  };
+}
+
+async function getCurrentTenant(req: Request): Promise<TenantContext> {
+  const header = req.headers.get("Authorization") ?? "";
+  const match = header.match(/^Bearer\s+(.+)$/i);
+  if (!match) throw new Error("Missing Authorization: Bearer token");
+  return await verifyTenantJwt(match[1]);
+}
+
+async function resolvePermissionScopes(userId: string): Promise<string[]> {
+  const email = await withAdmin(async (sql) => {
+    const rows = await sql`SELECT email FROM auth.users WHERE id = ${userId}`;
+    return rows[0]?.email ?? null;
+  });
+  return email ? [email] : [];
+}
+
+// ── Handler: POST /auth/session ────────────────────────────────────────
+async function handleAuthSession(req: Request): Promise<Response> {
+  let body: { supabase_token?: string };
+  try {
+    body = await req.json();
+  } catch {
+    return errorResponse(400, "Invalid JSON body");
+  }
+  if (!body.supabase_token) return errorResponse(400, "supabase_token is required");
+
+  let authUserId: string;
+  try {
+    authUserId = await verifySupabaseToken(body.supabase_token);
+  } catch (err) {
+    return errorResponse(401, `Invalid Supabase token: ${err instanceof Error ? err.message : String(err)}`);
+  }
+
+  const membership = await withAdmin(async (sql) => {
+    const rows = await sql`
+      SELECT tenant_id, role FROM memberships
+      WHERE user_id = ${authUserId}
+      ORDER BY created_at ASC LIMIT 1
+    `;
+    return rows[0] ?? null;
+  });
+
+  if (membership === null) {
+    return errorResponse(
+      401,
+      `No tenant membership found for user ${authUserId}. The account may not have been provisioned correctly.`,
+    );
+  }
+
+  const tenantId = membership.tenant_id as string;
+  const role = membership.role as string;
+  const token = await signTenantJwt(authUserId, tenantId, role);
+
+  return jsonResponse({ token, tenant_id: tenantId, role, expires_in: TENANT_JWT_TTL_SECONDS });
+}
+
+// ── Decisions: list + get (mirrors modules/decisions/service.py) ─────────
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const SLACK_USER_ID_RE = /^U[A-Z0-9]{6,}$/;
+
+function guessActorName(
+  displayName: string | null, email: string | null,
+  notionUserId: string | null, slackUserId: string | null,
+): string | null {
+  if (displayName) return displayName;
+  if (email) return email;
+  if (notionUserId && !UUID_RE.test(notionUserId)) return notionUserId;
+  if (slackUserId && !SLACK_USER_ID_RE.test(slackUserId)) return slackUserId;
+  return null;
+}
+
+// deno-lint-ignore no-explicit-any
+function buildDecisionOut(row: any, actors: unknown[], sourceLinks: string[], sourcePlatforms: string[]) {
+  return {
+    id: row.id,
+    tenant_id: row.tenant_id,
+    record_type: row.record_type,
+    decision_statement: row.decision_statement,
+    rationale: row.rationale ?? null,
+    alternatives_considered: row.alternatives_considered ?? [],
+    actors,
+    status: row.status,
+    superseded_by: row.superseded_by ?? null,
+    scope: row.scope,
+    confidence: Number(row.confidence),
+    source_links: sourceLinks,
+    source_platforms: sourcePlatforms,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+  };
+}
+
+async function listDecisions(tenantId: string, limit: number, offset: number) {
+  return await withTenant(tenantId, async (sql) => {
+    const rows = await sql`
+      SELECT id, tenant_id, record_type, decision_statement, rationale,
+             alternatives_considered, status, superseded_by, scope, confidence,
+             origin_raw_event_id, created_at, updated_at
+      FROM decisions WHERE tenant_id = ${tenantId}
+      ORDER BY created_at DESC LIMIT ${limit} OFFSET ${offset}
+    `;
+    const totalRows = await sql`SELECT COUNT(*)::int AS total FROM decisions WHERE tenant_id = ${tenantId}`;
+    const total = totalRows[0]?.total ?? 0;
+
+    const decisionIds = rows.map((r) => r.id);
+    // deno-lint-ignore no-explicit-any
+    const actorsByDec = new Map<string, any[]>();
+    const sourcesByDec = new Map<string, string[]>();
+    const platformsByDec = new Map<string, string[]>();
+
+    if (decisionIds.length > 0) {
+      const actorRows = await sql`
+        SELECT da.decision_id, da.actor_id, da.role,
+               a.display_name, a.email, a.notion_user_id, a.slack_user_id
+        FROM decision_actors da
+        LEFT JOIN public.actors a ON a.id = da.actor_id AND a.tenant_id = da.tenant_id
+        WHERE da.decision_id = ANY(${decisionIds}) AND da.tenant_id = ${tenantId}
+      `;
+      for (const ar of actorRows) {
+        const list = actorsByDec.get(ar.decision_id) ?? [];
+        list.push({
+          id: String(ar.actor_id), role: ar.role,
+          name: guessActorName(ar.display_name, ar.email, ar.notion_user_id, ar.slack_user_id),
+        });
+        actorsByDec.set(ar.decision_id, list);
+      }
+
+      const sourceRows = await sql`
+        SELECT decision_id, permalink FROM decision_sources
+        WHERE decision_id = ANY(${decisionIds}) AND tenant_id = ${tenantId}
+      `;
+      for (const sr of sourceRows) {
+        const list = sourcesByDec.get(sr.decision_id) ?? [];
+        list.push(sr.permalink);
+        sourcesByDec.set(sr.decision_id, list);
+      }
+
+      const originIds = rows.map((r) => r.origin_raw_event_id).filter((id) => id);
+      if (originIds.length > 0) {
+        const platformRows = await sql`
+          SELECT id, source FROM raw_events WHERE id = ANY(${originIds}) AND tenant_id = ${tenantId}
+        `;
+        const platformByOrigin = new Map(platformRows.map((p) => [p.id, p.source]));
+        for (const row of rows) {
+          if (row.origin_raw_event_id && platformByOrigin.has(row.origin_raw_event_id)) {
+            platformsByDec.set(row.id, [platformByOrigin.get(row.origin_raw_event_id) as string]);
+          }
+        }
+      }
+    }
+
+    const items = rows.map((row) =>
+      buildDecisionOut(
+        row, actorsByDec.get(row.id) ?? [], sourcesByDec.get(row.id) ?? [], platformsByDec.get(row.id) ?? [],
+      )
+    );
+    return { items, total };
+  });
+}
+
+async function getDecisionById(tenantId: string, decisionId: string) {
+  return await withTenant(tenantId, async (sql) => {
+    const rows = await sql`
+      SELECT id, tenant_id, record_type, decision_statement, rationale,
+             alternatives_considered, status, superseded_by, scope, confidence,
+             origin_raw_event_id, created_at, updated_at
+      FROM decisions WHERE id = ${decisionId} AND tenant_id = ${tenantId}
+    `;
+    const row = rows[0];
+    if (!row) return null;
+
+    const actorRows = await sql`
+      SELECT da.actor_id, da.role, a.display_name, a.email, a.notion_user_id, a.slack_user_id
+      FROM decision_actors da
+      LEFT JOIN public.actors a ON a.id = da.actor_id AND a.tenant_id = da.tenant_id
+      WHERE da.decision_id = ${decisionId} AND da.tenant_id = ${tenantId}
+    `;
+    const actors = actorRows.map((ar) => ({
+      id: String(ar.actor_id), role: ar.role,
+      name: guessActorName(ar.display_name, ar.email, ar.notion_user_id, ar.slack_user_id),
+    }));
+
+    const sourceRows = await sql`
+      SELECT permalink FROM decision_sources WHERE decision_id = ${decisionId} AND tenant_id = ${tenantId}
+    `;
+    const sourceLinks = sourceRows.map((sr) => sr.permalink);
+
+    let sourcePlatforms: string[] = [];
+    if (row.origin_raw_event_id) {
+      const platformRows = await sql`
+        SELECT source FROM raw_events WHERE id = ${row.origin_raw_event_id} AND tenant_id = ${tenantId}
+      `;
+      if (platformRows[0]?.source) sourcePlatforms = [platformRows[0].source];
+    }
+
+    return buildDecisionOut(row, actors, sourceLinks, sourcePlatforms);
+  });
+}
+
+// ── Retrieval: vector + keyword + RRF fusion (mirrors modules/retrieval) ──
+
+const VOYAGE_API_KEY = Deno.env.get("VOYAGE_API_KEY") ?? "";
+const VOYAGE_MODEL = Deno.env.get("VOYAGE_EMBED_MODEL") ?? "voyage-4-large";
+const VOYAGE_OUTPUT_DIMENSION = 1024;
+
+async function embedQuery(text: string): Promise<number[]> {
+  const resp = await fetchWithTimeout("https://api.voyageai.com/v1/embeddings", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${VOYAGE_API_KEY}`, "content-type": "application/json" },
+    body: JSON.stringify({
+      input: [text], model: VOYAGE_MODEL, input_type: "query",
+      output_dimension: VOYAGE_OUTPUT_DIMENSION, truncation: true,
+    }),
+  }, 30_000);
+  if (!resp.ok) throw new Error(`Voyage API error ${resp.status}: ${await resp.text()}`);
+  const data = await resp.json();
+  const embedding = data.data?.[0]?.embedding;
+  if (!Array.isArray(embedding) || embedding.length !== VOYAGE_OUTPUT_DIMENSION) {
+    throw new Error("Voyage returned an unexpected embedding shape");
+  }
+  return embedding;
+}
+
+type RetrievalMatch = {
+  decision_id: string; decision_statement: string; similarity_score: number;
+  confidence: number; permission_scope: string[]; rationale: string | null;
+  alternatives_considered: string[]; created_at: string | null;
+  decision_type: string | null; owner: string | null; source: string | null;
+};
+
+const OWNER_SELECT = `
+  (
+    SELECT COALESCE(a.display_name, a.email)
+    FROM public.decision_actors da
+    JOIN public.actors a ON a.id = da.actor_id AND a.tenant_id = d.tenant_id
+    WHERE da.decision_id = d.id AND da.tenant_id = d.tenant_id AND da.role = 'decided_by'
+    LIMIT 1
+  )
+`;
+
+async function searchSimilarDecisions(tenantId: string, embedding: number[], topK: number): Promise<RetrievalMatch[]> {
+  const vectorLiteral = "[" + embedding.join(",") + "]";
+  return await withTenant(tenantId, async (sql) => {
+    const rows = await sql`
+      SELECT
+        d.id AS decision_id, d.decision_statement,
+        1 - (de.embedding <=> ${vectorLiteral}::vector) AS similarity_score,
+        d.confidence, d.permission_scope, d.rationale, d.alternatives_considered,
+        d.created_at, d.record_type AS decision_type, ${sql.unsafe(OWNER_SELECT)} AS owner,
+        r.source AS source
+      FROM public.decision_embeddings de
+      JOIN public.decisions d ON d.id = de.decision_id AND d.tenant_id = de.tenant_id
+      LEFT JOIN public.raw_events r ON r.id = d.origin_raw_event_id AND r.tenant_id = d.tenant_id
+      WHERE d.tenant_id = ${tenantId}
+      ORDER BY de.embedding <=> ${vectorLiteral}::vector ASC
+      LIMIT ${topK}
+    `;
+    return rows.map((row) => ({
+      decision_id: row.decision_id, decision_statement: row.decision_statement,
+      similarity_score: Number(row.similarity_score), confidence: Number(row.confidence),
+      permission_scope: row.permission_scope ?? [], rationale: row.rationale,
+      alternatives_considered: row.alternatives_considered ?? [], created_at: row.created_at,
+      decision_type: row.decision_type, owner: row.owner, source: row.source,
+    }));
+  });
+}
+
+async function searchDecisionsKeyword(tenantId: string, question: string, topK: number): Promise<RetrievalMatch[]> {
+  const query = question.trim();
+  if (!query) return [];
+  return await withTenant(tenantId, async (sql) => {
+    const rows = await sql`
+      SELECT
+        d.id AS decision_id, d.decision_statement,
+        ts_rank(
+          to_tsvector('english', d.decision_statement || ' ' || COALESCE(d.rationale, '')),
+          websearch_to_tsquery('english', ${query})
+        ) AS similarity_score,
+        d.confidence, d.permission_scope, d.rationale, d.alternatives_considered,
+        d.created_at, d.record_type AS decision_type, ${sql.unsafe(OWNER_SELECT)} AS owner,
+        r.source AS source
+      FROM public.decisions d
+      LEFT JOIN public.raw_events r ON r.id = d.origin_raw_event_id AND r.tenant_id = d.tenant_id
+      WHERE d.tenant_id = ${tenantId}
+        AND to_tsvector('english', d.decision_statement || ' ' || COALESCE(d.rationale, ''))
+            @@ websearch_to_tsquery('english', ${query})
+      ORDER BY similarity_score DESC, d.created_at DESC
+      LIMIT ${topK}
+    `;
+    return rows.map((row) => ({
+      decision_id: row.decision_id, decision_statement: row.decision_statement,
+      similarity_score: Number(row.similarity_score), confidence: Number(row.confidence),
+      permission_scope: row.permission_scope ?? [], rationale: row.rationale,
+      alternatives_considered: row.alternatives_considered ?? [], created_at: row.created_at,
+      decision_type: row.decision_type, owner: row.owner, source: row.source,
+    }));
+  });
+}
+
+const DEFAULT_RRF_K = 60;
+
+function fuseRrf(vectorMatches: RetrievalMatch[], keywordMatches: RetrievalMatch[], topK: number, k = DEFAULT_RRF_K): RetrievalMatch[] {
+  const scores = new Map<string, number>();
+  const byId = new Map<string, RetrievalMatch>();
+  for (const list of [vectorMatches, keywordMatches]) {
+    list.forEach((match, index) => {
+      const rank = index + 1;
+      scores.set(match.decision_id, (scores.get(match.decision_id) ?? 0) + 1 / (k + rank));
+      if (!byId.has(match.decision_id)) byId.set(match.decision_id, match);
+    });
+  }
+  const fused = [...byId.values()].sort((a, b) => (scores.get(b.decision_id)! - scores.get(a.decision_id)!));
+  return fused.slice(0, topK);
+}
+
+async function hybridRetrieve(
+  tenantId: string, question: string, topK: number, candidateK: number,
+  embeddingQuery: string, keywordQuery: string,
+): Promise<RetrievalMatch[]> {
+  const fetchK = Math.max(candidateK, topK);
+  const embedding = await embedQuery(embeddingQuery || question);
+  const [vectorMatches, keywordMatches] = await Promise.all([
+    searchSimilarDecisions(tenantId, embedding, fetchK),
+    searchDecisionsKeyword(tenantId, keywordQuery || question, fetchK),
+  ]);
+  return fuseRrf(vectorMatches, keywordMatches, fetchK);
+}
+
+// ── Permissions: Layer 2 authorization (mirrors modules/permissions) ─────
+
+const SLACK_CHANNEL_RE = /^C[A-Z0-9]{8,}$/;
+const NOTION_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function isUnmappedScope(scope: string): boolean {
+  return SLACK_CHANNEL_RE.test(scope) || NOTION_ID_RE.test(scope);
+}
+
+function isDecisionAccessible(permissionScopes: string[], decision: RetrievalMatch): boolean {
+  if (!decision.permission_scope || decision.permission_scope.length === 0) return true;
+  if (decision.permission_scope.some((s) => permissionScopes.includes(s))) return true;
+  return decision.permission_scope.every(isUnmappedScope);
+}
+
+function filterAccessibleDecisions(permissionScopes: string[], matches: RetrievalMatch[]): RetrievalMatch[] {
+  return matches.filter((m) => isDecisionAccessible(permissionScopes, m));
+}
+
+// ── Context builder (mirrors modules/context/formatter.py, byte-for-byte) ─
+
+const DIVIDER = "-".repeat(50);
+
+function formatConfidence(confidence: number): string {
+  return `${Math.round(confidence * 100)}%`;
+}
+
+function decisionBlockLines(index: number, m: RetrievalMatch): string[] {
+  const lines = [
+    "", `Decision ${index}`, "", "Decision:", m.decision_statement, "",
+    "Reason:", m.rationale ?? "Not provided", "",
+    "Alternatives:", m.alternatives_considered.length ? m.alternatives_considered.join(", ") : "None", "",
+    "Confidence:", formatConfidence(m.confidence),
+  ];
+  if (m.owner) lines.push("", "Owner:", m.owner);
+  if (m.created_at) lines.push("", "Date:", m.created_at);
+  if (m.source) lines.push("", "Source:", m.source);
+  if (m.decision_type) lines.push("", "Decision Type:", m.decision_type);
+  lines.push("", DIVIDER);
+  return lines;
+}
+
+function formatContext(decisions: RetrievalMatch[]): string {
+  const lines = [DIVIDER];
+  decisions.forEach((d, i) => lines.push(...decisionBlockLines(i + 1, d)));
+  return lines.join("\n");
+}
+
+function estimateTokens(text: string): number {
+  return Math.floor(text.length / 4);
+}
+
+// ── Claude (forced tool-use; same shape as ai-worker/index.ts's callClaude) ─
+
+const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY") ?? "";
+const SYNTHESIS_MODEL = Deno.env.get("ANTHROPIC_SYNTHESIS_MODEL") ?? "claude-haiku-4-5-20251001";
+
+async function callClaude(
+  system: string, userMessage: string, tool: Record<string, unknown>, toolName: string,
+  maxTokens: number, timeoutMs: number,
+): Promise<Record<string, unknown>> {
+  const resp = await fetchWithTimeout("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: { "x-api-key": ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01", "content-type": "application/json" },
+    body: JSON.stringify({
+      model: SYNTHESIS_MODEL, max_tokens: maxTokens, temperature: 0, system,
+      messages: [{ role: "user", content: userMessage }],
+      tools: [tool], tool_choice: { type: "tool", name: toolName },
+    }),
+  }, timeoutMs);
+  if (!resp.ok) throw new Error(`Anthropic API error ${resp.status}: ${await resp.text()}`);
+  const data = await resp.json();
+  const block = (data.content ?? []).find((b: { type?: string }) => b.type === "tool_use");
+  if (!block) throw new Error(`Claude did not return a tool_use block for ${toolName}`);
+  return block.input as Record<string, unknown>;
+}
+
+// ── Query understanding (mirrors modules/query_understanding) ────────────
+
+type QueryAnalysis = {
+  intent: string; question_type: string; entities: string[]; keywords: string[];
+  department_guess: string; is_multi_document: boolean;
+};
+
+const NULL_QUERY_ANALYSIS: QueryAnalysis = {
+  intent: "unanalyzed", question_type: "other", entities: [], keywords: [],
+  department_guess: "", is_multi_document: false,
+};
+
+const QUERY_ANALYSIS_TOOL = {
+  name: "record_query_analysis",
+  description: "Record a structured analysis of the user's question before retrieval runs.",
+  input_schema: {
+    type: "object",
+    properties: {
+      intent: { type: "string" },
+      question_type: { type: "string", enum: ["why", "what", "when", "who", "list", "summary", "comparison", "other"] },
+      entities: { type: "array", items: { type: "string" } },
+      keywords: { type: "array", items: { type: "string" } },
+      department_guess: { type: "string" },
+      is_multi_document: { type: "boolean" },
+    },
+    required: ["intent", "question_type", "entities", "keywords", "department_guess", "is_multi_document"],
+    additionalProperties: false,
+  },
+};
+
+const QUERY_ANALYSIS_SYSTEM_PROMPT = `You are the query-understanding stage of Locus AI, a decision-intelligence system. Before any retrieval happens, analyze the user's question so the retrieval layer can find the right decisions.
+
+For the question below, determine:
+
+1. intent - one sentence describing what the user actually wants to know.
+2. question_type - the primary form of the question: why, what, when, who, list, summary, comparison, or other. ("list"/"summary"/"comparison" mean the user likely wants MULTIPLE decisions, not just one.)
+3. entities - proper nouns, ticket IDs, filenames, people's names, company/vendor names, and acronyms mentioned or clearly implied by the question. Include both the acronym and its likely expansion when relevant (e.g. "SSO" and "Single Sign-On").
+4. keywords - 3 to 8 high-signal retrieval terms capturing the core topic. Expand with likely synonyms and related terms a company's internal decision record might actually use - e.g. if the question mentions switching away from a product, include both the old and new product names, the general category, and the type of decision (e.g. "Stripe", "Paddle", "billing", "migration", "payment provider"). Do not include stopwords, question words, or generic verbs like "update" or "decide" unless they are genuinely distinctive to the topic.
+5. department_guess - the business domain/department this most likely relates to (e.g. engineering, finance, security, legal, hiring, marketing, product, analytics, customer support, infrastructure), or an empty string if genuinely unclear.
+6. is_multi_document - true if answering this well likely requires citing multiple decisions (broad "what have we decided about X" questions, list/summary/comparison questions), false for a question about one specific fact or decision.
+
+Call the record_query_analysis tool exactly once with this analysis. Do not answer the question itself - you have not been given any decisions to answer from yet.`;
+
+async function analyzeQuery(question: string): Promise<QueryAnalysis> {
+  try {
+    const result = await callClaude(
+      QUERY_ANALYSIS_SYSTEM_PROMPT, `Question: ${question}`, QUERY_ANALYSIS_TOOL,
+      "record_query_analysis", 512, 15_000,
+    );
+    return result as unknown as QueryAnalysis;
+  } catch (err) {
+    console.warn("Query understanding failed, falling back to raw question:", err);
+    return NULL_QUERY_ANALYSIS;
+  }
+}
+
+function keywordSearchQuery(analysis: QueryAnalysis): string {
+  return analysis.keywords.join(" OR ");
+}
+
+// ── Answering (mirrors modules/answering) ─────────────────────────────────
+
+const REFUSAL_TEXT = "I couldn't find enough information in the available decisions.";
+
+const ANSWER_TOOL = {
+  name: "submit_answer",
+  description: "Submit the grounded answer to the user's question, based only on the supplied context.",
+  input_schema: {
+    type: "object",
+    properties: {
+      sufficient_evidence: { type: "boolean" },
+      answer: { type: "string" },
+      reasoning: { type: "string" },
+      citations: { type: "array", items: { type: "integer" } },
+      confidence: { type: "number", minimum: 0.0, maximum: 1.0 },
+    },
+    required: ["sufficient_evidence", "answer", "reasoning", "citations", "confidence"],
+    additionalProperties: false,
+  },
+};
+
+const FORMATTING_RULES = `- Plain prose only: never use markdown syntax (no **bold**, no # headings, no bullet or numbered list characters). The frontend displays this text as-is, so any markdown punctuation shows up literally to the reader instead of being rendered. Structure with plain sentences and paragraph breaks instead.
+- Never use an em dash (—) or double hyphen (--). Use a period, comma, colon, or "and"/"but" to join or separate clauses instead.`;
+
+const MULTI_DOCUMENT_INSTRUCTION = `This question likely spans multiple decisions. If more than one decision in the context is relevant, structure your answer as a short list in plain text - one sentence per relevant decision, each citing its decision number - followed by a one-sentence overall summary. Do not merge distinct decisions into one statement if they are actually separate.`;
+
+function buildSystemPrompt(analysis: QueryAnalysis | null): string {
+  const instruction = analysis && analysis !== NULL_QUERY_ANALYSIS && analysis.is_multi_document ? MULTI_DOCUMENT_INSTRUCTION : "";
+  return `You are Locus AI, answering questions about a company's recorded decisions using ONLY the context supplied below.
+
+Rules:
+- Answer ONLY using the supplied context. Never use outside knowledge, general assumptions, or anything about what a company "probably" did.
+- Never invent facts, decisions, owners, dates, or outcomes that are not explicitly present in the context.
+- Cite every factual statement you make with its specific decision number (e.g. "Decision 2"). A sentence with no citation should not contain a specific claim from the context.
+- If one or more decisions in the context directly and clearly support an answer, answer confidently and cite them - even if other, less relevant decisions are also present in the context. The presence of topically-related-but-non-answering decisions is NOT a reason to refuse or hedge; only evaluate whether the decisions that actually bear on the question support an answer.
+- Only when two or more decisions DIRECTLY conflict about the same specific fact (not merely adjacent or topically similar) should you explain both viewpoints instead of silently picking one.
+- Set sufficient_evidence to false ONLY when no decision in the context actually answers the question. Do not refuse merely because multiple related decisions exist, but do not guess or partially answer from outside knowledge when the context genuinely lacks a supporting decision.
+${FORMATTING_RULES}
+${instruction}
+Call the submit_answer tool exactly once with your response.`;
+}
+
+function buildUserMessage(question: string, context: string, analysis: QueryAnalysis | null): string {
+  let header = `Question:\n${question}`;
+  if (analysis && analysis !== NULL_QUERY_ANALYSIS && analysis.intent) {
+    header += `\n\nDetected intent: ${analysis.intent} (question_type=${analysis.question_type})`;
+  }
+  return `${header}\n\nContext:\n${context}`;
+}
+
+type AnswerResult = { answer: string; reasoning: string; citations: number[]; confidence: number; model: string };
+
+async function generateAnswer(question: string, context: string, analysis: QueryAnalysis | null = null): Promise<AnswerResult> {
+  const systemPrompt = buildSystemPrompt(analysis);
+  const userMessage = buildUserMessage(question, context, analysis);
+  const toolOutput = await callClaude(systemPrompt, userMessage, ANSWER_TOOL, "submit_answer", 1024, 30_000) as {
+    sufficient_evidence: boolean; answer: string; reasoning: string; citations: number[]; confidence: number;
+  };
+
+  if (toolOutput.sufficient_evidence) {
+    return {
+      answer: toolOutput.answer, reasoning: toolOutput.reasoning,
+      citations: [...new Set(toolOutput.citations)].sort((a, b) => a - b),
+      confidence: toolOutput.confidence, model: SYNTHESIS_MODEL,
+    };
+  }
+  return { answer: REFUSAL_TEXT, reasoning: toolOutput.reasoning, citations: [], confidence: toolOutput.confidence, model: SYNTHESIS_MODEL };
+}
+
+function buildCitations(citationNumbers: number[], authorized: RetrievalMatch[]) {
+  const citations = [];
+  for (const number of citationNumbers) {
+    if (number >= 1 && number <= authorized.length) {
+      const match = authorized[number - 1];
+      citations.push({
+        decision_number: number, decision_id: match.decision_id,
+        decision_statement: match.decision_statement, confidence: match.confidence,
+      });
+    }
+  }
+  return citations;
+}
+
+// ── Handler: POST /search ──────────────────────────────────────────────
+
+const DEFAULT_TOP_K = 5;
+const MAX_TOP_K = 50;
+const DEFAULT_CANDIDATE_K = 20;
+const MULTI_DOCUMENT_MIN_TOP_K = 10;
+const RERANK_MIN_TOP_K = 7;
+
+async function handleSearch(req: Request): Promise<Response> {
+  let ctx: TenantContext;
+  try {
+    ctx = await getCurrentTenant(req);
+  } catch (err) {
+    return errorResponse(401, err instanceof Error ? err.message : "Unauthorized");
+  }
+
+  let body: { question?: string; top_k?: number };
+  try {
+    body = await req.json();
+  } catch {
+    return errorResponse(400, "Invalid JSON body");
+  }
+  const question = (body.question ?? "").trim();
+  if (!question) return errorResponse(422, "question is required");
+  const requestedTopK = Math.min(Math.max(body.top_k ?? DEFAULT_TOP_K, 1), MAX_TOP_K);
+
+  try {
+    const permissionScopes = await resolvePermissionScopes(ctx.userId);
+    const analysis = await analyzeQuery(question);
+
+    let effectiveTopK = Math.max(requestedTopK, RERANK_MIN_TOP_K);
+    if (analysis.is_multi_document) {
+      effectiveTopK = Math.min(MAX_TOP_K, Math.max(effectiveTopK, MULTI_DOCUMENT_MIN_TOP_K));
+    }
+    const candidateK = Math.max(DEFAULT_CANDIDATE_K, effectiveTopK * 2);
+
+    const candidates = await hybridRetrieve(
+      ctx.tenantId, question, effectiveTopK, candidateK, question, keywordSearchQuery(analysis),
+    );
+
+    const authorized = filterAccessibleDecisions(permissionScopes, candidates);
+    // No cross-encoder here (see file header) - truncate to effectiveTopK directly,
+    // reproducing that module's own fail-open fallback path exactly.
+    const finalMatches = authorized.slice(0, effectiveTopK);
+
+    const context = formatContext(finalMatches);
+    const answerResult = await generateAnswer(question, context, analysis);
+    const citations = buildCitations(answerResult.citations, finalMatches);
+
+    return jsonResponse({
+      answer: answerResult.answer,
+      citations,
+      reasoning: answerResult.reasoning,
+      confidence: answerResult.confidence,
+      metadata: {
+        model: answerResult.model,
+        latency_ms: 0,
+        retrieved_count: candidates.length,
+        authorized_count: authorized.length,
+        decision_count: finalMatches.length,
+        token_estimate: estimateTokens(context),
+        question_type: analysis.question_type,
+        is_multi_document: analysis.is_multi_document,
+        reranked: false,
+      },
+    });
+  } catch (err) {
+    console.error("search failed:", err);
+    return errorResponse(502, err instanceof Error ? err.message : "Search failed");
+  }
+}
+
+// ── Handler: GET /digest ──────────────────────────────────────────────
+
+const DIGEST_TOP_K = 25;
+const TEAM_QUESTION = "What were the most important decisions made by the team this week? Summarize them clearly, grouped by theme if helpful.";
+
+function personalQuestion(actorName: string): string {
+  return `Summarize the key decisions ${actorName} was involved in or that affected their work over the past 7 days. Group by theme if helpful.`;
+}
+
+async function resolveCallerActor(tenantId: string, userId: string): Promise<string | null> {
+  return await withTenant(tenantId, async (sql) => {
+    const rows = await sql`
+      SELECT display_name, email FROM actors WHERE tenant_id = ${tenantId} AND auth_user_id = ${userId}
+    `;
+    if (rows.length === 0) return null;
+    return rows[0].display_name || rows[0].email || null;
+  });
+}
+
+function digestWeekOf(): string {
+  const now = new Date();
+  const day = now.getUTCDay(); // 0=Sun..6=Sat
+  const diffToMonday = (day + 6) % 7;
+  const monday = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - diffToMonday));
+  if (diffToMonday === 0 && now.getUTCHours() < 9) {
+    monday.setUTCDate(monday.getUTCDate() - 7);
+  }
+  return monday.toISOString().slice(0, 10);
+}
+
+function periodBoundsForWeek(weekOf: string): { start: string; end: string } {
+  const end = new Date(weekOf + "T00:00:00Z");
+  const start = new Date(end);
+  start.setUTCDate(start.getUTCDate() - 7);
+  return { start: start.toISOString().slice(0, 10), end: end.toISOString().slice(0, 10) };
+}
+
+async function loadWeeklyDigest(tenantId: string, scope: "personal" | "team", weekOf: string, userId: string | null) {
+  if (scope === "personal" && !userId) return null;
+  return await withTenant(tenantId, async (sql) => {
+    const rows = scope === "team"
+      ? await sql`
+          SELECT scope, period_start, period_end, summary, items, metadata
+          FROM weekly_digests WHERE tenant_id = ${tenantId} AND scope = 'team' AND week_of = ${weekOf}
+        `
+      : await sql`
+          SELECT scope, period_start, period_end, summary, items, metadata
+          FROM weekly_digests WHERE tenant_id = ${tenantId} AND scope = 'personal'
+            AND user_id = ${userId} AND week_of = ${weekOf}
+        `;
+    const row = rows[0];
+    if (!row) return null;
+    return {
+      scope: row.scope, period: `${row.period_start}/${row.period_end}`,
+      summary: row.summary, items: row.items, metadata: row.metadata,
+    };
+  });
+}
+
+// deno-lint-ignore no-explicit-any
+async function saveWeeklyDigest(tenantId: string, digest: any, weekOf: string, userId: string | null) {
+  const { start, end } = periodBoundsForWeek(weekOf);
+  const [periodStart, periodEnd] = digest.period.split("/");
+  await withTenant(tenantId, async (sql) => {
+    if (digest.scope === "team") {
+      await sql`
+        INSERT INTO weekly_digests (tenant_id, user_id, scope, week_of, period_start, period_end, summary, items, metadata)
+        VALUES (${tenantId}, NULL, 'team', ${weekOf}, ${periodStart ?? start}, ${periodEnd ?? end}, ${digest.summary}, ${sql.json(digest.items)}::jsonb, ${sql.json(digest.metadata)}::jsonb)
+        ON CONFLICT (tenant_id, week_of) WHERE (scope = 'team')
+        DO UPDATE SET period_start = EXCLUDED.period_start, period_end = EXCLUDED.period_end,
+          summary = EXCLUDED.summary, items = EXCLUDED.items, metadata = EXCLUDED.metadata, created_at = now()
+      `;
+    } else {
+      await sql`
+        INSERT INTO weekly_digests (tenant_id, user_id, scope, week_of, period_start, period_end, summary, items, metadata)
+        VALUES (${tenantId}, ${userId}, 'personal', ${weekOf}, ${periodStart ?? start}, ${periodEnd ?? end}, ${digest.summary}, ${sql.json(digest.items)}::jsonb, ${sql.json(digest.metadata)}::jsonb)
+        ON CONFLICT (tenant_id, user_id, week_of) WHERE (scope = 'personal')
+        DO UPDATE SET period_start = EXCLUDED.period_start, period_end = EXCLUDED.period_end,
+          summary = EXCLUDED.summary, items = EXCLUDED.items, metadata = EXCLUDED.metadata, created_at = now()
+      `;
+    }
+  });
+}
+
+async function generateTeamPulse(tenantId: string, permissionScopes: string[], scope: "personal" | "team", userId: string | null) {
+  let personalized = true;
+  let question = TEAM_QUESTION;
+  if (scope === "personal") {
+    const actorName = userId ? await resolveCallerActor(tenantId, userId) : null;
+    if (actorName) {
+      question = personalQuestion(actorName);
+    } else {
+      personalized = false;
+    }
+  }
+
+  const matches = await hybridRetrieve(tenantId, question, DIGEST_TOP_K, DIGEST_TOP_K, question, question);
+  const authorized = filterAccessibleDecisions(permissionScopes, matches);
+  const context = formatContext(authorized);
+  const answerResult = await generateAnswer(question, context, null);
+
+  const items = authorized.map((m) => ({
+    decision_statement: m.decision_statement, rationale: m.rationale,
+    confidence: m.confidence, created_at: m.created_at,
+  }));
+
+  const now = new Date();
+  const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+  const period = `${weekAgo.toISOString().slice(0, 10)}/${now.toISOString().slice(0, 10)}`;
+
+  return {
+    scope, period, summary: answerResult.answer, items,
+    metadata: {
+      model: answerResult.model, latency_ms: 0, decision_count: authorized.length,
+      token_estimate: estimateTokens(context), personalized,
+    },
+  };
+}
+
+async function handleDigest(req: Request, url: URL): Promise<Response> {
+  let ctx: TenantContext;
+  try {
+    ctx = await getCurrentTenant(req);
+  } catch (err) {
+    return errorResponse(401, err instanceof Error ? err.message : "Unauthorized");
+  }
+
+  const scope = (url.searchParams.get("scope") ?? "personal") as "personal" | "team";
+  const refresh = url.searchParams.get("refresh") === "true";
+  if (scope !== "personal" && scope !== "team") return errorResponse(422, "scope must be 'personal' or 'team'");
+
+  try {
+    const permissionScopes = await resolvePermissionScopes(ctx.userId);
+    const weekOf = digestWeekOf();
+    const userId = scope === "personal" ? ctx.userId : null;
+
+    if (!refresh) {
+      const stored = await loadWeeklyDigest(ctx.tenantId, scope, weekOf, userId);
+      if (stored) return jsonResponse(stored);
+    }
+
+    const digest = await generateTeamPulse(ctx.tenantId, permissionScopes, scope, userId);
+    try {
+      await saveWeeklyDigest(ctx.tenantId, digest, weekOf, userId);
+    } catch (err) {
+      console.error("Failed to persist digest:", err);
+    }
+    return jsonResponse(digest);
+  } catch (err) {
+    console.error("digest failed:", err);
+    return errorResponse(502, err instanceof Error ? err.message : "Digest generation failed");
+  }
+}
+
+// ── Handler: POST /billing/checkout (Stripe REST API, no SDK needed) ─────
+
+async function createCheckoutSession(tenantId: string, plan: string): Promise<{ checkout_url: string; session_id: string }> {
+  const secretKey = Deno.env.get("STRIPE_SECRET_KEY");
+  if (!secretKey) throw new Error("STRIPE_SECRET_KEY is not configured");
+
+  const priceMap: Record<string, string | undefined> = {
+    self_serve: Deno.env.get("STRIPE_SELF_SERVE_PRICE_ID"),
+    team: Deno.env.get("STRIPE_TEAM_PRICE_ID"),
+  };
+  const priceId = priceMap[plan];
+  if (!priceId) throw new Error(`Unknown plan: ${plan}`);
+
+  const successUrl = (Deno.env.get("STRIPE_SUCCESS_URL") ?? "http://localhost:5173/billing/success") + "?session_id={CHECKOUT_SESSION_ID}";
+  const cancelUrl = Deno.env.get("STRIPE_CANCEL_URL") ?? "http://localhost:5173/billing/cancel";
+
+  const form = new URLSearchParams();
+  form.set("mode", "subscription");
+  form.set("line_items[0][price]", priceId);
+  form.set("line_items[0][quantity]", "1");
+  form.set("client_reference_id", tenantId);
+  form.set("metadata[tenant_id]", tenantId);
+  form.set("metadata[plan]", plan);
+  form.set("subscription_data[metadata][tenant_id]", tenantId);
+  form.set("subscription_data[metadata][plan]", plan);
+  form.set("success_url", successUrl);
+  form.set("cancel_url", cancelUrl);
+
+  const resp = await fetchWithTimeout("https://api.stripe.com/v1/checkout/sessions", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${secretKey}`, "content-type": "application/x-www-form-urlencoded" },
+    body: form.toString(),
+  }, 15_000);
+  if (!resp.ok) throw new Error(`Stripe error: ${await resp.text()}`);
+  const session = await resp.json();
+  return { checkout_url: session.url, session_id: session.id };
+}
+
+async function handleBillingCheckout(req: Request): Promise<Response> {
+  let ctx: TenantContext;
+  try {
+    ctx = await getCurrentTenant(req);
+  } catch (err) {
+    return errorResponse(401, err instanceof Error ? err.message : "Unauthorized");
+  }
+  let body: { plan?: string };
+  try {
+    body = await req.json();
+  } catch {
+    return errorResponse(400, "Invalid JSON body");
+  }
+  if (!body.plan) return errorResponse(400, "plan is required");
+
+  try {
+    const result = await createCheckoutSession(ctx.tenantId, body.plan);
+    return jsonResponse({ checkout_url: result.checkout_url, session_id: result.session_id });
+  } catch (err) {
+    console.error("Checkout failed:", err);
+    return errorResponse(502, err instanceof Error ? err.message : "Checkout failed");
+  }
+}
+
+// ── Handler: GET/POST /api/v1/decisions ──────────────────────────────────
+
+async function handleDecisions(req: Request, url: URL): Promise<Response> {
+  let ctx: TenantContext;
+  try {
+    ctx = await getCurrentTenant(req);
+  } catch (err) {
+    return errorResponse(401, err instanceof Error ? err.message : "Unauthorized");
+  }
+
+  const parts = url.pathname.split("/api/v1/decisions")[1]?.split("/").filter(Boolean) ?? [];
+
+  if (req.method === "GET" && parts.length === 0) {
+    const limit = Math.min(Math.max(Number(url.searchParams.get("limit") ?? 50), 1), 200);
+    const offset = Math.max(Number(url.searchParams.get("offset") ?? 0), 0);
+    try {
+      const result = await listDecisions(ctx.tenantId, limit, offset);
+      return jsonResponse(result);
+    } catch (err) {
+      console.error("list decisions failed:", err);
+      return errorResponse(500, "Failed to list decisions");
+    }
+  }
+
+  if (req.method === "GET" && parts.length === 1) {
+    try {
+      const decision = await getDecisionById(ctx.tenantId, parts[0]);
+      if (!decision) return errorResponse(404, "Decision not found");
+      return jsonResponse(decision);
+    } catch (err) {
+      console.error("get decision failed:", err);
+      return errorResponse(500, "Failed to fetch decision");
+    }
+  }
+
+  return errorResponse(404, "Not found");
+}
+
+// ── Entrypoint ─────────────────────────────────────────────────────────
+
+Deno.serve(async (req: Request) => {
+  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
+
+  const url = new URL(req.url);
+  const path = url.pathname;
+
+  try {
+    if (path.endsWith("/auth/session") && req.method === "POST") return await handleAuthSession(req);
+    if (path.includes("/api/v1/decisions")) return await handleDecisions(req, url);
+    if (path.endsWith("/search") && req.method === "POST") return await handleSearch(req);
+    if (path.endsWith("/digest") && req.method === "GET") return await handleDigest(req, url);
+    if (path.endsWith("/billing/checkout") && req.method === "POST") return await handleBillingCheckout(req);
+    return errorResponse(404, "Not found");
+  } catch (err) {
+    const message = err instanceof Error ? (err.stack ?? err.message) : String(err);
+    console.error("api top-level failure:", message);
+    return errorResponse(500, "Internal server error");
+  }
+});
