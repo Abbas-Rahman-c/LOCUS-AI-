@@ -67,6 +67,32 @@ async function encryptRawContent(plaintext: Uint8Array): Promise<Uint8Array> {
   return out;
 }
 
+// ── fetch() with a hard timeout ───────────────────────────────────────────
+// Plain fetch() never times out on its own - if Anthropic or Voyage ever
+// stalls mid-request, an un-timed-out call hangs for the life of the
+// invocation. Confirmed live: a handful of messages sat retrying for over
+// 30 minutes with pgmq's visibility timeout (60s) repeatedly expiring mid-
+// hang, letting overlapping invocations pile up on the same messages
+// forever without any one of them ever finishing cleanly. The Python
+// worker this replaced always set an explicit request timeout (15s triage,
+// 30s extraction via the Anthropic SDK's `timeout` param) - this restores
+// that same guarantee so a stalled call fails fast and leaves the message
+// for pgmq's own retry instead of hanging indefinitely.
+async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: number): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } catch (err) {
+    if (err instanceof Error && err.name === "AbortError") {
+      throw new Error(`Request to ${url} timed out after ${timeoutMs}ms`);
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 // ── Anthropic (forced tool-use, matches modules.ai.triage/extraction) ────
 
 async function callClaude(
@@ -76,8 +102,9 @@ async function callClaude(
   toolName: string,
   maxTokens: number,
   model: string,
+  timeoutMs: number,
 ): Promise<Record<string, unknown>> {
-  const resp = await fetch("https://api.anthropic.com/v1/messages", {
+  const resp = await fetchWithTimeout("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
       "x-api-key": ANTHROPIC_API_KEY,
@@ -93,7 +120,7 @@ async function callClaude(
       tools: [tool],
       tool_choice: { type: "tool", name: toolName },
     }),
-  });
+  }, timeoutMs);
   if (!resp.ok) {
     throw new Error(`Anthropic API error ${resp.status}: ${await resp.text()}`);
   }
@@ -211,7 +238,7 @@ function buildEventUserMessage(event: {
 // ── Voyage embeddings (matches modules.ai.embeddings.provider.embed_document) ──
 
 async function embedDocument(text: string): Promise<number[]> {
-  const resp = await fetch("https://api.voyageai.com/v1/embeddings", {
+  const resp = await fetchWithTimeout("https://api.voyageai.com/v1/embeddings", {
     method: "POST",
     headers: {
       Authorization: `Bearer ${VOYAGE_API_KEY}`,
@@ -224,7 +251,7 @@ async function embedDocument(text: string): Promise<number[]> {
       output_dimension: VOYAGE_OUTPUT_DIMENSION,
       truncation: true,
     }),
-  });
+  }, 30_000);
   if (!resp.ok) {
     throw new Error(`Voyage API error ${resp.status}: ${await resp.text()}`);
   }
@@ -297,7 +324,29 @@ async function pgmqSend(queue: string, message: Record<string, unknown>): Promis
 
 // ── Ingestion pipeline (mirrors event_worker._handle_message) ────────────
 
+// Signals a failure that will NEVER succeed on retry (e.g. the tenant
+// disconnected this source after the message was already queued) - distinct
+// from a transient failure (Claude API hiccup, DB blip), which should stay
+// in the queue for pgmq's normal visibility-timeout retry. Without this
+// distinction a message like this retries forever: confirmed live, a single
+// stale message from a tenant that disconnected Gmail was read and failed
+// over 1000 times across ~19 hours, standing between every other queued
+// message and ever being processed (Deno reads in msg_id order).
+class NonRetryableIngestionError extends Error {}
+
 async function handleIngestionMessage(msg: PgmqMsg): Promise<string> {
+  try {
+    return await handleIngestionMessageInner(msg);
+  } catch (err) {
+    if (err instanceof NonRetryableIngestionError) {
+      await pgmqDelete("ingestion", msg.msg_id);
+      return "abandoned_no_active_connection";
+    }
+    throw err;
+  }
+}
+
+async function handleIngestionMessageInner(msg: PgmqMsg): Promise<string> {
   const payload = msg.message as {
     tenant_id: string; source: string; source_id: string; actor: string;
     thread_ref?: string | null; permission_scope: string[]; raw_content: unknown;
@@ -328,14 +377,20 @@ async function handleIngestionMessage(msg: PgmqMsg): Promise<string> {
   const metadata = JSON.stringify({ ingested_via: "ai-worker-deno", encrypted: true });
 
   const rawEventId = await withTenant(tenantId, async (sql) => {
-    const external = payload.source === "slack" ? null : null; // connection_id resolved below
     const connRows = await sql`
       SELECT id FROM public.source_connections
       WHERE tenant_id = ${tenantId} AND source = ${payload.source} AND status = 'active'
       ORDER BY created_at ASC LIMIT 1
     `;
     if (connRows.length === 0) {
-      throw new Error(`No active source_connections row for tenant=${tenantId} source=${payload.source}`);
+      // Non-retryable: this tenant no longer has an active connection for
+      // this source (they disconnected it after this message was already
+      // queued). It will never become active again on its own, so retrying
+      // is pure waste - the caller deletes the message instead of leaving
+      // it to retry forever.
+      throw new NonRetryableIngestionError(
+        `No active source_connections row for tenant=${tenantId} source=${payload.source}`,
+      );
     }
     const connectionId = connRows[0].id;
 
@@ -370,7 +425,7 @@ async function handleIngestionMessage(msg: PgmqMsg): Promise<string> {
 
   // Triage
   const userMsg = buildEventUserMessage(payload as never);
-  const triage = await callClaude(TRIAGE_SYSTEM_PROMPT, userMsg, TRIAGE_TOOL, "record_triage_result", 128, TRIAGE_MODEL);
+  const triage = await callClaude(TRIAGE_SYSTEM_PROMPT, userMsg, TRIAGE_TOOL, "record_triage_result", 128, TRIAGE_MODEL, 15_000);
 
   if (triage.decision === "DISCARD") {
     await withTenant(tenantId, async (sql) => {
@@ -382,7 +437,7 @@ async function handleIngestionMessage(msg: PgmqMsg): Promise<string> {
 
   // Extraction
   const extraction = await callClaude(
-    EXTRACTION_SYSTEM_PROMPT, userMsg, EXTRACTION_TOOL, "record_extraction_result", 512, EXTRACT_MODEL,
+    EXTRACTION_SYSTEM_PROMPT, userMsg, EXTRACTION_TOOL, "record_extraction_result", 512, EXTRACT_MODEL, 30_000,
   ) as {
     record_type: string; status: string; decision_statement: string; rationale: string | null;
     alternatives_considered: string[]; actors: { source_actor_id: string; role: string }[]; confidence: number;
@@ -507,23 +562,43 @@ async function runBounded<T>(items: T[], concurrency: number, fn: (item: T) => P
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
-  const ingestionMsgs = await pgmqRead("ingestion", INGESTION_BATCH);
-  const ingestionResults = await runBounded(ingestionMsgs, CONCURRENCY, handleIngestionMessage);
+  // pgmq.read() sets each row's visibility timeout as a side effect of the
+  // SQL call itself - if anything after that point throws (a parsing bug,
+  // a network drop), the messages are already locked for VISIBILITY_TIMEOUT_
+  // SECONDS with nothing to show for it, and an uncaught rejection here can
+  // otherwise surface to the caller as an opaque empty-looking response
+  // instead of a real error. Wrapping the whole handler guarantees the
+  // caller always sees what actually happened.
+  try {
+    const ingestionMsgs = await pgmqRead("ingestion", INGESTION_BATCH);
+    const ingestionResults = await runBounded(ingestionMsgs, CONCURRENCY, handleIngestionMessage);
 
-  const embeddingMsgs = await pgmqRead("embedding_queue", EMBEDDING_BATCH);
-  const embeddingResults = await runBounded(embeddingMsgs, CONCURRENCY, handleEmbeddingMessage);
+    const embeddingMsgs = await pgmqRead("embedding_queue", EMBEDDING_BATCH);
+    const embeddingResults = await runBounded(embeddingMsgs, CONCURRENCY, handleEmbeddingMessage);
 
-  const summarize = (results: { status: string }[]) => {
-    const counts: Record<string, number> = {};
-    for (const r of results) counts[r.status] = (counts[r.status] ?? 0) + 1;
-    return counts;
-  };
+    const summarize = (results: { status: string; error?: string }[]) => {
+      const counts: Record<string, number> = {};
+      for (const r of results) counts[r.status] = (counts[r.status] ?? 0) + 1;
+      const errors = results.filter((r) => r.status === "error").slice(0, 5).map((r) => r.error);
+      return { counts, errors };
+    };
 
-  return new Response(
-    JSON.stringify({
-      ingestion: { read: ingestionMsgs.length, ...summarize(ingestionResults) },
-      embedding: { read: embeddingMsgs.length, ...summarize(embeddingResults) },
-    }),
-    { headers: { ...corsHeaders, "Content-Type": "application/json" } },
-  );
+    const ingestionSummary = summarize(ingestionResults);
+    const embeddingSummary = summarize(embeddingResults);
+
+    return new Response(
+      JSON.stringify({
+        ingestion: { read: ingestionMsgs.length, ...ingestionSummary.counts, sample_errors: ingestionSummary.errors },
+        embedding: { read: embeddingMsgs.length, ...embeddingSummary.counts, sample_errors: embeddingSummary.errors },
+      }),
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+    );
+  } catch (err) {
+    const message = err instanceof Error ? (err.stack ?? err.message) : String(err);
+    console.error("ai-worker top-level failure:", message);
+    return new Response(
+      JSON.stringify({ error: message }),
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+    );
+  }
 });
