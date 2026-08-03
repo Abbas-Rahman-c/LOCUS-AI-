@@ -11,10 +11,11 @@ export type MemoryRecord = {
   summary: string
   participants: string
   source: string
-  confidence: string
   status: MemoryStatus
   date?: string
   listSource?: string
+  /** Real source URL (Slack permalink, Gmail/Notion link) - "View Original" opens this when present. */
+  sourceLink?: string
 }
 
 export const TYPE_STYLES: Record<MemoryRecordType, string> = {
@@ -166,7 +167,6 @@ export function MemoryRecordDetail({
           <span className="text-[#5A45FF]">{record.participants}</span>
         </DetailRow>
         <DetailRow label="SOURCE">{record.source}</DetailRow>
-        <DetailRow label="CONFIDENCE">{record.confidence}</DetailRow>
         <DetailRow label="STATUS">
           <span
             className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold ${STATUS_STYLES[record.status]}`}
@@ -179,7 +179,11 @@ export function MemoryRecordDetail({
       <div className="mt-4 flex flex-wrap items-center gap-2.5">
         <button
           type="button"
-          className="rounded-lg border border-[#5A45FF] bg-white px-4 py-2 text-[13px] font-semibold text-[#5A45FF] transition-colors hover:bg-[#F8F7FF]"
+          disabled={!record.sourceLink}
+          onClick={() => {
+            if (record.sourceLink) window.open(record.sourceLink, '_blank', 'noopener,noreferrer')
+          }}
+          className="rounded-lg border border-[#5A45FF] bg-white px-4 py-2 text-[13px] font-semibold text-[#5A45FF] transition-colors hover:bg-[#F8F7FF] disabled:cursor-not-allowed disabled:border-[#E5E7EB] disabled:text-[#9CA3AF] disabled:hover:bg-white"
         >
           View Original
         </button>
@@ -222,7 +226,6 @@ export function createDefaultMemoryRecord(
       'Adopt PostgreSQL for the context layer persistence over vector-only stores',
     participants: '@jwest, @priya, @mtanaka',
     source: 'Notion · #product-planning · Mar 12, 9:41am',
-    confidence: '0.92, confirmed decision',
     status: 'Current',
     listSource: 'Slack #engineering',
     date: 'Aug 24, 2026',

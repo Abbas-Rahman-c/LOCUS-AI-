@@ -100,37 +100,77 @@ Deno.serve(async (req: Request) => {
     return new Response("OK", { status: 200 });
   }
 
-  // Look up the real tenant via the source_connections row OAuth created,
-  // matching on the Slack team ID that comes with every event payload.
+  // The Privacy settings page states as an unconditional commitment that
+  // DMs and group DMs are never read or captured - channel_type is "im"
+  // for a 1:1 DM and "mpim" for a group DM (vs "channel"/"group" for
+  // regular and private channels). Nothing enforced that claim before;
+  // if the Slack app ever had im:history/mpim:history granted, a DM would
+  // have been captured exactly like a channel message.
+  const channelType = String(event.channel_type ?? "");
+  if (channelType === "im" || channelType === "mpim") {
+    return new Response("OK (DM excluded)", { status: 200 });
+  }
+
+  // Look up every tenant with an active connection to this Slack workspace,
+  // matching on the team ID that comes with every event payload. A single
+  // Slack workspace can legitimately be connected by more than one tenant
+  // (e.g. several people on the same team each connecting Locus
+  // independently) - every one of them should get their own separate
+  // capture of the same message, not just whichever connection happens to
+  // be returned first.
   const teamId = String(payload.team_id ?? "");
-  const connection = await withAdmin(async (sql) => {
-    const rows = await sql`
+  const connections = await withAdmin(async (sql) => {
+    return await sql`
       select tenant_id
       from public.source_connections
       where source = 'slack'
         and external_workspace_id = ${teamId}
-      limit 1
+        and status = 'active'
     `;
-    return rows[0] ?? null;
   });
 
-  if (!connection) {
-    // No matching connection — can't attribute this event to a tenant.
+  if (connections.length === 0) {
+    // No matching connection — can't attribute this event to any tenant.
     // Acknowledge so Slack doesn't retry, but don't enqueue.
     return new Response("OK (no matching connection)", { status: 200 });
   }
 
-  const tenantId = connection.tenant_id;
+  const sourceId = String(event.ts ?? payload.event_id ?? crypto.randomUUID());
+  const receivedAt = new Date().toISOString();
+  // Slack's real https:// permalink (chat.getPermalink) needs a bot token
+  // and an extra API round trip per message; this slack:// deep link needs
+  // neither - it's built entirely from data already on the event and opens
+  // straight to the message in the Slack app.
+  const slackDeepLink = event.channel && event.ts
+    ? `slack://channel?team=${encodeURIComponent(teamId)}&id=${encodeURIComponent(String(event.channel))}&message=${encodeURIComponent(String(event.ts))}`
+    : undefined;
+  for (const connection of connections) {
+    await enqueueEvent({
+      tenant_id: connection.tenant_id,
+      source: "slack",
+      source_id: sourceId,
+      actor: String(event.user ?? "unknown"),
+      thread_ref: String(event.thread_ts ?? event.channel ?? ""),
+      permission_scope: event.channel ? [String(event.channel)] : [],
+      raw_content: { text: String(event.text ?? "") },
+      source_permalink: slackDeepLink,
+      received_at: receivedAt,
+    });
+  }
 
-  await enqueueEvent({
-    tenant_id: tenantId,
-    source: "slack",
-    source_id: String(event.ts ?? payload.event_id ?? crypto.randomUUID()),
-    actor: String(event.user ?? "unknown"),
-    thread_ref: String(event.thread_ts ?? event.channel ?? ""),
-    permission_scope: String(event.channel ?? ""),
-    raw_content: String(event.text ?? ""),
-    received_at: new Date().toISOString(),
+  // Slack is push-based - there's no poll cycle to timestamp the way
+  // Notion/Gmail have, so last_synced_at was never set here and every
+  // Slack connection showed "Not yet synced" in the UI forever, even with
+  // messages actively arriving. Stamping it on every received event makes
+  // the same "Synced Xm ago" display accurate for Slack too.
+  await withAdmin(async (sql) => {
+    await sql`
+      update public.source_connections
+      set last_synced_at = ${receivedAt}
+      where source = 'slack'
+        and external_workspace_id = ${teamId}
+        and status = 'active'
+    `;
   });
 
   return new Response("OK", { status: 200 });

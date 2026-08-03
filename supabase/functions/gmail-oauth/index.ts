@@ -1,8 +1,10 @@
 import { withTenant } from "../_shared/db.ts";
 import {
   authorizeErrorResponse,
+  encodeState,
   parseTenantState,
   popupCallbackResponse,
+  resolveRedirectOrigin,
   resolveTenantFromAuthorize,
 } from "../_shared/oauth_tenant.ts";
 
@@ -19,6 +21,7 @@ Deno.serve(async (req: Request) => {
 
   // GET /authorize: redirect to Google's consent screen
   if (url.pathname.endsWith("/authorize")) {
+    const redirectOrigin = resolveRedirectOrigin(url);
     try {
       const tenantId = await resolveTenantFromAuthorize(url);
 
@@ -36,21 +39,22 @@ Deno.serve(async (req: Request) => {
       googleAuthUrl.searchParams.set("scope", scopes.join(" "));
       googleAuthUrl.searchParams.set("access_type", "offline");
       googleAuthUrl.searchParams.set("prompt", "consent");
-      googleAuthUrl.searchParams.set("state", tenantId);
+      googleAuthUrl.searchParams.set("state", encodeState(tenantId, redirectOrigin));
 
       return Response.redirect(googleAuthUrl.toString(), 302);
     } catch (err) {
-      return authorizeErrorResponse(SOURCE, err);
+      return authorizeErrorResponse(SOURCE, err, redirectOrigin);
     }
   }
 
   // GET /callback: handle Google's redirect back
   if (url.pathname.endsWith("/callback")) {
     let tenantId: string;
+    let redirectOrigin: string;
     try {
-      tenantId = parseTenantState(url.searchParams.get("state"));
+      ({ tenantId, redirectOrigin } = parseTenantState(url.searchParams.get("state")));
     } catch (err) {
-      return authorizeErrorResponse(SOURCE, err);
+      return authorizeErrorResponse(SOURCE, err, resolveRedirectOrigin(url));
     }
 
     const code = url.searchParams.get("code");
@@ -59,7 +63,7 @@ Deno.serve(async (req: Request) => {
         success: false,
         error: "Missing authorization code",
         status: 400,
-      });
+      }, redirectOrigin);
     }
 
     try {
@@ -82,7 +86,7 @@ Deno.serve(async (req: Request) => {
           success: false,
           error: `Gmail OAuth failed: ${tokenData.error ?? "unknown error"}`,
           status: 400,
-        });
+        }, redirectOrigin);
       }
 
       // 2. Get the user's email address
@@ -97,7 +101,7 @@ Deno.serve(async (req: Request) => {
           success: false,
           error: "Email address not returned by Google",
           status: 400,
-        });
+        }, redirectOrigin);
       }
 
       // 3. Store the connection under tenant GUC (locus_app / APP_DATABASE_URL).
@@ -134,17 +138,17 @@ Deno.serve(async (req: Request) => {
           success: false,
           error: `Failed to store token: ${message}`,
           status: 500,
-        });
+        }, redirectOrigin);
       }
 
-      return popupCallbackResponse(SOURCE, { success: true });
+      return popupCallbackResponse(SOURCE, { success: true }, redirectOrigin);
     } catch (error) {
       console.error("OAuth error:", error);
       return popupCallbackResponse(SOURCE, {
         success: false,
         error: "Internal Server Error",
         status: 500,
-      });
+      }, redirectOrigin);
     }
   }
 

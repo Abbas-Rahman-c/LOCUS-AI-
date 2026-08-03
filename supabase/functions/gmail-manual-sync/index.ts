@@ -3,6 +3,95 @@ import { enqueueEvent, IngestionEnvelope } from "../_shared/queue.ts";
 
 console.log("Gmail manual sync started!");
 
+const GMAIL_CLIENT_ID = Deno.env.get("GMAIL_CLIENT_ID");
+const GMAIL_CLIENT_SECRET = Deno.env.get("GMAIL_CLIENT_SECRET");
+
+// Plain fetch() never times out on its own - with every active Gmail
+// connection processed sequentially in one invocation, a single stalled
+// call (token refresh, list, or per-message fetch) blocks every other
+// tenant's sync behind it. Same bug, same fix as ai-worker/index.ts.
+async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: number): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } catch (err) {
+    if (err instanceof Error && err.name === "AbortError") {
+      throw new Error(`Request to ${url} timed out after ${timeoutMs}ms`);
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * Google access tokens expire in ~1 hour; oauth_token_ref goes stale fast.
+ * Refreshes it up front using the refresh_token captured at connect time
+ * (stored in cursor_state by gmail-oauth's callback), and persists the new
+ * access token so later syncs don't need to refresh again until it expires.
+ */
+// deno-lint-ignore no-explicit-any
+async function refreshAccessToken(source: any): Promise<string | null> {
+  const refreshToken = (source.cursor_state as Record<string, unknown> | null)?.refresh_token as
+    | string
+    | undefined;
+  if (!refreshToken) {
+    console.error(`No refresh_token stored for source ${source.id}; cannot refresh.`);
+    return null;
+  }
+
+  const resp = await fetchWithTimeout("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      client_id: GMAIL_CLIENT_ID ?? "",
+      client_secret: GMAIL_CLIENT_SECRET ?? "",
+      refresh_token: refreshToken,
+      grant_type: "refresh_token",
+    }),
+  }, 15_000);
+
+  if (!resp.ok) {
+    console.error(`Gmail token refresh failed for source ${source.id}:`, await resp.text());
+    return null;
+  }
+
+  const data = await resp.json();
+  const newAccessToken = data.access_token as string | undefined;
+  if (!newAccessToken) return null;
+
+  await withTenant(String(source.tenant_id), async (sql) => {
+    await sql`
+      update public.source_connections
+      set oauth_token_ref = ${newAccessToken}
+      where id = ${source.id}
+    `;
+  });
+
+  return newAccessToken;
+}
+
+const SYNC_CONCURRENCY = 5;
+
+// Runs syncOneSource(source) for every source with at most `concurrency` in
+// flight at once - one tenant's stalled OAuth/Gmail call (now bounded to
+// 15s by fetchWithTimeout, but 15s x up to 12 sequential calls still adds
+// up) no longer serializes behind every other tenant's sync.
+// deno-lint-ignore no-explicit-any
+async function runBounded(sources: any[], concurrency: number, fn: (source: any) => Promise<unknown>) {
+  const results: unknown[] = [];
+  let i = 0;
+  async function worker() {
+    while (i < sources.length) {
+      const source = sources[i++];
+      results.push(await fn(source));
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(concurrency, sources.length) }, worker));
+  return results;
+}
+
 Deno.serve(async (_req) => {
   // Cross-tenant list of active Gmail connections (admin / bypass)
   const sources = await withAdmin(async (sql) => {
@@ -14,26 +103,26 @@ Deno.serve(async (_req) => {
     `;
   });
 
-  const results = [];
-
-  for (const source of sources) {
+  // deno-lint-ignore no-explicit-any
+  async function syncOneSource(source: any) {
     try {
       console.log(`Syncing Gmail: ${source.external_workspace_id}`);
 
-      const accessToken = source.oauth_token_ref;
+      const accessToken = await refreshAccessToken(source);
       if (!accessToken) {
-        console.error(`No access token for source ${source.id}`);
-        continue;
+        console.error(`Unable to obtain a valid access token for source ${source.id}`);
+        return { source_id: source.id, messages_synced: 0, error: "no_access_token" };
       }
 
-      const listResp = await fetch(
+      const listResp = await fetchWithTimeout(
         "https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=10",
         { headers: { Authorization: `Bearer ${accessToken}` } },
+        15_000,
       );
 
       if (!listResp.ok) {
         console.error(`Gmail list error for ${source.id}:`, await listResp.text());
-        continue;
+        return { source_id: source.id, messages_synced: 0, error: `list_failed_${listResp.status}` };
       }
 
       const listData = await listResp.json();
@@ -43,9 +132,10 @@ Deno.serve(async (_req) => {
       let syncedCount = 0;
 
       for (const msgMeta of messages) {
-        const msgResp = await fetch(
+        const msgResp = await fetchWithTimeout(
           `https://gmail.googleapis.com/gmail/v1/users/me/messages/${msgMeta.id}?format=full`,
           { headers: { Authorization: `Bearer ${accessToken}` } },
+          15_000,
         );
         if (!msgResp.ok) {
           console.error(`Failed to fetch message ${msgMeta.id}:`, await msgResp.text());
@@ -84,15 +174,18 @@ Deno.serve(async (_req) => {
           source_id: rawMsg.id,
           actor: actor || "unknown",
           thread_ref: rawMsg.threadId,
-          permission_scope: source.external_workspace_id,
-          raw_content: JSON.stringify({
+          permission_scope: source.external_workspace_id ? [String(source.external_workspace_id)] : [],
+          raw_content: {
             subject: getHeader("Subject"),
             body,
             from: fromHeader,
             to: getHeader("To"),
             date: getHeader("Date"),
             snippet: rawMsg.snippet,
-          }),
+          },
+          // #all/{id} works regardless of which label the message is
+          // filed under (inbox, archived, etc.), unlike #inbox/{id}.
+          source_permalink: `https://mail.google.com/mail/u/0/#all/${rawMsg.id}`,
           received_at: new Date().toISOString(),
         };
 
@@ -108,11 +201,14 @@ Deno.serve(async (_req) => {
         `;
       });
 
-      results.push({ source_id: source.id, messages_synced: syncedCount });
+      return { source_id: source.id, messages_synced: syncedCount };
     } catch (err) {
       console.error(`Error syncing source ${source.id}:`, err);
+      return { source_id: source.id, messages_synced: 0, error: err instanceof Error ? err.message : String(err) };
     }
   }
+
+  const results = await runBounded(sources, SYNC_CONCURRENCY, syncOneSource);
 
   return new Response(JSON.stringify({ message: "Sync completed", results }), {
     headers: { "Content-Type": "application/json" },

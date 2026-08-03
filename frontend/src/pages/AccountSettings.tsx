@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import type { User } from '@supabase/supabase-js'
 import { getSupabaseClient, isSupabaseConfigured } from '../lib/supabase'
 import { DEMO_EMAIL_KEY, WORKSPACES_DONE_KEY } from '../lib/sessionKeys'
+import { clearBackendSession, createCheckoutSession } from '../lib/api'
 
 function TrashIcon() {
   return (
@@ -71,6 +72,21 @@ function PlanFeature({
 }
 
 function PlanPicker({ onClose }: { onClose: () => void }) {
+  const [isUpgrading, setIsUpgrading] = useState(false)
+  const [upgradeError, setUpgradeError] = useState('')
+
+  const handleUpgrade = async () => {
+    setIsUpgrading(true)
+    setUpgradeError('')
+    try {
+      const { checkout_url } = await createCheckoutSession('team')
+      window.location.href = checkout_url
+    } catch (error) {
+      setUpgradeError(error instanceof Error ? error.message : 'Unable to start checkout.')
+      setIsUpgrading(false)
+    }
+  }
+
   return (
     <div
       className="fixed inset-0 z-50 bg-black/25 p-3 sm:p-5"
@@ -185,10 +201,17 @@ function PlanPicker({ onClose }: { onClose: () => void }) {
               <div className="mt-auto border-t border-[#E0E2E8] pt-6">
                 <button
                   type="button"
-                  className="h-12 w-full rounded-[8px] bg-[#4B3BD4] text-[16px] font-semibold text-white hover:bg-[#3F30BC]"
+                  disabled={isUpgrading}
+                  onClick={() => void handleUpgrade()}
+                  className="h-12 w-full rounded-[8px] bg-[#4B3BD4] text-[16px] font-semibold text-white hover:bg-[#3F30BC] disabled:cursor-wait disabled:opacity-70"
                 >
-                  Upgrade
+                  {isUpgrading ? 'Starting checkout...' : 'Upgrade'}
                 </button>
+                {upgradeError ? (
+                  <p role="alert" className="mt-2 text-[13px] text-[#B4232C]">
+                    {upgradeError}
+                  </p>
+                ) : null}
               </div>
             </div>
           </article>
@@ -296,6 +319,7 @@ function clearLocalSession() {
   sessionStorage.removeItem(DEMO_EMAIL_KEY)
   sessionStorage.removeItem(WORKSPACES_DONE_KEY)
   sessionStorage.removeItem('locus:connected-tools')
+  clearBackendSession()
 }
 
 export default function AccountSettings() {

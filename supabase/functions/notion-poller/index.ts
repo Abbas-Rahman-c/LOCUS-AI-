@@ -66,11 +66,19 @@ Deno.serve(async (_req) => {
         const envelope: IngestionEnvelope = {
           tenant_id: source.tenant_id,
           source: "notion",
-          source_id: source.id,
+          // Dedup is keyed on (tenant_id, source, source_id) - this must be
+          // the page's own id, not the connection's id (source.id), or every
+          // page after the first in a batch collides with the first's
+          // raw_events row and is silently treated as an already-seen
+          // duplicate, never stored.
+          source_id: page.id,
           actor: page.last_edited_by?.id || "unknown",
           thread_ref: page.id,
-          permission_scope: source.external_workspace_id,
-          raw_content: JSON.stringify(page),
+          permission_scope: source.external_workspace_id ? [String(source.external_workspace_id)] : [],
+          raw_content: page,
+          // Notion's Search API already returns the page's real URL - no
+          // extra lookup needed, unlike Slack/Gmail.
+          source_permalink: typeof page.url === "string" ? page.url : undefined,
           received_at: new Date().toISOString(),
         };
         await enqueueEvent(envelope);

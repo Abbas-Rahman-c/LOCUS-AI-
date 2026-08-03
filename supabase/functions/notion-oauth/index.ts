@@ -1,8 +1,10 @@
 import { withTenant } from "../_shared/db.ts";
 import {
   authorizeErrorResponse,
+  encodeState,
   parseTenantState,
   popupCallbackResponse,
+  resolveRedirectOrigin,
   resolveTenantFromAuthorize,
 } from "../_shared/oauth_tenant.ts";
 
@@ -19,6 +21,8 @@ Deno.serve(async (req: Request) => {
 
   // GET /authorize: Redirect to Notion consent screen
   if (url.pathname.endsWith("/authorize")) {
+    const redirectOrigin = resolveRedirectOrigin(url);
+    const syncMode = url.searchParams.get("sync_mode") === "new" ? "new" : "full";
     try {
       const tenantId = await resolveTenantFromAuthorize(url);
 
@@ -27,21 +31,23 @@ Deno.serve(async (req: Request) => {
       notionAuthUrl.searchParams.set("response_type", "code");
       notionAuthUrl.searchParams.set("owner", "user");
       notionAuthUrl.searchParams.set("redirect_uri", REDIRECT_URI ?? "");
-      notionAuthUrl.searchParams.set("state", tenantId);
+      notionAuthUrl.searchParams.set("state", encodeState(tenantId, redirectOrigin, syncMode));
 
       return Response.redirect(notionAuthUrl.toString(), 302);
     } catch (err) {
-      return authorizeErrorResponse(SOURCE, err);
+      return authorizeErrorResponse(SOURCE, err, redirectOrigin);
     }
   }
 
   // GET /callback: Handle OAuth callback
   if (url.pathname.endsWith("/callback")) {
     let tenantId: string;
+    let redirectOrigin: string;
+    let syncMode: "full" | "new";
     try {
-      tenantId = parseTenantState(url.searchParams.get("state"));
+      ({ tenantId, redirectOrigin, syncMode } = parseTenantState(url.searchParams.get("state")));
     } catch (err) {
-      return authorizeErrorResponse(SOURCE, err);
+      return authorizeErrorResponse(SOURCE, err, resolveRedirectOrigin(url));
     }
 
     const code = url.searchParams.get("code");
@@ -50,7 +56,7 @@ Deno.serve(async (req: Request) => {
         success: false,
         error: "Missing authorization code",
         status: 400,
-      });
+      }, redirectOrigin);
     }
 
     try {
@@ -74,15 +80,24 @@ Deno.serve(async (req: Request) => {
           success: false,
           error: `Notion OAuth failed: ${tokenData.error ?? "unknown error"}`,
           status: 400,
-        });
+        }, redirectOrigin);
       }
+
+      // "new" means only pick up content from this moment forward -
+      // last_synced_at = now() gives notion-poller exactly that cursor.
+      // "full" (default, and every first-time connect) must explicitly
+      // clear last_synced_at back to null on a RECONNECT, not just leave
+      // it - the upsert previously never touched this column at all, so
+      // reconnecting after a disconnect kept whatever cursor was already
+      // there instead of actually backfilling everything again.
+      const lastSyncedAt = syncMode === "new" ? new Date().toISOString() : null;
 
       try {
         await withTenant(tenantId, async (sql) => {
           await sql`
             insert into public.source_connections (
               tenant_id, source, external_workspace_id, oauth_token_ref,
-              ingestion_mode, status, cursor_state
+              ingestion_mode, status, cursor_state, last_synced_at
             ) values (
               ${tenantId}::uuid,
               'notion',
@@ -90,13 +105,15 @@ Deno.serve(async (req: Request) => {
               ${tokenData.access_token},
               'polling',
               'active',
-              '{}'::jsonb
+              '{}'::jsonb,
+              ${lastSyncedAt}
             )
             on conflict (tenant_id, source, external_workspace_id)
             do update set
               oauth_token_ref = excluded.oauth_token_ref,
               status = 'active',
-              ingestion_mode = excluded.ingestion_mode
+              ingestion_mode = excluded.ingestion_mode,
+              last_synced_at = excluded.last_synced_at
           `;
         });
       } catch (err) {
@@ -105,17 +122,17 @@ Deno.serve(async (req: Request) => {
           success: false,
           error: `Failed to store token: ${message}`,
           status: 500,
-        });
+        }, redirectOrigin);
       }
 
-      return popupCallbackResponse(SOURCE, { success: true });
+      return popupCallbackResponse(SOURCE, { success: true }, redirectOrigin);
     } catch (error) {
       console.error("OAuth error:", error);
       return popupCallbackResponse(SOURCE, {
         success: false,
         error: "Internal Server Error",
         status: 500,
-      });
+      }, redirectOrigin);
     }
   }
 
