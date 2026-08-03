@@ -19,7 +19,7 @@ const CAPTURES: MemoryRecord[] = [
     type: 'Blocker',
     title: 'Adopt PostgreSQL for the context layer',
     meta: 'Slack · 3h ago',
-    confidence: '0.81 — open blocker',
+    confidence: '0.81, open blocker',
     status: 'Current',
   }),
   createDefaultMemoryRecord({
@@ -27,7 +27,7 @@ const CAPTURES: MemoryRecord[] = [
     type: 'Action Item',
     title: 'Adopt PostgreSQL for the context layer',
     meta: 'Slack · 3h ago',
-    confidence: '0.88 — assigned action',
+    confidence: '0.88, assigned action',
   }),
   createDefaultMemoryRecord({
     id: 'dash-4',

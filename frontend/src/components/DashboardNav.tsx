@@ -17,12 +17,6 @@ type ProfileUser = {
   initials: string
 }
 
-const OTHER_ACCOUNTS = [
-  { name: 'Jun Zhou', email: 'junzhou@gmail.com', initials: 'JZ' },
-  { name: 'Jun Zhou', email: 'junzhou@gmail.com', initials: 'JZ' },
-  { name: 'Jun Zhou', email: 'junzhou@gmail.com', initials: 'JZ' },
-]
-
 function clearLocalSession() {
   sessionStorage.removeItem(DEMO_EMAIL_KEY)
   sessionStorage.removeItem(WORKSPACES_DONE_KEY)
@@ -38,13 +32,20 @@ function getInitials(name: string) {
     .join('')
 }
 
+function getNameFromEmail(email: string) {
+  const emailName = email.split('@')[0]?.replace(/[._-]+/g, ' ').trim()
+  if (!emailName) return 'Locus User'
+
+  return emailName.replace(/\b\w/g, (letter) => letter.toUpperCase())
+}
+
 export function DashboardNav() {
   const navigate = useNavigate()
   const [menuOpen, setMenuOpen] = useState(false)
   const [profile, setProfile] = useState<ProfileUser>({
-    name: 'Jun Zhou',
-    email: 'junzhou@gmail.com',
-    initials: 'JZ',
+    name: 'Locus User',
+    email: '',
+    initials: 'LU',
   })
   const menuRef = useRef<HTMLDivElement>(null)
 
@@ -65,15 +66,15 @@ export function DashboardNav() {
     void supabase.auth.getSession().then(({ data }) => {
       const user = data.session?.user
       if (!user) return
-      const email = user.email ?? 'junzhou@gmail.com'
+      const email = user.email ?? ''
       const name =
         String(
           user.user_metadata.full_name ||
             user.user_metadata.name ||
             user.user_metadata.display_name ||
-            'Jun Zhou',
+            getNameFromEmail(email),
         )
-      setProfile({ name, email, initials: getInitials(name) || 'JZ' })
+      setProfile({ name, email, initials: getInitials(name) || 'LU' })
     })
   }, [])
 
@@ -195,31 +196,9 @@ export function DashboardNav() {
                   </svg>
                 </div>
                 <p className="mt-3 text-[16px] font-bold text-[#111827]">{profile.name}</p>
-                <p className="mt-0.5 text-[13px] text-[#6B7280]">{profile.email}</p>
-              </div>
-
-              <div className="border-t border-[#E8E8ED] px-4 pt-3 pb-2">
-                <p className="px-1 text-[14px] font-bold text-[#111827]">Other Accounts</p>
-                <ul className="mt-2">
-                  {OTHER_ACCOUNTS.map((account, index) => (
-                    <li
-                      key={`${account.email}-${index}`}
-                      className={`flex items-center gap-3 px-1 py-3 ${
-                        index < OTHER_ACCOUNTS.length - 1 ? 'border-b border-[#F0F0F4]' : ''
-                      }`}
-                    >
-                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#EEEBFF] text-[12px] font-semibold text-[#5A45FF]">
-                        {account.initials}
-                      </div>
-                      <div className="min-w-0">
-                        <p className="truncate text-[14px] font-semibold text-[#111827]">
-                          {account.name}
-                        </p>
-                        <p className="truncate text-[12px] text-[#6B7280]">{account.email}</p>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
+                {profile.email ? (
+                  <p className="mt-0.5 text-[13px] text-[#6B7280]">{profile.email}</p>
+                ) : null}
               </div>
 
               <div className="border-t border-[#E8E8ED] p-4">

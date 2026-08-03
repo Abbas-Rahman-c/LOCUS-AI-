@@ -687,7 +687,7 @@ export default function SettingsPage() {
                   <p className="mt-1 text-[13px] leading-relaxed text-[#6B7280]">
                     Locus reads messages to build structured memory, then
                     permanently deletes the raw content within 24 hours. Only the
-                    extracted context summary is stored — never
+                    extracted context summary is stored, never
                     the full message thread.
                   </p>
                   <div className="mt-5">
@@ -816,7 +816,7 @@ export default function SettingsPage() {
                   {
                     id: 'readonly-oauth',
                     icon: <ShieldIcon />,
-                    text: 'Read-only OAuth — Locus never writes to Slack, Notion, or Gmail.',
+                    text: 'Read-only OAuth. Locus never writes to Slack, Notion, or Gmail.',
                   },
                   {
                     id: 'raw-deleted',
@@ -846,7 +846,7 @@ export default function SettingsPage() {
                         <path d="M9 12l2 2 4-4" stroke="#5A45FF" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
                       </svg>
                     ),
-                    text: 'Read-only OAuth — Locus never writes to Slack, Notion, or Gmail.',
+                    text: 'Read-only OAuth. Locus never writes to Slack, Notion, or Gmail.',
                   },
                 ].map((item) => (
                   <div

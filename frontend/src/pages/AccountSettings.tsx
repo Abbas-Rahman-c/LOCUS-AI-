@@ -46,13 +46,13 @@ function RocketIcon() {
 }
 
 const CORE_PLAN_FEATURES = [
-  'Own memory sources (Slack, Notion, Gmail — with SharePoint/OneDrive/Teams on the roadmap)',
+  'Own memory sources (Slack, Notion, and Gmail, with SharePoint/OneDrive/Teams on the roadmap)',
   'Own memory register (private, not shared)',
   'Context Search with saved search history',
-  'Personal Pulse — weekly digest of your own organizational memory',
-  'Catch-Up Brief — self-serve, parameterized by scope and time window',
+  'Personal Pulse: weekly digest of your own organizational memory',
+  'Catch-Up Brief: self-serve, parameterized by scope and time window',
   'Memory refresh rate: 6 hours',
-  'MCP access — search_team_context, get_team_pulse, get_onboarding_brief callable from Claude',
+  'MCP access: search_team_context, get_team_pulse, and get_onboarding_brief callable from Claude',
 ]
 
 function PlanFeature({

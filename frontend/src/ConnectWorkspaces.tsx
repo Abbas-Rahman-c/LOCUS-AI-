@@ -17,21 +17,21 @@ const tools: Tool[] = [
     id: 'slack',
     name: 'Slack',
     description:
-      "Build memory from channels and threads you're already in. Locus learns — you stay focused.",
+      "Capture memory from channels and threads you're already in. Locus listens — you stay focused.",
     iconSrc: '/slack-logo.png',
   },
   {
     id: 'notion',
     name: 'Notion',
     description:
-      "Build memory from channels and threads you're already in. Locus learns — you stay focused.",
+      "Capture memory from channels and threads you're already in. Locus listens — you stay focused.",
     iconSrc: '/notion-logo.png',
   },
   {
     id: 'gmail',
     name: 'Gmail',
     description:
-      "Build memory from channels and threads you're already in. Locus learns — you stay focused.",
+      "Capture memory from channels and threads you're already in. Locus listens — you stay focused.",
     iconSrc: '/gmail-logo.png',
   },
 ]
@@ -93,7 +93,7 @@ export default function ConnectWorkspaces({
   }
 
   return (
-    <main className="min-h-screen bg-[#f8f8fc] px-5 py-6 text-[#17171b] sm:px-8 sm:py-8 lg:px-10">
+    <main className="min-h-screen bg-[#f4f4f8] px-5 py-6 text-[#18181b] sm:px-8 sm:py-8 lg:px-10">
       <div className="mx-auto flex min-h-[calc(100vh-4rem)] w-full max-w-[1360px] flex-col items-center">
         <LocusLogo size={40} className="gap-3 [&_span]:text-[22px]" />
 
@@ -101,9 +101,11 @@ export default function ConnectWorkspaces({
           <h1 className="text-[28px] font-bold leading-tight sm:text-[32px]">
             Connect your workspaces
           </h1>
-          <p className="mx-auto mt-3 max-w-[660px] text-[15px] leading-[1.45] text-[#7a8190] sm:text-[17px]">
-            Your Locus account is ready. Next: connect Slack, Notion, and
-            <br className="hidden sm:block" /> Gmail so we can start building organizational memory.
+          <p className="mx-auto mt-3 max-w-[760px] text-[15px] leading-[1.45] text-[#6b7280] sm:text-[17px]">
+            <span className="block">
+              Your Locus account is ready. Next: connect Slack, Notion, and Gmail so
+            </span>
+            <span className="block">we can start capturing decisions.</span>
           </p>
           <div className="mt-2 flex flex-wrap items-center justify-center gap-2 text-[14px] text-[#7a8190]">
             <GoogleIcon />
@@ -143,8 +145,10 @@ export default function ConnectWorkspaces({
                   </div>
                 </div>
 
-                <p className="mt-4 flex-1 text-[15px] leading-[1.45] text-[#737b8c]">
-                  {tool.description}
+                <p className="mt-4 flex-1 text-[15px] leading-[1.45] text-[#6b7280]">
+                  <span className="block">Capture memory from channels and</span>
+                  <span className="block">threads you're already in. Locus listens —</span>
+                  <span className="block">you stay focused.</span>
                 </p>
 
                 <button
