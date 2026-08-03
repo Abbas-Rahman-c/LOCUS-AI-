@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import logoSrc from "./assets/locuslogo.png";
 
 
@@ -34,9 +34,28 @@ const GoogleIcon: React.FC = () => (
   </svg>
 );
 
-const CheckIcon: React.FC = () => (
+const CheckIcon: React.FC<{ isVisible: boolean }> = ({ isVisible }) => (
   <svg viewBox="0 0 24 24" fill="none" className="h-3.5 w-3.5">
-    <path d="M5 13l4 4L19 7" stroke="white" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round" />
+    <path
+      d="M5 13l4 4L19 7"
+      stroke="#9CA3AF"
+      strokeWidth={3}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+    <path
+      d="M5 13l4 4L19 7"
+      stroke="white"
+      strokeWidth={3}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      pathLength="1"
+      className="transition-[stroke-dashoffset] duration-500 ease-out"
+      style={{
+        strokeDasharray: 1,
+        strokeDashoffset: isVisible ? 0 : 1,
+      }}
+    />
   </svg>
 );
 
@@ -49,18 +68,34 @@ const SpinnerIcon: React.FC = () => (
 interface StepRowProps {
   step: DecisionStep;
   isLast: boolean;
+  isRevealed: boolean;
 }
 
-const StepRow: React.FC<StepRowProps> = ({ step, isLast }) => {
-  const bubbleClasses = step.status === "pending" ? "bg-gray-200" : "bg-gray-900";
+const StepRow: React.FC<StepRowProps> = ({ step, isLast, isRevealed }) => {
+  const isActive = isRevealed && step.status !== "pending";
+  const bubbleClasses = isActive
+    ? "border-gray-900 bg-gray-900"
+    : "border-gray-300 bg-white";
   return (
     <div className="flex items-start">
       <div className="flex flex-col items-center">
-        <div className={`flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full ${bubbleClasses}`}>
-          {step.status === "complete" && <CheckIcon />}
-          {step.status === "in-progress" && <SpinnerIcon />}
+        <div
+          className={`flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full border transition-[transform,background-color,border-color] duration-300 ease-out ${bubbleClasses} ${
+            isRevealed ? "scale-100" : "scale-90"
+          }`}
+        >
+          {step.status === "complete" && <CheckIcon isVisible={isRevealed} />}
+          {step.status === "in-progress" && isRevealed && <SpinnerIcon />}
         </div>
-        {!isLast && <div className="my-1 h-8 w-px bg-lime-400" />}
+        {!isLast && (
+          <div className="my-1 h-8 w-px overflow-hidden bg-gray-200">
+            <div
+              className={`h-full w-full origin-top bg-lime-400 transition-transform duration-500 ease-out ${
+                isRevealed ? "scale-y-100" : "scale-y-0"
+              }`}
+            />
+          </div>
+        )}
       </div>
       <p className={`ml-3 mt-0.5 text-sm ${step.status === "pending" ? "text-gray-400" : "text-gray-900"} ${step.label === "Done" ? "font-semibold" : ""}`}>
         {step.label}
@@ -81,6 +116,17 @@ const DecisionReady: React.FC<DecisionReadyProps> = ({
   onGoToDashboard,
   onOpenSettings,
 }) => {
+  const [revealedStepCount, setRevealedStepCount] = useState(0);
+
+  useEffect(() => {
+    setRevealedStepCount(0);
+    const timers = steps.map((_, index) =>
+      window.setTimeout(() => setRevealedStepCount(index + 1), 250 + index * 600),
+    );
+
+    return () => timers.forEach((timer) => window.clearTimeout(timer));
+  }, [steps]);
+
   const handleGoToDashboard = () => {
     if (onGoToDashboard) {
       onGoToDashboard();
@@ -114,7 +160,12 @@ const DecisionReady: React.FC<DecisionReadyProps> = ({
         </div>
         <div className="mx-auto mt-12 flex max-w-xs flex-col items-start text-left">
           {steps.map((step, i) => (
-            <StepRow key={step.label} step={step} isLast={i === steps.length - 1} />
+            <StepRow
+              key={step.label}
+              step={step}
+              isLast={i === steps.length - 1}
+              isRevealed={i < revealedStepCount}
+            />
           ))}
         </div>
         <button

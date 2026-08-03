@@ -1,7 +1,11 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { LocusLogo } from './components/LocusLogo'
+import { SourceLogo } from '../src/components/SourceLogo'
 
 type StepId = 1 | 2 | 3
+
+const STEP_HOLD_DURATION_MS = 2000
+const STEP_TRANSITION_DURATION_MS = 1000
 
 const STEPS: { id: StepId; label: string }[] = [
   { id: 1, label: '1. Connect tools' },
@@ -25,75 +29,55 @@ function CheckIcon() {
   )
 }
 
-function SlackIcon() {
-  return (
-    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <path d="M5.5 15.1a1.8 1.8 0 1 1-1.8-1.8h1.8v1.8Z" fill="#E01E5A" />
-      <path d="M6.4 15.1a1.8 1.8 0 1 1 3.6 0v4.5a1.8 1.8 0 1 1-3.6 0v-4.5Z" fill="#E01E5A" />
-      <path d="M8.9 5.5a1.8 1.8 0 1 1 1.8-1.8v1.8H8.9Z" fill="#36C5F0" />
-      <path d="M8.9 6.4a1.8 1.8 0 1 1 0 3.6H4.4a1.8 1.8 0 1 1 0-3.6h4.5Z" fill="#36C5F0" />
-      <path d="M18.5 8.9a1.8 1.8 0 1 1 1.8 1.8h-1.8V8.9Z" fill="#2EB67D" />
-      <path d="M17.6 8.9a1.8 1.8 0 1 1-3.6 0V4.4a1.8 1.8 0 1 1 3.6 0v4.5Z" fill="#2EB67D" />
-      <path d="M15.1 18.5a1.8 1.8 0 1 1-1.8 1.8v-1.8h1.8Z" fill="#ECB22E" />
-      <path d="M15.1 17.6a1.8 1.8 0 1 1 0-3.6h4.5a1.8 1.8 0 1 1 0 3.6h-4.5Z" fill="#ECB22E" />
-    </svg>
-  )
-}
+function Stepper({
+  active,
+  onChange,
+  animationKey,
+  isTransitioning,
+}: {
+  active: StepId
+  onChange: (id: StepId) => void
+  animationKey: number
+  isTransitioning: boolean
+}) {
+  const incomingStep: StepId = active === 3 ? 1 : ((active + 1) as StepId)
 
-function NotionIcon() {
-  return (
-    <svg width="26" height="26" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <path
-        d="M4.5 3.8h12.2c.4 0 .8.2 1 .5l2.3 3.2c.2.3.3.6.3 1v11.2c0 .7-.6 1.3-1.3 1.3H6.8c-.4 0-.8-.2-1-.5L3.5 17.3c-.2-.3-.3-.6-.3-1V5.1c0-.7.6-1.3 1.3-1.3Z"
-        fill="#fff"
-        stroke="#111"
-        strokeWidth="1.2"
-      />
-      <path d="M8.2 7.2v9.2M11.5 7.2H15v9.2h-3.5" stroke="#111" strokeWidth="1.4" strokeLinecap="round" />
-    </svg>
-  )
-}
-
-function EmailIcon() {
-  return (
-    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <rect x="3" y="5.5" width="18" height="13" rx="2" stroke="#EA4335" strokeWidth="1.8" />
-      <path
-        d="M4.2 7.2 12 12.4l7.8-5.2"
-        stroke="#EA4335"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  )
-}
-
-function Stepper({ active, onChange }: { active: StepId; onChange: (id: StepId) => void }) {
   return (
     <div className="mt-10 flex w-full max-w-[720px] items-center">
       {STEPS.map((step, index) => {
         const isActive = step.id === active
+        const isIncoming = step.id === incomingStep
         const isPast = step.id < active
         return (
           <div key={step.id} className="flex flex-1 items-center last:flex-none">
             <button
               type="button"
               onClick={() => onChange(step.id)}
-              className={`whitespace-nowrap rounded-full px-4 py-2 text-[13px] font-medium transition-colors ${
-                isActive
-                  ? 'bg-[#5b52e8] text-white shadow-sm'
-                  : 'border border-[#d8d6f5] bg-white text-[#8b85d8] hover:border-[#5b52e8] hover:text-[#5b52e8]'
+              className={`whitespace-nowrap rounded-full border px-4 py-2 text-[13px] font-medium ${
+                isActive && isTransitioning
+                  ? 'how-it-works-step-outgoing'
+                  : isIncoming && isTransitioning
+                    ? 'how-it-works-step-incoming'
+                    : isActive
+                      ? 'border-[#5b52e8] bg-[#5b52e8] text-white shadow-sm'
+                    : 'border-[#d8d6f5] bg-white text-[#8b85d8] hover:border-[#5b52e8] hover:text-[#5b52e8]'
               }`}
             >
               {step.label}
             </button>
             {index < STEPS.length - 1 && (
-              <div
-                className={`mx-2 h-px flex-1 ${
-                  isPast || isActive ? 'bg-[#5b52e8]' : 'bg-[#e5e7eb]'
-                }`}
-              />
+              <div className="mx-2 h-0.5 flex-1 overflow-hidden bg-[#e5e7eb]">
+                <div
+                  key={`${animationKey}-${step.id}`}
+                  className={`h-full origin-left bg-[#5b52e8] ${
+                    isPast
+                      ? 'scale-x-100'
+                      : isActive && isTransitioning
+                        ? 'how-it-works-progress'
+                        : 'scale-x-0'
+                  }`}
+                />
+              </div>
             )}
           </div>
         )
@@ -107,19 +91,19 @@ function ConnectToolsPanel() {
     {
       name: 'Slack',
       detail: 'Threads, channels, DMs',
-      icon: <SlackIcon />,
+      icon: <SourceLogo source="Slack" className="h-8 w-8" />,
       cardClass: 'border-[#f0e8ff] bg-[#faf7ff]',
     },
     {
       name: 'Notion',
       detail: 'Docs, wikis, databases',
-      icon: <NotionIcon />,
+      icon: <SourceLogo source="Notion" className="h-8 w-8" />,
       cardClass: 'border-[#ebebeb] bg-[#fafafa]',
     },
     {
-      name: 'Email',
+      name: 'Gmail',
       detail: 'Threads & replies',
-      icon: <EmailIcon />,
+      icon: <SourceLogo source="Gmail" className="h-8 w-8" />,
       cardClass: 'border-[#fde8e8] bg-[#fff8f8]',
     },
   ]
@@ -392,6 +376,28 @@ function FindDecisionsPanel() {
 
 export default function HowItWorks() {
   const [activeStep, setActiveStep] = useState<StepId>(1)
+  const [animationKey, setAnimationKey] = useState(0)
+  const [isTransitioning, setIsTransitioning] = useState(false)
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      if (isTransitioning) {
+        setActiveStep((current) => (current === 3 ? 1 : ((current + 1) as StepId)))
+        setIsTransitioning(false)
+      } else {
+        setAnimationKey((current) => current + 1)
+        setIsTransitioning(true)
+      }
+    }, isTransitioning ? STEP_TRANSITION_DURATION_MS : STEP_HOLD_DURATION_MS)
+
+    return () => window.clearTimeout(timer)
+  }, [activeStep, animationKey, isTransitioning])
+
+  const selectStep = (step: StepId) => {
+    setActiveStep(step)
+    setIsTransitioning(false)
+    setAnimationKey((current) => current + 1)
+  }
 
   return (
     <div className="bg-white px-6 py-16 sm:px-10 lg:px-16 lg:py-20">
@@ -410,11 +416,18 @@ export default function HowItWorks() {
           already knows.
         </p>
 
-        <Stepper active={activeStep} onChange={setActiveStep} />
+        <Stepper
+          active={activeStep}
+          onChange={selectStep}
+          animationKey={animationKey}
+          isTransitioning={isTransitioning}
+        />
 
-        {activeStep === 1 && <ConnectToolsPanel />}
-        {activeStep === 2 && <CapturePanel />}
-        {activeStep === 3 && <FindDecisionsPanel />}
+        <div key={activeStep} className="how-it-works-panel-enter">
+          {activeStep === 1 && <ConnectToolsPanel />}
+          {activeStep === 2 && <CapturePanel />}
+          {activeStep === 3 && <FindDecisionsPanel />}
+        </div>
       </div>
     </div>
   )
