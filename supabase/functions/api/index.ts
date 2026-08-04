@@ -404,7 +404,9 @@ async function getCurrentTenant(req: Request): Promise<TenantContext> {
 // Gmail address - in practice, "log in with Gmail and connect with that
 // same Gmail" was the only way anything ever showed up. Real fix: grant
 // every tenant member visibility into every source actually connected to
-// their tenant, not just their own identity.
+// their tenant, not just their own identity. Broader than Gmail alone
+// (also covers Slack/Notion workspace ids) since the same gap applies to
+// all three connectors identically, not just Gmail.
 async function resolvePermissionScopes(userId: string, tenantId: string): Promise<string[]> {
   const email = await withAdmin(async (sql) => {
     const rows = await sql`SELECT email FROM auth.users WHERE id = ${userId}`;

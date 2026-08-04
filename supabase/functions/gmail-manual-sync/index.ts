@@ -72,9 +72,66 @@ async function refreshAccessToken(source: any): Promise<string | null> {
   return newAccessToken;
 }
 
+// First-sync backfill window + safety caps, and the per-run cap for every
+// sync after that. All overridable via Supabase secrets; defaults match
+// what was requested (30-day lookback, bounded message counts so one
+// connection with a huge mailbox can't make a single invocation run
+// forever). Configurable rather than hardcoded so a demo/staging tenant
+// can be tuned without a code change.
+const BACKFILL_LOOKBACK_DAYS = Number(Deno.env.get("GMAIL_BACKFILL_LOOKBACK_DAYS") ?? "30");
+const BACKFILL_MAX_MESSAGES = Number(Deno.env.get("GMAIL_BACKFILL_MAX_MESSAGES") ?? "200");
+const INCREMENTAL_MAX_MESSAGES = Number(Deno.env.get("GMAIL_INCREMENTAL_MAX_MESSAGES") ?? "50");
+const LIST_PAGE_SIZE = 100; // Gmail's messages.list allows up to 500; 100 keeps each page fetch quick under fetchWithTimeout.
+
+// Gmail's `after:` search operator wants YYYY/MM/DD (day granularity, no
+// time component) - https://support.google.com/mail/answer/7190. Day
+// granularity means a run's window can overlap the previous run's by up
+// to a day; that's intentional and safe (re-listing an already-ingested
+// message just costs one duplicate list entry, which store_raw_event()'s
+// ON CONFLICT (tenant_id, source, source_id) DO NOTHING in ai-worker
+// already no-ops on) - the alternative, rounding forward, risks silently
+// skipping a message instead.
+function formatGmailAfterDate(date: Date): string {
+  return `${date.getUTCFullYear()}/${date.getUTCMonth() + 1}/${date.getUTCDate()}`;
+}
+
+// Paginates messages.list up to maxMessages total, honoring the same
+// per-call timeout every other Gmail request in this file uses. Stops
+// early once maxMessages is reached or Gmail reports no nextPageToken -
+// never fetches more than the caller asked for, regardless of how large
+// the actual result set is.
+async function listGmailMessageIds(
+  accessToken: string,
+  query: string,
+  maxMessages: number,
+): Promise<{ id: string }[]> {
+  const ids: { id: string }[] = [];
+  let pageToken: string | undefined;
+
+  do {
+    const url = new URL("https://gmail.googleapis.com/gmail/v1/users/me/messages");
+    url.searchParams.set("maxResults", String(Math.min(LIST_PAGE_SIZE, maxMessages - ids.length)));
+    if (query) url.searchParams.set("q", query);
+    if (pageToken) url.searchParams.set("pageToken", pageToken);
+
+    const resp = await fetchWithTimeout(
+      url.toString(),
+      { headers: { Authorization: `Bearer ${accessToken}` } },
+      15_000,
+    );
+    if (!resp.ok) {
+      console.error(`Gmail list page failed (query=${query}):`, await resp.text());
+      break;
+    }
+    const data = await resp.json();
+    ids.push(...(data.messages ?? []));
+    pageToken = data.nextPageToken;
+  } while (pageToken && ids.length < maxMessages);
+
+  return ids.slice(0, maxMessages);
+}
+
 const SYNC_CONCURRENCY = 5;
-const GMAIL_BACKFILL_BATCH = 50;
-const GMAIL_INCREMENTAL_BATCH = 10;
 
 // Runs syncOneSource(source) for every source with at most `concurrency` in
 // flight at once - one tenant's stalled OAuth/Gmail call (now bounded to
@@ -107,6 +164,12 @@ Deno.serve(async (_req) => {
 
   // deno-lint-ignore no-explicit-any
   async function syncOneSource(source: any) {
+    // Captured before any fetching starts, not after: last_synced_at is set
+    // to this value at the end of a successful run, so a message that
+    // arrives WHILE this run is in flight is still >= the next run's
+    // `after:` bound (a little overlap, dedup-safe) instead of falling into
+    // the gap between "when this run listed messages" and "when it finished".
+    const syncStartedAt = new Date();
     try {
       console.log(`Syncing Gmail: ${source.external_workspace_id}`);
 
@@ -116,28 +179,24 @@ Deno.serve(async (_req) => {
         return { source_id: source.id, messages_synced: 0, error: "no_access_token" };
       }
 
-      // First sync ever (last_synced_at still null) backfills a real batch
-      // of history instead of just the 10 most recent - previously every
-      // sync, first or hundredth, fetched the same 10 most recent messages,
-      // so anything already in the inbox before connecting was never
-      // ingested at all, only mail that arrived after the connection existed.
+      // last_synced_at is set only after a source's FIRST successful sync
+      // (see the update at the end of this function) - null here means
+      // this connection has never completed a sync, so this run is a
+      // first-connection backfill, not an incremental catch-up.
       const isFirstSync = !source.last_synced_at;
-      const maxResults = isFirstSync ? GMAIL_BACKFILL_BATCH : GMAIL_INCREMENTAL_BATCH;
+      const afterDate = isFirstSync
+        ? new Date(syncStartedAt.getTime() - BACKFILL_LOOKBACK_DAYS * 24 * 60 * 60 * 1000)
+        : new Date(source.last_synced_at);
+      const maxMessages = isFirstSync ? BACKFILL_MAX_MESSAGES : INCREMENTAL_MAX_MESSAGES;
+      const query = `after:${formatGmailAfterDate(afterDate)}`;
 
-      const listResp = await fetchWithTimeout(
-        `https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=${maxResults}`,
-        { headers: { Authorization: `Bearer ${accessToken}` } },
-        15_000,
+      console.log(
+        `${isFirstSync ? "Backfilling" : "Incrementally syncing"} ${source.external_workspace_id} `
+          + `(query="${query}", maxMessages=${maxMessages})`,
       );
 
-      if (!listResp.ok) {
-        console.error(`Gmail list error for ${source.id}:`, await listResp.text());
-        return { source_id: source.id, messages_synced: 0, error: `list_failed_${listResp.status}` };
-      }
-
-      const listData = await listResp.json();
-      const messages = listData.messages || [];
-      console.log(`Found ${messages.length} recent messages for ${source.id}`);
+      const messages = await listGmailMessageIds(accessToken, query, maxMessages);
+      console.log(`Found ${messages.length} messages for ${source.id}`);
 
       let syncedCount = 0;
 
@@ -206,12 +265,12 @@ Deno.serve(async (_req) => {
       await withTenant(String(source.tenant_id), async (sql) => {
         await sql`
           update public.source_connections
-          set last_synced_at = ${new Date().toISOString()}
+          set last_synced_at = ${syncStartedAt.toISOString()}
           where id = ${source.id}
         `;
       });
 
-      return { source_id: source.id, messages_synced: syncedCount };
+      return { source_id: source.id, messages_synced: syncedCount, first_sync: isFirstSync };
     } catch (err) {
       console.error(`Error syncing source ${source.id}:`, err);
       return { source_id: source.id, messages_synced: 0, error: err instanceof Error ? err.message : String(err) };
