@@ -586,9 +586,22 @@ async function getDecisionById(tenantId: string, decisionId: string) {
       LEFT JOIN public.actors a ON a.id = da.actor_id AND a.tenant_id = da.tenant_id
       WHERE da.decision_id = ${decisionId} AND da.tenant_id = ${tenantId}
     `;
+    // A single decision has few enough participants that a live Slack
+    // lookup for each still-unresolved one is cheap here - unlike
+    // listDecisions, which returns up to 200 rows at once and would turn
+    // into 200x live API calls if it did the same.
+    const unresolvedParticipantIds = actorRows
+      .filter((ar) => !guessActorName(ar.display_name, ar.email, ar.notion_user_id, ar.slack_user_id) && ar.slack_user_id)
+      .map((ar) => ar.slack_user_id as string);
+    const liveParticipantNames = unresolvedParticipantIds.length > 0
+      ? await resolveSlackNamesLive(sql, tenantId, unresolvedParticipantIds)
+      : new Map<string, string>();
+
     const actors = actorRows.map((ar) => ({
       id: String(ar.actor_id), role: ar.role,
-      name: guessActorName(ar.display_name, ar.email, ar.notion_user_id, ar.slack_user_id),
+      name: guessActorName(ar.display_name, ar.email, ar.notion_user_id, ar.slack_user_id)
+        ?? (ar.slack_user_id ? liveParticipantNames.get(ar.slack_user_id) : undefined)
+        ?? null,
     }));
 
     const sourceRows = await sql`

@@ -109,9 +109,13 @@ Deno.serve(async (req: Request) => {
       slackAuthUrl.searchParams.set(
         "scope",
         // read scopes added so conversations.list works (Capture Controls'
-        // real channel listing) - existing connections need to reconnect to
-        // pick these up, a token from before this change won't have them.
-        "channels:history,groups:history,im:history,mpim:history,chat:write,channels:read,groups:read,mpim:read,im:read",
+        // real channel listing); users:read added so users.info can
+        // resolve a real display name for someone who chatted without
+        // ever being named in a decision (see resolveSlackNamesLive in
+        // supabase/functions/api/index.ts) - existing connections need to
+        // reconnect to pick up either of these, a token from before this
+        // change won't have them.
+        "channels:history,groups:history,im:history,mpim:history,chat:write,channels:read,groups:read,mpim:read,im:read,users:read",
       );
       slackAuthUrl.searchParams.set("redirect_uri", REDIRECT_URI ?? "");
       slackAuthUrl.searchParams.set("state", encodeState(tenantId, redirectOrigin, syncMode));
