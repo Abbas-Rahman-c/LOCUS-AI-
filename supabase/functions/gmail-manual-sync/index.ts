@@ -72,14 +72,18 @@ async function refreshAccessToken(source: any): Promise<string | null> {
   return newAccessToken;
 }
 
-// First-sync backfill window + safety caps, and the per-run cap for every
-// sync after that. All overridable via Supabase secrets; defaults match
-// what was requested (30-day lookback, bounded message counts so one
-// connection with a huge mailbox can't make a single invocation run
-// forever). Configurable rather than hardcoded so a demo/staging tenant
-// can be tuned without a code change.
-const BACKFILL_LOOKBACK_DAYS = Number(Deno.env.get("GMAIL_BACKFILL_LOOKBACK_DAYS") ?? "30");
+// Backfill has no date lower-bound anymore - "full history" used to mean
+// "the last 30 days", which silently threw away everything older the
+// moment the first sync completed (last_synced_at gets set, isFirstSync
+// goes false forever, that 30-day wall never gets revisited). Instead each
+// 5-minute cron run pages BACKFILL_MAX_MESSAGES further back via Gmail's
+// own nextPageToken (resumed from cursor_state.backfill_page_token) until
+// Gmail reports no more history or BACKFILL_TOTAL_MAX_MESSAGES is hit -
+// only then does it flip to incremental mode. A single invocation still
+// only touches one page, so per-run cost is unchanged; it just no longer
+// gives up after page one. All overridable via Supabase secrets.
 const BACKFILL_MAX_MESSAGES = Number(Deno.env.get("GMAIL_BACKFILL_MAX_MESSAGES") ?? "200");
+const BACKFILL_TOTAL_MAX_MESSAGES = Number(Deno.env.get("GMAIL_BACKFILL_TOTAL_MAX_MESSAGES") ?? "5000");
 const INCREMENTAL_MAX_MESSAGES = Number(Deno.env.get("GMAIL_INCREMENTAL_MAX_MESSAGES") ?? "50");
 const LIST_PAGE_SIZE = 100; // Gmail's messages.list allows up to 500; 100 keeps each page fetch quick under fetchWithTimeout.
 
@@ -131,6 +135,33 @@ async function listGmailMessageIds(
   return ids.slice(0, maxMessages);
 }
 
+// Single-page fetch with an explicit resumable pageToken, used by the
+// backfill path so progress can be persisted to cursor_state and picked up
+// by the NEXT cron run instead of needing everything in one invocation.
+async function listGmailMessagesPage(
+  accessToken: string,
+  query: string,
+  pageToken: string | undefined,
+  maxResults: number,
+): Promise<{ ids: { id: string }[]; nextPageToken?: string }> {
+  const url = new URL("https://gmail.googleapis.com/gmail/v1/users/me/messages");
+  url.searchParams.set("maxResults", String(Math.min(LIST_PAGE_SIZE, Math.max(maxResults, 0))));
+  if (query) url.searchParams.set("q", query);
+  if (pageToken) url.searchParams.set("pageToken", pageToken);
+
+  const resp = await fetchWithTimeout(
+    url.toString(),
+    { headers: { Authorization: `Bearer ${accessToken}` } },
+    15_000,
+  );
+  if (!resp.ok) {
+    console.error(`Gmail list page failed (query=${query}):`, await resp.text());
+    return { ids: [] };
+  }
+  const data = await resp.json();
+  return { ids: data.messages ?? [], nextPageToken: data.nextPageToken };
+}
+
 const SYNC_CONCURRENCY = 5;
 
 // Runs syncOneSource(source) for every source with at most `concurrency` in
@@ -179,24 +210,44 @@ Deno.serve(async (_req) => {
         return { source_id: source.id, messages_synced: 0, error: "no_access_token" };
       }
 
-      // last_synced_at is set only after a source's FIRST successful sync
-      // (see the update at the end of this function) - null here means
-      // this connection has never completed a sync, so this run is a
-      // first-connection backfill, not an incremental catch-up.
-      const isFirstSync = !source.last_synced_at;
-      const afterDate = isFirstSync
-        ? new Date(syncStartedAt.getTime() - BACKFILL_LOOKBACK_DAYS * 24 * 60 * 60 * 1000)
-        : new Date(source.last_synced_at);
-      const maxMessages = isFirstSync ? BACKFILL_MAX_MESSAGES : INCREMENTAL_MAX_MESSAGES;
-      const query = `after:${formatGmailAfterDate(afterDate)}`;
+      // last_synced_at is set only once a source's backfill has fully
+      // finished (see the update at the end of this function) - null here
+      // means backfill is still in progress (or hasn't started), so this
+      // run continues paging further back through history rather than
+      // switching to incremental catch-up.
+      const cursorState = (source.cursor_state ?? {}) as Record<string, unknown>;
+      const backfilling = !source.last_synced_at;
+      const backfillTotalSoFar = Number(cursorState.backfill_total_synced ?? 0);
+
+      let messages: { id: string }[];
+      let query: string;
+      let nextBackfillPageToken: string | undefined;
+
+      if (backfilling) {
+        query = ""; // no date bound - paging through the account's full history
+        const remainingBudget = Math.max(0, BACKFILL_TOTAL_MAX_MESSAGES - backfillTotalSoFar);
+        const pageSize = Math.min(BACKFILL_MAX_MESSAGES, remainingBudget);
+        const page = pageSize > 0
+          ? await listGmailMessagesPage(
+            accessToken,
+            query,
+            cursorState.backfill_page_token as string | undefined,
+            pageSize,
+          )
+          : { ids: [], nextPageToken: undefined };
+        messages = page.ids;
+        // Stop paginating once the safety ceiling is hit even if Gmail has
+        // more - remainingBudget is already 0 next run either way.
+        nextBackfillPageToken = remainingBudget > 0 ? page.nextPageToken : undefined;
+      } else {
+        query = `after:${formatGmailAfterDate(new Date(source.last_synced_at))}`;
+        messages = await listGmailMessageIds(accessToken, query, INCREMENTAL_MAX_MESSAGES);
+      }
 
       console.log(
-        `${isFirstSync ? "Backfilling" : "Incrementally syncing"} ${source.external_workspace_id} `
-          + `(query="${query}", maxMessages=${maxMessages})`,
+        `${backfilling ? "Backfilling" : "Incrementally syncing"} ${source.external_workspace_id} `
+          + `(query="${query || "<all mail>"}", found ${messages.length})`,
       );
-
-      const messages = await listGmailMessageIds(accessToken, query, maxMessages);
-      console.log(`Found ${messages.length} messages for ${source.id}`);
 
       let syncedCount = 0;
 
@@ -281,15 +332,44 @@ Deno.serve(async (_req) => {
         syncedCount++;
       }
 
-      await withTenant(String(source.tenant_id), async (sql) => {
-        await sql`
-          update public.source_connections
-          set last_synced_at = ${syncStartedAt.toISOString()}
-          where id = ${source.id}
-        `;
-      });
+      if (backfilling) {
+        const totalSynced = backfillTotalSoFar + syncedCount;
+        if (nextBackfillPageToken) {
+          // More history remains (or the safety ceiling isn't hit yet) -
+          // stay in backfill mode, save the resume point for the next cron
+          // run. last_synced_at stays null on purpose.
+          await withTenant(String(source.tenant_id), async (sql) => {
+            await sql`
+              update public.source_connections
+              set cursor_state = cursor_state || ${
+              sql.json({ backfill_page_token: nextBackfillPageToken, backfill_total_synced: totalSynced })
+            }::jsonb
+              where id = ${source.id}
+            `;
+          });
+        } else {
+          // Reached the true bottom of the mailbox, or hit the safety
+          // ceiling - backfill is done, switch to incremental going forward.
+          await withTenant(String(source.tenant_id), async (sql) => {
+            await sql`
+              update public.source_connections
+              set cursor_state = cursor_state || ${sql.json({ backfill_total_synced: totalSynced })}::jsonb,
+                  last_synced_at = ${syncStartedAt.toISOString()}
+              where id = ${source.id}
+            `;
+          });
+        }
+      } else {
+        await withTenant(String(source.tenant_id), async (sql) => {
+          await sql`
+            update public.source_connections
+            set last_synced_at = ${syncStartedAt.toISOString()}
+            where id = ${source.id}
+          `;
+        });
+      }
 
-      return { source_id: source.id, messages_synced: syncedCount, first_sync: isFirstSync };
+      return { source_id: source.id, messages_synced: syncedCount, backfilling };
     } catch (err) {
       console.error(`Error syncing source ${source.id}:`, err);
       return { source_id: source.id, messages_synced: 0, error: err instanceof Error ? err.message : String(err) };

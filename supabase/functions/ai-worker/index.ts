@@ -567,15 +567,49 @@ const CONFLICT_TOOL = {
   },
 };
 
-const CONFLICT_SYSTEM_PROMPT = `You compare one new decision against a short list of existing decisions from the same team's records, and classify how each candidate relates to the new one.
+const CONFLICT_SYSTEM_PROMPT = `You compare one new decision against a short list of existing decisions from the same team's records, and classify how each candidate relates to the new one. Each decision is shown with its participants when known.
 
-- "contradicts": the two decisions state genuinely incompatible conclusions about the same specific question (not merely related topics - e.g. "use Postgres" vs "use MongoDB" for the same system is a contradiction; "use Postgres for the context layer" and "use Redis for caching" is not, those are different questions).
-- "duplicates": the two decisions state essentially the same conclusion about the same question, redundantly.
-- "unrelated": anything else, including decisions that are topically similar but don't actually make competing or repeated claims. Default to this when genuinely unsure - a false "contradicts" flag is worse than a missed one.
+- "contradicts": the two decisions state genuinely incompatible conclusions about the same specific question, made by/about the same person or team (not merely related topics - e.g. "use Postgres" vs "use MongoDB" for the same system is a contradiction; "use Postgres for the context layer" and "use Redis for caching" is not, those are different questions).
+- "duplicates": the two decisions state essentially the same conclusion about the same question, redundantly, by/about the same person or team.
+- "unrelated": anything else, including decisions that are topically similar but don't actually make competing or repeated claims, OR concern different people/targets. Default to this when genuinely unsure - a false "contradicts" or "duplicates" flag is worse than a missed one.
+
+Participants matter: if the two decisions are about different people (e.g. one participant decided something for themselves, and the candidate's participant is someone else, or targets a different person/team), that is NOT a conflict or duplicate even if the wording is nearly identical - classify it "unrelated". Only flag "contradicts" or "duplicates" when the decisions are actually about the same real-world person, team, or system.
 
 Call record_conflict_analysis exactly once with one classification per candidate, in the order given.`;
 
-type ConflictCandidate = { id: string; decision_statement: string; rationale: string | null };
+type ConflictCandidate = {
+  id: string;
+  decision_statement: string;
+  rationale: string | null;
+  created_at: string;
+  participants: string[];
+};
+
+// COALESCE order mirrors api/index.ts's guessActorName: a real name beats an
+// email beats a raw platform id, so the LLM sees "Abbas Rahman" instead of a
+// Slack/Notion user id it can't reason about.
+async function getParticipantNames(
+  // deno-lint-ignore no-explicit-any
+  sql: any,
+  tenantId: string,
+  decisionIds: string[],
+): Promise<Map<string, string[]>> {
+  if (decisionIds.length === 0) return new Map();
+  const rows = await sql`
+    SELECT da.decision_id, COALESCE(a.display_name, a.email, a.slack_user_id, a.notion_user_id) AS name
+    FROM public.decision_actors da
+    LEFT JOIN public.actors a ON a.id = da.actor_id AND a.tenant_id = da.tenant_id
+    WHERE da.decision_id = ANY(${decisionIds}) AND da.tenant_id = ${tenantId}
+  `;
+  const byDecision = new Map<string, string[]>();
+  for (const r of rows as { decision_id: string; name: string | null }[]) {
+    if (!r.name) continue;
+    const list = byDecision.get(r.decision_id) ?? [];
+    list.push(r.name);
+    byDecision.set(r.decision_id, list);
+  }
+  return byDecision;
+}
 
 async function detectConflicts(
   tenantId: string,
@@ -586,29 +620,56 @@ async function detectConflicts(
 ): Promise<void> {
   try {
     const vectorLiteral = "[" + embedding.join(",") + "]";
-    const candidates: ConflictCandidate[] = await withTenant(tenantId, async (sql) => {
-      const rows = await sql`
-        SELECT d.id, d.decision_statement, d.rationale,
-               1 - (de.embedding <=> ${vectorLiteral}::vector) AS similarity
-        FROM public.decision_embeddings de
-        JOIN public.decisions d ON d.id = de.decision_id AND d.tenant_id = de.tenant_id
-        WHERE de.tenant_id = ${tenantId} AND de.decision_id != ${decisionId}
-          AND 1 - (de.embedding <=> ${vectorLiteral}::vector) >= ${CONFLICT_SIMILARITY_FLOOR}
-        ORDER BY de.embedding <=> ${vectorLiteral}::vector ASC
-        LIMIT ${CONFLICT_CANDIDATE_LIMIT}
-      `;
-      return rows.map((r: { id: string; decision_statement: string; rationale: string | null }) => ({
-        id: r.id, decision_statement: r.decision_statement, rationale: r.rationale,
-      }));
-    });
+    const { candidates, newDecisionCreatedAt, newDecisionParticipants } = await withTenant(
+      tenantId,
+      async (sql) => {
+        const rows = await sql`
+          SELECT d.id, d.decision_statement, d.rationale, d.created_at,
+                 1 - (de.embedding <=> ${vectorLiteral}::vector) AS similarity
+          FROM public.decision_embeddings de
+          JOIN public.decisions d ON d.id = de.decision_id AND d.tenant_id = de.tenant_id
+          WHERE de.tenant_id = ${tenantId} AND de.decision_id != ${decisionId}
+            AND 1 - (de.embedding <=> ${vectorLiteral}::vector) >= ${CONFLICT_SIMILARITY_FLOOR}
+          ORDER BY de.embedding <=> ${vectorLiteral}::vector ASC
+          LIMIT ${CONFLICT_CANDIDATE_LIMIT}
+        `;
+        if (rows.length === 0) return { candidates: [], newDecisionCreatedAt: null, newDecisionParticipants: [] };
+
+        const newRow = await sql`SELECT created_at FROM public.decisions WHERE id = ${decisionId} AND tenant_id = ${tenantId}`;
+        const names = await getParticipantNames(sql, tenantId, [decisionId, ...rows.map((r: { id: string }) => r.id)]);
+
+        const candidates = rows.map(
+          (r: { id: string; decision_statement: string; rationale: string | null; created_at: string }) => ({
+            id: r.id,
+            decision_statement: r.decision_statement,
+            rationale: r.rationale,
+            created_at: r.created_at,
+            participants: names.get(r.id) ?? [],
+          }),
+        );
+        return {
+          candidates,
+          newDecisionCreatedAt: newRow[0]?.created_at ?? null,
+          newDecisionParticipants: names.get(decisionId) ?? [],
+        };
+      },
+    );
 
     if (candidates.length === 0) return;
 
+    const participantsLabel = (names: string[]) => names.length > 0 ? ` [participants: ${names.join(", ")}]` : "";
+
     const userMessage = [
-      `New decision:\n${statement}${rationale ? `\nReason: ${rationale}` : ""}`,
+      `New decision:\n${statement}${rationale ? `\nReason: ${rationale}` : ""}${
+        participantsLabel(newDecisionParticipants)
+      }`,
       "",
       "Existing candidates:",
-      ...candidates.map((c, i) => `${i + 1}. ${c.decision_statement}${c.rationale ? ` (reason: ${c.rationale})` : ""}`),
+      ...candidates.map((c: ConflictCandidate, i: number) =>
+        `${i + 1}. ${c.decision_statement}${c.rationale ? ` (reason: ${c.rationale})` : ""}${
+          participantsLabel(c.participants)
+        }`
+      ),
     ].join("\n");
 
     const result = await callClaude(
@@ -620,8 +681,29 @@ async function detectConflicts(
     );
     if (flagged.length === 0) return;
 
+    // "duplicates" is resolved automatically, not surfaced as a warning: the
+    // older of the pair gets marked superseded by the newer one (same
+    // superseded_by column /decisions already uses, so it just renders with
+    // the existing "Superseded" badge instead of staying listed as current).
+    // "contradicts" still needs a human to look at it - genuinely incompatible
+    // conclusions aren't something to silently resolve either direction.
+    const duplicates = flagged.filter((c) => c.relationship === "duplicates");
+    const contradictions = flagged.filter((c) => c.relationship === "contradicts");
+
     await withTenant(tenantId, async (sql) => {
-      for (const c of flagged) {
+      for (const c of duplicates) {
+        const candidate = candidates[c.candidate_number - 1];
+        if (!candidate) continue;
+        const candidateIsOlder = newDecisionCreatedAt
+          ? new Date(candidate.created_at).getTime() <= new Date(newDecisionCreatedAt).getTime()
+          : true;
+        const [olderId, newerId] = candidateIsOlder ? [candidate.id, decisionId] : [decisionId, candidate.id];
+        await sql`
+          UPDATE public.decisions SET superseded_by = ${newerId}
+          WHERE id = ${olderId} AND tenant_id = ${tenantId} AND superseded_by IS NULL
+        `;
+      }
+      for (const c of contradictions) {
         const candidate = candidates[c.candidate_number - 1];
         if (!candidate) continue;
         await sql`
