@@ -234,14 +234,33 @@ Deno.serve(async (_req) => {
         if (!body) body = rawMsg.snippet || "";
 
         const fromHeader = getHeader("From");
-        const actorMatch = fromHeader.match(/<(.+)>/);
-        const actor = actorMatch ? actorMatch[1] : fromHeader;
+        // Gmail's From header is usually `"Real Name" <email>` - the name
+        // is right there for free, no extra lookup needed, but was being
+        // discarded entirely (only the bracketed email was kept), so
+        // Gmail participants only ever showed a raw email address.
+        const actorMatch = fromHeader.match(/^\s*"?([^"<]*?)"?\s*<(.+)>\s*$/);
+        const actor = actorMatch ? actorMatch[2] : fromHeader;
+        const actorDisplayName = actorMatch && actorMatch[1].trim() ? actorMatch[1].trim() : undefined;
+
+        // rawMsg.internalDate is Gmail's own epoch-milliseconds timestamp
+        // for when the message actually arrived - the reliable source,
+        // unlike the Date: header (inconsistent formats, sender-controlled,
+        // can be wrong/missing). Without this, every message - live or
+        // backfilled - got stamped with "now" (see ai-worker's matching fix
+        // to actually use this field instead of defaulting to now() itself),
+        // so a real backfill of month-old mail would still show up as if it
+        // all happened today.
+        const internalDateMs = Number(rawMsg.internalDate);
+        const messageReceivedAt = Number.isFinite(internalDateMs) && internalDateMs > 0
+          ? new Date(internalDateMs).toISOString()
+          : new Date().toISOString();
 
         const envelope: IngestionEnvelope = {
           tenant_id: source.tenant_id,
           source: "gmail",
           source_id: rawMsg.id,
           actor: actor || "unknown",
+          actor_display_name: actorDisplayName,
           thread_ref: rawMsg.threadId,
           permission_scope: source.external_workspace_id ? [String(source.external_workspace_id)] : [],
           raw_content: {
@@ -255,7 +274,7 @@ Deno.serve(async (_req) => {
           // #all/{id} works regardless of which label the message is
           // filed under (inbox, archived, etc.), unlike #inbox/{id}.
           source_permalink: `https://mail.google.com/mail/u/0/#all/${rawMsg.id}`,
-          received_at: new Date().toISOString(),
+          received_at: messageReceivedAt,
         };
 
         await enqueueEvent(envelope);

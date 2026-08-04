@@ -272,15 +272,23 @@ const ACTOR_IDENTIFIER_COLUMN: Record<string, string> = {
 };
 
 // deno-lint-ignore no-explicit-any
-async function resolveActorId(sql: any, tenantId: string, source: string, sourceActorId: string): Promise<string> {
+async function resolveActorId(
+  sql: any, tenantId: string, source: string, sourceActorId: string, displayName?: string,
+): Promise<string> {
   const column = ACTOR_IDENTIFIER_COLUMN[source];
   if (!column) throw new Error(`No actor identifier column for source=${source}`);
 
   if (column === "email") {
+    // COALESCE keeps an existing real name rather than ever overwriting it
+    // with null on a later message from the same sender that happens not
+    // to carry a display name (e.g. a reply-only header, or a different
+    // connector for the same address).
     const rows = await sql`
-      INSERT INTO actors (tenant_id, email, kind)
-      VALUES (${tenantId}, ${sourceActorId}, 'internal')
-      ON CONFLICT (tenant_id, email) DO UPDATE SET email = EXCLUDED.email
+      INSERT INTO actors (tenant_id, email, display_name, kind)
+      VALUES (${tenantId}, ${sourceActorId}, ${displayName ?? null}, 'internal')
+      ON CONFLICT (tenant_id, email) DO UPDATE SET
+        email = EXCLUDED.email,
+        display_name = COALESCE(EXCLUDED.display_name, actors.display_name)
       RETURNING id
     `;
     return rows[0].id;
@@ -350,7 +358,7 @@ async function handleIngestionMessageInner(msg: PgmqMsg): Promise<string> {
   const payload = msg.message as {
     tenant_id: string; source: string; source_id: string; actor: string;
     thread_ref?: string | null; permission_scope: string[]; raw_content: unknown;
-    source_permalink?: string | null; received_at: string;
+    source_permalink?: string | null; received_at: string; actor_display_name?: string;
   };
   const tenantId = payload.tenant_id;
 
@@ -421,6 +429,22 @@ async function handleIngestionMessageInner(msg: PgmqMsg): Promise<string> {
   if (rawEventId === null) {
     await pgmqDelete("ingestion", msg.msg_id);
     return "duplicate_on_insert";
+  }
+
+  // Attaches a real display name to the sender's actors row whenever the
+  // connector could get one for free (Gmail's From header), regardless of
+  // whether this specific message ends up KEEP or DISCARD, or whether the
+  // sender is ever named as a decision participant - "participants only
+  // ever show a raw email" was a direct, reported gap, this is what fixes
+  // it at the source instead of guessing a name later.
+  if (payload.actor_display_name && ACTOR_IDENTIFIER_COLUMN[payload.source]) {
+    try {
+      await withTenant(tenantId, async (sql) => {
+        await resolveActorId(sql, tenantId, payload.source, payload.actor, payload.actor_display_name);
+      });
+    } catch (err) {
+      console.error(`Failed to attach display name for ${payload.actor}:`, err);
+    }
   }
 
   // Triage

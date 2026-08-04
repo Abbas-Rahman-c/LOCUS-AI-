@@ -23,6 +23,12 @@ export interface IngestionEnvelope {
   // decision_sources - this is what "View Original" in the frontend opens.
   // No connector set this before, so the button was always disabled.
   source_permalink?: string;
+  // A human-readable name for `actor`, when the connector can get one for
+  // free from the message itself (Gmail's From header is usually
+  // "Real Name" <email>, not just the address). Attached to the actors
+  // table row for `actor` so participants show a real name instead of a
+  // raw email/id - see ai-worker's handleIngestionMessageInner.
+  actor_display_name?: string;
 }
 
 export async function enqueueEvent(envelope: IngestionEnvelope) {
