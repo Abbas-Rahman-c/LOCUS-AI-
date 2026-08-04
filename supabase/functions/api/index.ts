@@ -124,12 +124,32 @@ async function getCurrentTenant(req: Request): Promise<TenantContext> {
   return await verifyTenantJwt(match[1]);
 }
 
-async function resolvePermissionScopes(userId: string): Promise<string[]> {
+// source_connections has no per-user column at all - it's tenant-wide, not
+// tied to whichever member happened to click "Connect". Scoping access to
+// only the caller's own login email meant a decision captured from a
+// connected Gmail account was invisible to every tenant member except the
+// one whose Supabase login email happened to exactly match the connected
+// Gmail address - in practice, "log in with Gmail and connect with that
+// same Gmail" was the only way anything ever showed up. Real fix: grant
+// every tenant member visibility into every source actually connected to
+// their tenant, not just their own identity.
+async function resolvePermissionScopes(userId: string, tenantId: string): Promise<string[]> {
   const email = await withAdmin(async (sql) => {
     const rows = await sql`SELECT email FROM auth.users WHERE id = ${userId}`;
     return rows[0]?.email ?? null;
   });
-  return email ? [email] : [];
+
+  const connectedScopes = await withTenant(tenantId, async (sql) => {
+    const rows = await sql`
+      SELECT DISTINCT external_workspace_id FROM public.source_connections
+      WHERE tenant_id = ${tenantId} AND status = 'active' AND external_workspace_id IS NOT NULL
+    `;
+    return rows.map((r) => r.external_workspace_id as string);
+  });
+
+  const scopes = new Set<string>(connectedScopes);
+  if (email) scopes.add(email);
+  return [...scopes];
 }
 
 // ── Handler: POST /auth/session ────────────────────────────────────────
@@ -692,7 +712,7 @@ async function handleSearch(req: Request): Promise<Response> {
   const requestedTopK = Math.min(Math.max(body.top_k ?? DEFAULT_TOP_K, 1), MAX_TOP_K);
 
   try {
-    const permissionScopes = await resolvePermissionScopes(ctx.userId);
+    const permissionScopes = await resolvePermissionScopes(ctx.userId, ctx.tenantId);
     const analysis = await analyzeQuery(question);
 
     let effectiveTopK = Math.max(requestedTopK, RERANK_MIN_TOP_K);
@@ -869,7 +889,7 @@ async function handleDigest(req: Request, url: URL): Promise<Response> {
   if (scope !== "personal" && scope !== "team") return errorResponse(422, "scope must be 'personal' or 'team'");
 
   try {
-    const permissionScopes = await resolvePermissionScopes(ctx.userId);
+    const permissionScopes = await resolvePermissionScopes(ctx.userId, ctx.tenantId);
     const weekOf = digestWeekOf();
     const userId = scope === "personal" ? ctx.userId : null;
 

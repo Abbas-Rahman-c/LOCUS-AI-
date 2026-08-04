@@ -73,6 +73,8 @@ async function refreshAccessToken(source: any): Promise<string | null> {
 }
 
 const SYNC_CONCURRENCY = 5;
+const GMAIL_BACKFILL_BATCH = 50;
+const GMAIL_INCREMENTAL_BATCH = 10;
 
 // Runs syncOneSource(source) for every source with at most `concurrency` in
 // flight at once - one tenant's stalled OAuth/Gmail call (now bounded to
@@ -114,8 +116,16 @@ Deno.serve(async (_req) => {
         return { source_id: source.id, messages_synced: 0, error: "no_access_token" };
       }
 
+      // First sync ever (last_synced_at still null) backfills a real batch
+      // of history instead of just the 10 most recent - previously every
+      // sync, first or hundredth, fetched the same 10 most recent messages,
+      // so anything already in the inbox before connecting was never
+      // ingested at all, only mail that arrived after the connection existed.
+      const isFirstSync = !source.last_synced_at;
+      const maxResults = isFirstSync ? GMAIL_BACKFILL_BATCH : GMAIL_INCREMENTAL_BATCH;
+
       const listResp = await fetchWithTimeout(
-        "https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=10",
+        `https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=${maxResults}`,
         { headers: { Authorization: `Bearer ${accessToken}` } },
         15_000,
       );

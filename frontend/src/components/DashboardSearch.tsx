@@ -41,6 +41,12 @@ function timeAgo(at: number, now = Date.now()) {
   return `${Math.floor(hours / 24)}d ago`
 }
 
+function timeOfDayGreeting(hour = new Date().getHours()) {
+  if (hour < 12) return 'Good morning'
+  if (hour < 18) return 'Good afternoon'
+  return 'Good evening'
+}
+
 export function DashboardSearch() {
   const [greetingName, setGreetingName] = useState('there')
   const [question, setQuestion] = useState('')
@@ -95,7 +101,7 @@ export function DashboardSearch() {
   return (
     <section className="mb-8">
       <h1 className="mb-5 text-[32px] font-bold leading-tight tracking-[-0.02em] text-[#111827]">
-        Good morning, {greetingName}
+        {timeOfDayGreeting()}, {greetingName}
       </h1>
 
       <form
