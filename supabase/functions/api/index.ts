@@ -152,14 +152,18 @@ async function buildThreadContext(
     `;
     const threadRefs = threadRefRows.map((r: { thread_ref: string }) => r.thread_ref);
 
+    // raw_events has no plain-text "actor" column - only actor_id (a
+    // foreign key the current ingestion pipeline never populates). The
+    // real actor identity only ever existed inside the encrypted envelope
+    // itself, which is already being decrypted below anyway.
     const eventRows = threadRefs.length > 0
       ? await sql`
-          SELECT id, source, actor, received_at, raw_content FROM public.raw_events
+          SELECT id, source, received_at, raw_content FROM public.raw_events
           WHERE thread_ref = ANY(${threadRefs}) AND tenant_id = ${tenantId}
           ORDER BY received_at ASC
         `
       : await sql`
-          SELECT id, source, actor, received_at, raw_content FROM public.raw_events
+          SELECT id, source, received_at, raw_content FROM public.raw_events
           WHERE id = ANY(${rawEventIds}) AND tenant_id = ${tenantId}
           ORDER BY received_at ASC
         `;
@@ -169,9 +173,9 @@ async function buildThreadContext(
       try {
         const bytes = byteaToUint8Array(row.raw_content);
         const plaintext = await decryptRawContent(bytes);
-        const envelope = JSON.parse(plaintext) as { raw_content?: unknown };
+        const envelope = JSON.parse(plaintext) as { raw_content?: unknown; actor?: string };
         const text = extractEventText(envelope.raw_content, row.source);
-        messages.push({ at: row.received_at, actor: row.actor, source: row.source, text });
+        messages.push({ at: row.received_at, actor: envelope.actor ?? "unknown", source: row.source, text });
       } catch (err) {
         console.error(`Failed to decrypt/parse raw_event ${row.id}:`, err);
       }
