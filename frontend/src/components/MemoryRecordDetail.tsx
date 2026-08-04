@@ -262,7 +262,7 @@ export function MemoryRecordDetail({
                       minute: '2-digit',
                     })}
                   </p>
-                  <p className="mt-0.5 text-[13px] leading-relaxed text-[#111827]">{message.text}</p>
+                  <p className="mt-0.5 whitespace-pre-wrap text-[13px] leading-relaxed text-[#111827]">{message.text}</p>
                 </li>
               ))}
             </ol>

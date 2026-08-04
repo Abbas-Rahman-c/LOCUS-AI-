@@ -100,6 +100,18 @@ Deno.serve(async (req: Request) => {
     return new Response("OK", { status: 200 });
   }
 
+  // A "message" event with a subtype is never a new message someone
+  // typed - message_changed (an edit, with its own new event ts, so the
+  // dedup-by-source_id constraint never catches it and the edited message
+  // gets captured a second time as if it were brand new), message_deleted,
+  // channel_join ("<@U...> has joined the channel"), bot_message echoes,
+  // etc. Confirmed live: this exact gap produced both the duplicate
+  // "3 tests failing"/"simpler auth flow" decisions and literal
+  // "has joined the channel" noise showing up as captured content.
+  if (event.subtype) {
+    return new Response("OK (subtype excluded)", { status: 200 });
+  }
+
   // The Privacy settings page states as an unconditional commitment that
   // DMs and group DMs are never read or captured - channel_type is "im"
   // for a 1:1 DM and "mpim" for a group DM (vs "channel"/"group" for
