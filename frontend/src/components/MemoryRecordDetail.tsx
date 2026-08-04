@@ -1,4 +1,5 @@
-import { useState, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
+import { getDecision, type ThreadMessage } from '../lib/api'
 
 export type MemoryRecordType = 'Decision' | 'Blocker' | 'Action Item'
 export type MemoryStatus = 'Current' | 'Superseded'
@@ -16,6 +17,12 @@ export type MemoryRecord = {
   listSource?: string
   /** Real source URL (Slack permalink, Gmail/Notion link) - "View Original" opens this when present. */
   sourceLink?: string
+  /** True when the extraction found no stated reason - shown as an explicit
+   * "No context captured" signal instead of silently leaving it blank, so
+   * the reader knows the gap is real, not a UI bug. */
+  hasContext?: boolean
+  /** Exact source timestamp (not the relative "3h ago" already in `meta`). */
+  exactTime?: string
 }
 
 export const TYPE_STYLES: Record<MemoryRecordType, string> = {
@@ -140,6 +147,26 @@ export function MemoryRecordDetail({
 }) {
   const [isFlagging, setIsFlagging] = useState(false)
   const [flagSubmitted, setFlagSubmitted] = useState(false)
+  const [thread, setThread] = useState<ThreadMessage[] | null>(null)
+  const [threadError, setThreadError] = useState('')
+
+  // Only fetches when actually expanded (this component is only mounted
+  // then) - the thread reconstruction decrypts and walks every raw_event
+  // sharing the source's thread_ref, too expensive to include on every row
+  // of a list.
+  useEffect(() => {
+    let active = true
+    getDecision(record.id)
+      .then((detail) => {
+        if (active) setThread(detail.thread_context)
+      })
+      .catch(() => {
+        if (active) setThreadError('Unable to load the conversation that led here.')
+      })
+    return () => {
+      active = false
+    }
+  }, [record.id])
 
   return (
     <div>
@@ -162,17 +189,53 @@ export function MemoryRecordDetail({
       ) : null}
 
       <div className="border-t border-[#F0F0F4] pt-1">
-        <DetailRow label="SUMMARY">{record.summary}</DetailRow>
+        <DetailRow label="SUMMARY">
+          {record.summary}
+          {record.hasContext === false ? (
+            <span className="ml-2 inline-flex rounded-full bg-[#F3F4F6] px-2 py-0.5 text-[11px] font-semibold text-[#6B7280]">
+              No context captured
+            </span>
+          ) : null}
+        </DetailRow>
         <DetailRow label="PARTICIPANTS">
           <span className="text-[#5A45FF]">{record.participants}</span>
         </DetailRow>
-        <DetailRow label="SOURCE">{record.source}</DetailRow>
+        <DetailRow label="SOURCE">
+          {record.source}
+          {record.exactTime ? <span className="text-[#9CA3AF]"> · {record.exactTime}</span> : null}
+        </DetailRow>
         <DetailRow label="STATUS">
           <span
             className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold ${STATUS_STYLES[record.status]}`}
           >
             {record.status}
           </span>
+        </DetailRow>
+        <DetailRow label="CONVERSATION">
+          {threadError ? (
+            <span className="text-[#9CA3AF]">{threadError}</span>
+          ) : thread === null ? (
+            <span className="text-[#9CA3AF]">Loading…</span>
+          ) : thread.length === 0 ? (
+            <span className="text-[#9CA3AF]">No prior messages found in this thread.</span>
+          ) : (
+            <ol className="flex flex-col gap-2.5">
+              {thread.map((message, index) => (
+                <li key={index} className="border-l-2 border-[#EEEBFF] pl-3">
+                  <p className="text-[12px] font-semibold text-[#6B7280]">
+                    {message.actor} ·{' '}
+                    {new Date(message.at).toLocaleString('en-US', {
+                      month: 'short',
+                      day: 'numeric',
+                      hour: 'numeric',
+                      minute: '2-digit',
+                    })}
+                  </p>
+                  <p className="mt-0.5 text-[13px] leading-relaxed text-[#111827]">{message.text}</p>
+                </li>
+              ))}
+            </ol>
+          )}
         </DetailRow>
       </div>
 

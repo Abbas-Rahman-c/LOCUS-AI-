@@ -532,14 +532,14 @@ function ConnectedSourcesSettings() {
   }
 
   const openConnect = (sourceId: SourceId) => {
-    // A genuine reconnect (a Notion connection existed before and was
-    // disconnected) - a first-time connect has no history to choose
-    // between, so it skips straight to a full sync.
-    if (sourceId === 'notion' && connections.notion?.status === 'revoked') {
-      setSyncModeTarget(sourceId)
-      return
-    }
-    void handleConnect(sourceId)
+    // Every connect and reconnect asks what to read, for every source, not
+    // just Notion reconnects - "I just connected Gmail, why isn't my old
+    // mail here" was a real, repeated confusion (Gmail's connector only
+    // ever grabbed the 10 most recent messages with no way to ask for
+    // more). Slack and Gmail both now support a real one-time backfill on
+    // "full" (see slack-oauth's backfillSlackHistory and gmail-manual-
+    // sync's first-sync batch), so the same choice applies everywhere.
+    setSyncModeTarget(sourceId)
   }
 
   const openDisconnectConfirm = (sourceId: SourceId) => {
@@ -744,7 +744,7 @@ function ConnectedSourcesSettings() {
             className="w-full max-w-[440px] rounded-[12px] bg-white p-6 shadow-[0_20px_55px_rgba(17,24,39,0.22)]"
           >
             <h2 id="sync-mode-title" className="text-[18px] font-semibold text-[#111827]">
-              Reconnecting Notion
+              Connecting {CONNECTED_SOURCE_META.find((s) => s.id === syncModeTarget)?.name}
             </h2>
             <p className="mt-2 text-[14px] leading-5 text-[#6B7280]">
               What should Locus read on this connection?
@@ -753,22 +753,24 @@ function ConnectedSourcesSettings() {
             <div className="mt-4 flex flex-col gap-2">
               <button
                 type="button"
-                onClick={() => void handleConnect('notion', 'full')}
+                onClick={() => syncModeTarget && void handleConnect(syncModeTarget, 'full')}
                 className="flex flex-col items-start gap-1 rounded-lg border border-[#E5E7EB] p-3 text-left hover:border-[#5A45FF] hover:bg-[#F8F7FF]"
               >
                 <span className="text-[14px] font-semibold text-[#111827]">Full history</span>
                 <span className="text-[13px] text-[#6B7280]">
-                  Read everything in the workspace again, from the beginning.
+                  {syncModeTarget === 'slack'
+                    ? 'Read recent history from every channel Locus can see, not just new messages.'
+                    : 'Read everything Locus can see again, from the beginning.'}
                 </span>
               </button>
               <button
                 type="button"
-                onClick={() => void handleConnect('notion', 'new')}
+                onClick={() => syncModeTarget && void handleConnect(syncModeTarget, 'new')}
                 className="flex flex-col items-start gap-1 rounded-lg border border-[#E5E7EB] p-3 text-left hover:border-[#5A45FF] hover:bg-[#F8F7FF]"
               >
                 <span className="text-[14px] font-semibold text-[#111827]">From now on</span>
                 <span className="text-[13px] text-[#6B7280]">
-                  Only capture pages edited after this reconnect.
+                  Only capture what arrives after this connection.
                 </span>
               </button>
             </div>

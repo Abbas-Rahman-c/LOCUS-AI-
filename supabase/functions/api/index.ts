@@ -68,6 +68,97 @@ async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: numbe
   }
 }
 
+// ── Decryption (reverse of ai-worker/index.ts's encryptRawContent, same
+// AES-256-GCM / "LOCUS1" blob format) - needed to reconstruct the actual
+// conversation thread behind a decision from the encrypted raw_events it
+// came from, not just the single triggering message. ──────────────────────
+
+const LOCUS_MAGIC = new TextEncoder().encode("LOCUS1");
+const NONCE_LEN = 12;
+
+async function getAesKey(): Promise<CryptoKey> {
+  const secret = Deno.env.get("RAW_EVENTS_ENCRYPTION_KEY") || Deno.env.get("APP_SECRET_KEY");
+  if (!secret) throw new Error("RAW_EVENTS_ENCRYPTION_KEY or APP_SECRET_KEY is not set");
+  const hash = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(secret));
+  return crypto.subtle.importKey("raw", hash, "AES-GCM", false, ["decrypt"]);
+}
+
+async function decryptRawContent(encrypted: Uint8Array): Promise<string> {
+  const key = await getAesKey();
+  const nonce = encrypted.slice(LOCUS_MAGIC.length, LOCUS_MAGIC.length + NONCE_LEN);
+  const ciphertext = encrypted.slice(LOCUS_MAGIC.length + NONCE_LEN);
+  const plaintext = await crypto.subtle.decrypt({ name: "AES-GCM", iv: nonce }, key, ciphertext);
+  return new TextDecoder().decode(plaintext);
+}
+
+// Same field-extraction rules as modules.retrieval.service.extract_event_text:
+// Gmail gets its subject prefixed onto the body; everything else falls back
+// to the first populated text-shaped field, never invents content.
+function extractEventText(rawContent: unknown, source: string): string {
+  if (!rawContent || typeof rawContent !== "object") return String(rawContent ?? "");
+  const content = rawContent as Record<string, unknown>;
+  if (source === "gmail") {
+    const subject = typeof content.subject === "string" ? content.subject : "";
+    const body = typeof content.body === "string" ? content.body : "";
+    return subject ? `Subject: ${subject}\n${body}` : body;
+  }
+  for (const field of ["text", "body", "content", "message", "description", "snippet"]) {
+    const val = content[field];
+    if (typeof val === "string" && val) return val;
+  }
+  return JSON.stringify(content);
+}
+
+type ThreadMessage = { at: string; actor: string; source: string; text: string };
+
+// Reconstructs "what was the conversation that led to this decision" - not
+// just the single message that got extracted, every message sharing the
+// same thread_ref (a Slack thread, a Gmail thread, a Notion page's edit
+// history), in chronological order. Falls back to just the directly linked
+// raw_events when no thread_ref exists (e.g. a standalone Gmail message).
+async function buildThreadContext(
+  tenantId: string,
+  originRawEventId: string | null,
+  sourceRawEventIds: string[],
+): Promise<ThreadMessage[]> {
+  const rawEventIds = [...new Set([originRawEventId, ...sourceRawEventIds].filter((id): id is string => !!id))];
+  if (rawEventIds.length === 0) return [];
+
+  return await withTenant(tenantId, async (sql) => {
+    const threadRefRows = await sql`
+      SELECT DISTINCT thread_ref FROM public.raw_events
+      WHERE id = ANY(${rawEventIds}) AND tenant_id = ${tenantId} AND thread_ref IS NOT NULL
+    `;
+    const threadRefs = threadRefRows.map((r) => r.thread_ref as string);
+
+    const eventRows = threadRefs.length > 0
+      ? await sql`
+          SELECT id, source, actor, received_at, raw_content FROM public.raw_events
+          WHERE thread_ref = ANY(${threadRefs}) AND tenant_id = ${tenantId}
+          ORDER BY received_at ASC
+        `
+      : await sql`
+          SELECT id, source, actor, received_at, raw_content FROM public.raw_events
+          WHERE id = ANY(${rawEventIds}) AND tenant_id = ${tenantId}
+          ORDER BY received_at ASC
+        `;
+
+    const messages: ThreadMessage[] = [];
+    for (const row of eventRows) {
+      try {
+        const bytes = row.raw_content instanceof Uint8Array ? row.raw_content : new Uint8Array(row.raw_content);
+        const plaintext = await decryptRawContent(bytes);
+        const envelope = JSON.parse(plaintext) as { raw_content?: unknown };
+        const text = extractEventText(envelope.raw_content, row.source);
+        messages.push({ at: row.received_at, actor: row.actor, source: row.source, text });
+      } catch (err) {
+        console.error(`Failed to decrypt/parse raw_event ${row.id}:`, err);
+      }
+    }
+    return messages;
+  });
+}
+
 // ── Auth: Supabase token verification + tenant-scoped JWT issuance ────────
 // Mirrors backend/src/modules/auth/service.py + supabase_verifier.py exactly:
 // verify the Supabase-issued access_token via JWKS, look up the caller's
@@ -320,19 +411,30 @@ async function getDecisionById(tenantId: string, decisionId: string) {
     }));
 
     const sourceRows = await sql`
-      SELECT permalink FROM decision_sources WHERE decision_id = ${decisionId} AND tenant_id = ${tenantId}
+      SELECT permalink, raw_event_id FROM decision_sources WHERE decision_id = ${decisionId} AND tenant_id = ${tenantId}
     `;
     const sourceLinks = sourceRows.map((sr) => sr.permalink);
 
     let sourcePlatforms: string[] = [];
+    let sourceReceivedAt: string | null = null;
     if (row.origin_raw_event_id) {
       const platformRows = await sql`
-        SELECT source FROM raw_events WHERE id = ${row.origin_raw_event_id} AND tenant_id = ${tenantId}
+        SELECT source, received_at FROM raw_events WHERE id = ${row.origin_raw_event_id} AND tenant_id = ${tenantId}
       `;
       if (platformRows[0]?.source) sourcePlatforms = [platformRows[0].source];
+      if (platformRows[0]?.received_at) sourceReceivedAt = platformRows[0].received_at;
     }
 
-    return buildDecisionOut(row, actors, sourceLinks, sourcePlatforms);
+    const decisionOut = buildDecisionOut(row, actors, sourceLinks, sourcePlatforms);
+    return {
+      ...decisionOut,
+      source_received_at: sourceReceivedAt,
+      thread_context: await buildThreadContext(
+        tenantId,
+        row.origin_raw_event_id,
+        sourceRows.map((sr) => sr.raw_event_id).filter(Boolean),
+      ),
+    };
   });
 }
 

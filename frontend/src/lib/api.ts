@@ -227,6 +227,20 @@ export interface DecisionListResponse {
   total: number
 }
 
+export interface ThreadMessage {
+  at: string
+  actor: string
+  source: string
+  text: string
+}
+
+/** Only returned by GET /api/v1/decisions/:id - too expensive (decrypts and
+ * walks every raw_event in the thread) to include on every row of a list. */
+export interface DecisionDetail extends DecisionOut {
+  source_received_at: string | null
+  thread_context: ThreadMessage[]
+}
+
 export interface DigestItem {
   decision_statement: string
   rationale: string | null
@@ -259,6 +273,13 @@ export function searchDecisions(question: string): Promise<SearchResponse> {
 
 export function listDecisions(limit: number, offset: number): Promise<DecisionListResponse> {
   return apiFetch<DecisionListResponse>(`/api/v1/decisions?limit=${limit}&offset=${offset}`)
+}
+
+/** Fetches one decision with its full reconstructed conversation thread -
+ * every message sharing the same thread_ref as the source event, not just
+ * the single message that got extracted. */
+export function getDecision(id: string): Promise<DecisionDetail> {
+  return apiFetch<DecisionDetail>(`/api/v1/decisions/${id}`)
 }
 
 export function getDigest(scope: 'team' | 'personal'): Promise<DigestResponse> {

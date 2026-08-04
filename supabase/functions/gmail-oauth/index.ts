@@ -22,6 +22,7 @@ Deno.serve(async (req: Request) => {
   // GET /authorize: redirect to Google's consent screen
   if (url.pathname.endsWith("/authorize")) {
     const redirectOrigin = resolveRedirectOrigin(url);
+    const syncMode = url.searchParams.get("sync_mode") === "new" ? "new" : "full";
     try {
       const tenantId = await resolveTenantFromAuthorize(url);
 
@@ -39,7 +40,7 @@ Deno.serve(async (req: Request) => {
       googleAuthUrl.searchParams.set("scope", scopes.join(" "));
       googleAuthUrl.searchParams.set("access_type", "offline");
       googleAuthUrl.searchParams.set("prompt", "consent");
-      googleAuthUrl.searchParams.set("state", encodeState(tenantId, redirectOrigin));
+      googleAuthUrl.searchParams.set("state", encodeState(tenantId, redirectOrigin, syncMode));
 
       return Response.redirect(googleAuthUrl.toString(), 302);
     } catch (err) {
@@ -51,8 +52,9 @@ Deno.serve(async (req: Request) => {
   if (url.pathname.endsWith("/callback")) {
     let tenantId: string;
     let redirectOrigin: string;
+    let syncMode: "full" | "new";
     try {
-      ({ tenantId, redirectOrigin } = parseTenantState(url.searchParams.get("state")));
+      ({ tenantId, redirectOrigin, syncMode } = parseTenantState(url.searchParams.get("state")));
     } catch (err) {
       return authorizeErrorResponse(SOURCE, err, resolveRedirectOrigin(url));
     }
@@ -104,6 +106,15 @@ Deno.serve(async (req: Request) => {
         }, redirectOrigin);
       }
 
+      // "new" means only pick up mail from this moment forward -
+      // last_synced_at = now() gives gmail-manual-sync exactly that cursor,
+      // matching notion-oauth's same choice. "full" (default, and every
+      // first-time connect) must explicitly clear last_synced_at to null on
+      // a RECONNECT too, not just leave it, so gmail-manual-sync's
+      // first-sync backfill (see gmail-manual-sync/index.ts) actually
+      // re-triggers instead of silently keeping the old cursor.
+      const lastSyncedAt = syncMode === "new" ? new Date().toISOString() : null;
+
       // 3. Store the connection under tenant GUC (locus_app / APP_DATABASE_URL).
       // Token stored as plain text for now to unblock testing.
       try {
@@ -111,7 +122,7 @@ Deno.serve(async (req: Request) => {
           await sql`
             insert into public.source_connections (
               tenant_id, source, external_workspace_id, oauth_token_ref,
-              ingestion_mode, status, cursor_state
+              ingestion_mode, status, cursor_state, last_synced_at
             ) values (
               ${tenantId}::uuid,
               'gmail',
@@ -122,14 +133,16 @@ Deno.serve(async (req: Request) => {
               ${sql.json({
                 history_id: null,
                 refresh_token: tokenData.refresh_token ?? null,
-              })}::jsonb
+              })}::jsonb,
+              ${lastSyncedAt}
             )
             on conflict (tenant_id, source, external_workspace_id)
             do update set
               oauth_token_ref = excluded.oauth_token_ref,
               status = 'active',
               cursor_state = excluded.cursor_state,
-              ingestion_mode = excluded.ingestion_mode
+              ingestion_mode = excluded.ingestion_mode,
+              last_synced_at = excluded.last_synced_at
           `;
         });
       } catch (err) {
