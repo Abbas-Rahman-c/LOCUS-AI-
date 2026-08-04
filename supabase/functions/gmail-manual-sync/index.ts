@@ -82,7 +82,15 @@ async function refreshAccessToken(source: any): Promise<string | null> {
 // only then does it flip to incremental mode. A single invocation still
 // only touches one page, so per-run cost is unchanged; it just no longer
 // gives up after page one. All overridable via Supabase secrets.
-const BACKFILL_MAX_MESSAGES = Number(Deno.env.get("GMAIL_BACKFILL_MAX_MESSAGES") ?? "200");
+// Kept small - removing the 30-day date bound means every one of a tenant's
+// gmail connections can now have a much bigger mailbox to page through, and
+// with SYNC_CONCURRENCY connections doing that in the SAME invocation, a
+// per-source cap of 200 was enough to blow the edge function's compute
+// budget outright (observed live: WORKER_RESOURCE_LIMIT, invocation killed
+// before any source got to persist its progress - worse than the old
+// 30-day wall, since nothing was saved at all). 20/run still finishes a
+// realistic mailbox in well under an hour of 5-minute cron ticks.
+const BACKFILL_MAX_MESSAGES = Number(Deno.env.get("GMAIL_BACKFILL_MAX_MESSAGES") ?? "20");
 const BACKFILL_TOTAL_MAX_MESSAGES = Number(Deno.env.get("GMAIL_BACKFILL_TOTAL_MAX_MESSAGES") ?? "5000");
 const INCREMENTAL_MAX_MESSAGES = Number(Deno.env.get("GMAIL_INCREMENTAL_MAX_MESSAGES") ?? "50");
 const LIST_PAGE_SIZE = 100; // Gmail's messages.list allows up to 500; 100 keeps each page fetch quick under fetchWithTimeout.
@@ -162,7 +170,9 @@ async function listGmailMessagesPage(
   return { ids: data.messages ?? [], nextPageToken: data.nextPageToken };
 }
 
-const SYNC_CONCURRENCY = 5;
+// Lowered alongside BACKFILL_MAX_MESSAGES for the same reason - fewer
+// sources doing full-history paging in parallel within one invocation.
+const SYNC_CONCURRENCY = 2;
 
 // Runs syncOneSource(source) for every source with at most `concurrency` in
 // flight at once - one tenant's stalled OAuth/Gmail call (now bounded to
@@ -224,7 +234,37 @@ Deno.serve(async (_req) => {
       let nextBackfillPageToken: string | undefined;
 
       if (backfilling) {
-        query = ""; // no date bound - paging through the account's full history
+        // Gmail lists newest-first with no date bound. This connection was
+        // already kept current by incremental sync before backfill even
+        // started, so page 1 onward is entirely mail already ingested -
+        // paging from the top would spend potentially hundreds of pages
+        // re-listing (and duplicate-skipping) known mail before ever
+        // reaching anything actually new. Instead, jump straight past it:
+        // anchor the very first backfill page to `before:` the oldest
+        // message already stored for THIS connection, so every page from
+        // page 1 onward is unseen history. Stored in cursor_state once so
+        // resumed pages (which must reuse the same query as their
+        // pageToken) don't recompute a moving target as new mail arrives.
+        if (typeof cursorState.backfill_query === "string") {
+          query = cursorState.backfill_query;
+        } else {
+          const earliestKnown = await withTenant(String(source.tenant_id), async (sql) => {
+            const rows = await sql`
+              SELECT min(received_at) AS earliest FROM public.raw_events
+              WHERE tenant_id = ${source.tenant_id} AND connection_id = ${source.id}
+            `;
+            return rows[0]?.earliest as string | null;
+          });
+          query = earliestKnown ? `before:${formatGmailAfterDate(new Date(earliestKnown))}` : "";
+          await withTenant(String(source.tenant_id), async (sql) => {
+            await sql`
+              update public.source_connections
+              set cursor_state = cursor_state || ${sql.json({ backfill_query: query })}::jsonb
+              where id = ${source.id}
+            `;
+          });
+        }
+
         const remainingBudget = Math.max(0, BACKFILL_TOTAL_MAX_MESSAGES - backfillTotalSoFar);
         const pageSize = Math.min(BACKFILL_MAX_MESSAGES, remainingBudget);
         const page = pageSize > 0
