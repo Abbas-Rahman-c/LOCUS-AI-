@@ -91,9 +91,67 @@ async function decryptRawContent(encrypted: Uint8Array): Promise<string> {
   return new TextDecoder().decode(plaintext);
 }
 
+// notion-poller stores raw_content as the entire raw Notion API page object
+// (properties, ids, timestamps, everything), not flat text - reads a
+// human-readable value back out of each property by its Notion type,
+// instead of dumping the whole structure as JSON.
+// deno-lint-ignore no-explicit-any
+function notionPropertyText(prop: any): string | null {
+  if (!prop || typeof prop !== "object") return null;
+  switch (prop.type) {
+    case "title":
+    case "rich_text": {
+      const parts = (prop[prop.type] ?? []).map((t: { plain_text?: string }) => t.plain_text).filter(Boolean);
+      return parts.length > 0 ? parts.join("") : null;
+    }
+    case "select":
+      return prop.select?.name ?? null;
+    case "status":
+      return prop.status?.name ?? null;
+    case "multi_select": {
+      const names = (prop.multi_select ?? []).map((s: { name?: string }) => s.name).filter(Boolean);
+      return names.length > 0 ? names.join(", ") : null;
+    }
+    case "date":
+      return prop.date?.start ?? null;
+    case "number":
+      return prop.number !== null && prop.number !== undefined ? String(prop.number) : null;
+    case "checkbox":
+      return prop.checkbox ? "yes" : null;
+    case "email":
+    case "url":
+    case "phone_number":
+      return prop[prop.type] ?? null;
+    case "people": {
+      const names = (prop.people ?? []).map((p: { name?: string }) => p.name).filter(Boolean);
+      return names.length > 0 ? names.join(", ") : null;
+    }
+    default:
+      return null;
+  }
+}
+
+// deno-lint-ignore no-explicit-any
+function extractNotionPageText(page: any): string {
+  const properties = page.properties ?? {};
+  const titleEntry = Object.entries(properties).find(([, p]: [string, any]) => p?.type === "title");
+  const title = titleEntry ? notionPropertyText(titleEntry[1]) : null;
+
+  const lines: string[] = [];
+  if (title) lines.push(title);
+  for (const [name, prop] of Object.entries(properties)) {
+    if (titleEntry && name === titleEntry[0]) continue;
+    const value = notionPropertyText(prop);
+    if (value) lines.push(`${name}: ${value}`);
+  }
+  return lines.length > 0 ? lines.join("\n") : (page.url ?? "Notion page");
+}
+
 // Same field-extraction rules as modules.retrieval.service.extract_event_text:
-// Gmail gets its subject prefixed onto the body; everything else falls back
-// to the first populated text-shaped field, never invents content.
+// Gmail gets its subject prefixed onto the body; Notion reads its page
+// properties into readable text (see extractNotionPageText); everything
+// else falls back to the first populated text-shaped field, never
+// invents content.
 function extractEventText(rawContent: unknown, source: string): string {
   if (!rawContent || typeof rawContent !== "object") return String(rawContent ?? "");
   const content = rawContent as Record<string, unknown>;
@@ -101,6 +159,9 @@ function extractEventText(rawContent: unknown, source: string): string {
     const subject = typeof content.subject === "string" ? content.subject : "";
     const body = typeof content.body === "string" ? content.body : "";
     return subject ? `Subject: ${subject}\n${body}` : body;
+  }
+  if (source === "notion" && "properties" in content) {
+    return extractNotionPageText(content);
   }
   for (const field of ["text", "body", "content", "message", "description", "snippet"]) {
     const val = content[field];
@@ -168,19 +229,47 @@ async function buildThreadContext(
           ORDER BY received_at ASC
         `;
 
-    const messages: ThreadMessage[] = [];
+    // deno-lint-ignore no-explicit-any
+    const decrypted: { at: string; rawActor: string; source: string; text: string }[] = [];
     for (const row of eventRows) {
       try {
         const bytes = byteaToUint8Array(row.raw_content);
         const plaintext = await decryptRawContent(bytes);
         const envelope = JSON.parse(plaintext) as { raw_content?: unknown; actor?: string };
         const text = extractEventText(envelope.raw_content, row.source);
-        messages.push({ at: row.received_at, actor: envelope.actor ?? "unknown", source: row.source, text });
+        decrypted.push({ at: row.received_at, rawActor: envelope.actor ?? "unknown", source: row.source, text });
       } catch (err) {
         console.error(`Failed to decrypt/parse raw_event ${row.id}:`, err);
       }
     }
-    return messages;
+
+    // Envelopes only ever carry the raw platform identifier (a Slack "U..."
+    // id, a Notion user id, a Gmail address) - resolve to real names the
+    // same way decision participants already are, instead of showing raw
+    // ids in the reconstructed conversation.
+    const rawActorIds = [...new Set(decrypted.map((m) => m.rawActor))];
+    const actorNameByRawId = new Map<string, string>();
+    if (rawActorIds.length > 0) {
+      const actorRows = await sql`
+        SELECT display_name, email, notion_user_id, slack_user_id FROM public.actors
+        WHERE tenant_id = ${tenantId}
+          AND (slack_user_id = ANY(${rawActorIds}) OR notion_user_id = ANY(${rawActorIds}) OR email = ANY(${rawActorIds}))
+      `;
+      for (const ar of actorRows) {
+        const name = guessActorName(ar.display_name, ar.email, ar.notion_user_id, ar.slack_user_id);
+        if (!name) continue;
+        for (const rawId of [ar.slack_user_id, ar.notion_user_id, ar.email]) {
+          if (rawId) actorNameByRawId.set(rawId, name);
+        }
+      }
+    }
+
+    return decrypted.map((m) => ({
+      at: m.at,
+      actor: actorNameByRawId.get(m.rawActor) ?? m.rawActor,
+      source: m.source,
+      text: m.text,
+    }));
   } catch (err) {
     console.error("buildThreadContext query failed:", err);
     return [];
