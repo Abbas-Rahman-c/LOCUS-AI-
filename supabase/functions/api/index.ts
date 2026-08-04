@@ -619,10 +619,28 @@ async function getDecisionById(tenantId: string, decisionId: string) {
       if (platformRows[0]?.received_at) sourceReceivedAt = platformRows[0].received_at;
     }
 
+    // Symmetric in meaning even though stored asymmetrically (decision_id
+    // is always "whichever one was captured second") - a conflict shows up
+    // regardless of which side of the pair you're looking at.
+    const conflictRows = await sql`
+      SELECT dc.relationship, dc.reason, dc.confidence,
+             CASE WHEN dc.decision_id = ${decisionId} THEN dc.related_decision_id ELSE dc.decision_id END AS other_id,
+             CASE WHEN dc.decision_id = ${decisionId} THEN d2.decision_statement ELSE d1.decision_statement END AS other_statement
+      FROM public.decision_conflicts dc
+      JOIN public.decisions d1 ON d1.id = dc.decision_id AND d1.tenant_id = dc.tenant_id
+      JOIN public.decisions d2 ON d2.id = dc.related_decision_id AND d2.tenant_id = dc.tenant_id
+      WHERE dc.tenant_id = ${tenantId} AND (dc.decision_id = ${decisionId} OR dc.related_decision_id = ${decisionId})
+    `;
+    const conflicts = conflictRows.map((cr) => ({
+      decision_id: cr.other_id, decision_statement: cr.other_statement,
+      relationship: cr.relationship, reason: cr.reason, confidence: Number(cr.confidence),
+    }));
+
     const decisionOut = buildDecisionOut(row, actors, sourceLinks, sourcePlatforms);
     return {
       ...decisionOut,
       source_received_at: sourceReceivedAt,
+      conflicts,
       thread_context: await buildThreadContext(
         sql,
         tenantId,

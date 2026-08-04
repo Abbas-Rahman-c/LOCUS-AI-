@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react'
-import { getDecision, type ThreadMessage } from '../lib/api'
+import { getDecision, type DecisionConflict, type ThreadMessage } from '../lib/api'
 
 export type MemoryRecordType = 'Decision' | 'Blocker' | 'Action Item'
 export type MemoryStatus = 'Current' | 'Superseded'
@@ -149,6 +149,7 @@ export function MemoryRecordDetail({
   const [flagSubmitted, setFlagSubmitted] = useState(false)
   const [thread, setThread] = useState<ThreadMessage[] | null>(null)
   const [threadError, setThreadError] = useState('')
+  const [conflicts, setConflicts] = useState<DecisionConflict[]>([])
 
   // Only fetches when actually expanded (this component is only mounted
   // then) - the thread reconstruction decrypts and walks every raw_event
@@ -158,7 +159,9 @@ export function MemoryRecordDetail({
     let active = true
     getDecision(record.id)
       .then((detail) => {
-        if (active) setThread(detail.thread_context)
+        if (!active) return
+        setThread(detail.thread_context)
+        setConflicts(detail.conflicts)
       })
       .catch(() => {
         if (active) setThreadError('Unable to load the conversation that led here.')
@@ -186,6 +189,34 @@ export function MemoryRecordDetail({
           </p>
           <span className="shrink-0 text-[12px] text-[#9CA3AF]">{record.meta}</span>
         </button>
+      ) : null}
+
+      {conflicts.length > 0 ? (
+        <div className="mb-4 flex flex-col gap-2">
+          {conflicts.map((conflict) => (
+            <div
+              key={conflict.decision_id}
+              className={`rounded-lg border p-3 ${
+                conflict.relationship === 'contradicts'
+                  ? 'border-[#F3D6D6] bg-[#FFF7F7]'
+                  : 'border-[#F5E6C8] bg-[#FFFBF0]'
+              }`}
+            >
+              <p
+                className={`text-[13px] font-semibold ${
+                  conflict.relationship === 'contradicts' ? 'text-[#B4232C]' : 'text-[#946C00]'
+                }`}
+              >
+                {conflict.relationship === 'contradicts'
+                  ? 'May conflict with another decision'
+                  : 'May duplicate another decision'}
+              </p>
+              <p className="mt-1 text-[13px] leading-relaxed text-[#374151]">
+                <span className="font-medium">{conflict.decision_statement}</span>: {conflict.reason}
+              </p>
+            </div>
+          ))}
+        </div>
       ) : null}
 
       <div className="border-t border-[#F0F0F4] pt-1">

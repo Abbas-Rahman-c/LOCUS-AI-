@@ -234,11 +234,23 @@ export interface ThreadMessage {
   text: string
 }
 
+/** A conflict flagged automatically when this decision was captured -
+ * compared against its most similar existing decisions, Claude classified
+ * whether it genuinely contradicts or duplicates one of them. */
+export interface DecisionConflict {
+  decision_id: string
+  decision_statement: string
+  relationship: 'contradicts' | 'duplicates'
+  reason: string
+  confidence: number
+}
+
 /** Only returned by GET /api/v1/decisions/:id - too expensive (decrypts and
  * walks every raw_event in the thread) to include on every row of a list. */
 export interface DecisionDetail extends DecisionOut {
   source_received_at: string | null
   thread_context: ThreadMessage[]
+  conflicts: DecisionConflict[]
 }
 
 export interface DigestItem {

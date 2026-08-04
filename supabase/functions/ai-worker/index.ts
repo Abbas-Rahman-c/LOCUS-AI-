@@ -502,6 +502,120 @@ function buildSearchableText(statement: string, rationale: string | null, altern
   return lines.join("\n");
 }
 
+// ── Decision conflict detection (differentiator: nothing else in this
+// market automatically reasons about whether a new decision contradicts
+// or duplicates an existing one - competitors either index content for
+// search [Glean] or rely on a human manually verifying/flagging staleness
+// [Guru]. This runs on every newly embedded decision, for free, using the
+// same vector search /search already relies on. ─────────────────────────
+
+const CONFLICT_CANDIDATE_LIMIT = 3;
+// Cosine similarity floor before a candidate is even worth an LLM call -
+// below this, two decisions just aren't about the same thing closely
+// enough to plausibly conflict, and asking Claude would be pure noise
+// (and pure cost) for an unrelated pair.
+const CONFLICT_SIMILARITY_FLOOR = 0.72;
+const CONFLICT_CONFIDENCE_FLOOR = 0.6;
+
+const CONFLICT_TOOL = {
+  name: "record_conflict_analysis",
+  description: "Classify how a new decision relates to each existing candidate decision.",
+  input_schema: {
+    type: "object",
+    properties: {
+      classifications: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            candidate_number: { type: "integer" },
+            relationship: { type: "string", enum: ["contradicts", "duplicates", "unrelated"] },
+            reason: { type: "string" },
+            confidence: { type: "number", minimum: 0, maximum: 1 },
+          },
+          required: ["candidate_number", "relationship", "reason", "confidence"],
+          additionalProperties: false,
+        },
+      },
+    },
+    required: ["classifications"],
+    additionalProperties: false,
+  },
+};
+
+const CONFLICT_SYSTEM_PROMPT = `You compare one new decision against a short list of existing decisions from the same team's records, and classify how each candidate relates to the new one.
+
+- "contradicts": the two decisions state genuinely incompatible conclusions about the same specific question (not merely related topics - e.g. "use Postgres" vs "use MongoDB" for the same system is a contradiction; "use Postgres for the context layer" and "use Redis for caching" is not, those are different questions).
+- "duplicates": the two decisions state essentially the same conclusion about the same question, redundantly.
+- "unrelated": anything else, including decisions that are topically similar but don't actually make competing or repeated claims. Default to this when genuinely unsure - a false "contradicts" flag is worse than a missed one.
+
+Call record_conflict_analysis exactly once with one classification per candidate, in the order given.`;
+
+type ConflictCandidate = { id: string; decision_statement: string; rationale: string | null };
+
+async function detectConflicts(
+  tenantId: string,
+  decisionId: string,
+  statement: string,
+  rationale: string | null,
+  embedding: number[],
+): Promise<void> {
+  try {
+    const vectorLiteral = "[" + embedding.join(",") + "]";
+    const candidates: ConflictCandidate[] = await withTenant(tenantId, async (sql) => {
+      const rows = await sql`
+        SELECT d.id, d.decision_statement, d.rationale,
+               1 - (de.embedding <=> ${vectorLiteral}::vector) AS similarity
+        FROM public.decision_embeddings de
+        JOIN public.decisions d ON d.id = de.decision_id AND d.tenant_id = de.tenant_id
+        WHERE de.tenant_id = ${tenantId} AND de.decision_id != ${decisionId}
+          AND 1 - (de.embedding <=> ${vectorLiteral}::vector) >= ${CONFLICT_SIMILARITY_FLOOR}
+        ORDER BY de.embedding <=> ${vectorLiteral}::vector ASC
+        LIMIT ${CONFLICT_CANDIDATE_LIMIT}
+      `;
+      return rows.map((r: { id: string; decision_statement: string; rationale: string | null }) => ({
+        id: r.id, decision_statement: r.decision_statement, rationale: r.rationale,
+      }));
+    });
+
+    if (candidates.length === 0) return;
+
+    const userMessage = [
+      `New decision:\n${statement}${rationale ? `\nReason: ${rationale}` : ""}`,
+      "",
+      "Existing candidates:",
+      ...candidates.map((c, i) => `${i + 1}. ${c.decision_statement}${c.rationale ? ` (reason: ${c.rationale})` : ""}`),
+    ].join("\n");
+
+    const result = await callClaude(
+      CONFLICT_SYSTEM_PROMPT, userMessage, CONFLICT_TOOL, "record_conflict_analysis", 512, EXTRACT_MODEL, 20_000,
+    ) as { classifications: { candidate_number: number; relationship: string; reason: string; confidence: number }[] };
+
+    const flagged = (result.classifications ?? []).filter(
+      (c) => (c.relationship === "contradicts" || c.relationship === "duplicates") && c.confidence >= CONFLICT_CONFIDENCE_FLOOR,
+    );
+    if (flagged.length === 0) return;
+
+    await withTenant(tenantId, async (sql) => {
+      for (const c of flagged) {
+        const candidate = candidates[c.candidate_number - 1];
+        if (!candidate) continue;
+        await sql`
+          INSERT INTO public.decision_conflicts (tenant_id, decision_id, related_decision_id, relationship, reason, confidence)
+          VALUES (${tenantId}, ${decisionId}, ${candidate.id}, ${c.relationship}, ${c.reason}, ${c.confidence})
+          ON CONFLICT (decision_id, related_decision_id) DO UPDATE SET
+            relationship = EXCLUDED.relationship, reason = EXCLUDED.reason, confidence = EXCLUDED.confidence
+        `;
+      }
+    });
+  } catch (err) {
+    // Fails open, same rule as everywhere else this session: conflict
+    // detection is a quality enrichment, never a reason to fail the
+    // embedding job that already succeeded.
+    console.error(`detectConflicts failed for decision ${decisionId}:`, err);
+  }
+}
+
 async function handleEmbeddingMessage(msg: PgmqMsg): Promise<string> {
   const job = msg.message as { tenant_id: string; decision_id: string };
 
@@ -533,6 +647,8 @@ async function handleEmbeddingMessage(msg: PgmqMsg): Promise<string> {
         embedding = EXCLUDED.embedding, embedding_model = EXCLUDED.embedding_model, embedded_at = EXCLUDED.embedded_at
     `;
   });
+
+  await detectConflicts(job.tenant_id, job.decision_id, row.decision_statement, row.rationale, embedding);
 
   await pgmqDelete("embedding_queue", msg.msg_id);
   return "embedded";
