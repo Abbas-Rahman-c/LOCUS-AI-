@@ -397,11 +397,11 @@ async function handleIngestionMessageInner(msg: PgmqMsg): Promise<string> {
     const inserted = await sql`
       INSERT INTO public.raw_events (
         tenant_id, connection_id, source, source_id, thread_ref,
-        permission_scope, raw_content, metadata, triage_result
+        permission_scope, raw_content, metadata, triage_result, received_at
       ) VALUES (
         ${tenantId}, ${connectionId}, ${payload.source}, ${payload.source_id},
         ${payload.thread_ref ?? null}, ${payload.permission_scope ?? []},
-        ${encrypted}, ${metadata}::jsonb, 'pending'
+        ${encrypted}, ${metadata}::jsonb, 'pending', ${payload.received_at}
       )
       ON CONFLICT (tenant_id, source, source_id) DO NOTHING
       RETURNING id
