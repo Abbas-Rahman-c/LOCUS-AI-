@@ -76,7 +76,10 @@ async function backfillSlackHistory(tenantId: string, teamId: string, accessToke
             source: "slack",
             source_id: String(message.ts),
             actor: String(message.user ?? "unknown"),
-            thread_ref: String(message.thread_ts ?? channel.id),
+            // Same fix as slack-webhook: fall back to this message's own
+            // ts, not the whole channel, so backfilled messages don't all
+            // get treated as one giant unrelated "thread".
+            thread_ref: String(message.thread_ts ?? message.ts),
             permission_scope: [String(channel.id)],
             raw_content: { text: String(message.text ?? "") },
             source_permalink: slackDeepLink,

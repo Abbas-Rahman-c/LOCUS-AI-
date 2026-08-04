@@ -150,7 +150,15 @@ Deno.serve(async (req: Request) => {
       source: "slack",
       source_id: sourceId,
       actor: String(event.user ?? "unknown"),
-      thread_ref: String(event.thread_ts ?? event.channel ?? ""),
+      // A real reply thread uses thread_ts (the parent message's own ts,
+      // which the parent itself is also addressable by in Slack's
+      // threading model). Falling back to the channel id here previously
+      // meant every message ever posted in that channel counted as "the
+      // same thread" as this one - a decision about joining the team
+      // ended up reconstructed alongside completely unrelated channel
+      // chatter. Falling back to this message's own ts instead means an
+      // unthreaded message only ever groups with its own real replies.
+      thread_ref: String(event.thread_ts ?? event.ts ?? ""),
       permission_scope: event.channel ? [String(event.channel)] : [],
       raw_content: { text: String(event.text ?? "") },
       source_permalink: slackDeepLink,

@@ -187,6 +187,64 @@ function byteaToUint8Array(value: unknown): Uint8Array {
   return new Uint8Array(value as ArrayLike<number>);
 }
 
+// The actors table only ever has a row for people extracted as an actual
+// decision participant (role decided_by/mentioned) - someone who just
+// chatted in the reconstructed thread without ever being named in a
+// decision has no row to look up. Falls back to a live Slack users.info
+// call per unresolved id (bounded, only for ids that miss the table), and
+// caches the result back into actors so the next lookup is a normal
+// table hit instead of another live call.
+// deno-lint-ignore no-explicit-any
+async function resolveSlackNamesLive(sql: any, tenantId: string, slackUserIds: string[]): Promise<Map<string, string>> {
+  const resolved = new Map<string, string>();
+  if (slackUserIds.length === 0) return resolved;
+
+  try {
+    const connRows = await sql`
+      SELECT oauth_token_ref FROM public.source_connections
+      WHERE tenant_id = ${tenantId} AND source = 'slack' AND status = 'active'
+      ORDER BY created_at ASC LIMIT 1
+    `;
+    const accessToken = connRows[0]?.oauth_token_ref;
+    if (!accessToken) return resolved;
+
+    for (const slackUserId of slackUserIds) {
+      try {
+        const resp = await fetchWithTimeout(
+          `https://slack.com/api/users.info?user=${encodeURIComponent(slackUserId)}`,
+          { headers: { Authorization: `Bearer ${accessToken}` } },
+          8_000,
+        );
+        const data = await resp.json();
+        if (!data.ok) continue;
+        const name = data.user?.profile?.real_name || data.user?.real_name || data.user?.name;
+        if (!name) continue;
+        resolved.set(slackUserId, name);
+
+        // No unique constraint on (tenant_id, slack_user_id) exists to
+        // support ON CONFLICT - select-then-insert/update instead, same
+        // pattern already proven in ai-worker's resolveActorId.
+        const existing = await sql`
+          SELECT id FROM public.actors WHERE tenant_id = ${tenantId} AND slack_user_id = ${slackUserId}
+        `;
+        if (existing.length > 0) {
+          await sql`UPDATE public.actors SET display_name = ${name} WHERE id = ${existing[0].id}`;
+        } else {
+          await sql`
+            INSERT INTO public.actors (tenant_id, slack_user_id, display_name, kind)
+            VALUES (${tenantId}, ${slackUserId}, ${name}, 'internal')
+          `;
+        }
+      } catch (err) {
+        console.error(`Slack users.info failed for ${slackUserId}:`, err);
+      }
+    }
+  } catch (err) {
+    console.error("resolveSlackNamesLive failed:", err);
+  }
+  return resolved;
+}
+
 // Reconstructs "what was the conversation that led to this decision" - not
 // just the single message that got extracted, every message sharing the
 // same thread_ref (a Slack thread, a Gmail thread, a Notion page's edit
@@ -262,6 +320,12 @@ async function buildThreadContext(
           if (rawId) actorNameByRawId.set(rawId, name);
         }
       }
+    }
+
+    const unresolvedSlackIds = rawActorIds.filter((id) => !actorNameByRawId.has(id) && SLACK_USER_ID_RE.test(id));
+    if (unresolvedSlackIds.length > 0) {
+      const liveResolved = await resolveSlackNamesLive(sql, tenantId, unresolvedSlackIds);
+      for (const [id, name] of liveResolved) actorNameByRawId.set(id, name);
     }
 
     return decrypted.map((m) => ({
