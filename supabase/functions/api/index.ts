@@ -503,16 +503,35 @@ function buildDecisionOut(row: any, actors: unknown[], sourceLinks: string[], so
   };
 }
 
-async function listDecisions(tenantId: string, limit: number, offset: number) {
+async function listDecisions(
+  tenantId: string,
+  limit: number,
+  offset: number,
+  recordType?: string | null,
+  source?: string | null,
+) {
   return await withTenant(tenantId, async (sql) => {
+    // Filtering happens here, not client-side, so "Gmail only" (etc.) reflects
+    // the full archive across all pages, not just whatever page was loaded
+    // before the filter was picked.
+    const recordTypeFilter = recordType ? sql`AND d.record_type = ${recordType}` : sql``;
+    const sourceFilter = source ? sql`AND re.source = ${source}` : sql``;
+
     const rows = await sql`
-      SELECT id, tenant_id, record_type, decision_statement, rationale,
-             alternatives_considered, status, superseded_by, scope, confidence,
-             origin_raw_event_id, created_at, updated_at
-      FROM decisions WHERE tenant_id = ${tenantId}
-      ORDER BY created_at DESC LIMIT ${limit} OFFSET ${offset}
+      SELECT d.id, d.tenant_id, d.record_type, d.decision_statement, d.rationale,
+             d.alternatives_considered, d.status, d.superseded_by, d.scope, d.confidence,
+             d.origin_raw_event_id, d.created_at, d.updated_at
+      FROM decisions d
+      LEFT JOIN raw_events re ON re.id = d.origin_raw_event_id AND re.tenant_id = d.tenant_id
+      WHERE d.tenant_id = ${tenantId} ${recordTypeFilter} ${sourceFilter}
+      ORDER BY d.created_at DESC LIMIT ${limit} OFFSET ${offset}
     `;
-    const totalRows = await sql`SELECT COUNT(*)::int AS total FROM decisions WHERE tenant_id = ${tenantId}`;
+    const totalRows = await sql`
+      SELECT COUNT(*)::int AS total
+      FROM decisions d
+      LEFT JOIN raw_events re ON re.id = d.origin_raw_event_id AND re.tenant_id = d.tenant_id
+      WHERE d.tenant_id = ${tenantId} ${recordTypeFilter} ${sourceFilter}
+    `;
     const total = totalRows[0]?.total ?? 0;
 
     const decisionIds = rows.map((r) => r.id);
@@ -1306,8 +1325,10 @@ async function handleDecisions(req: Request, url: URL): Promise<Response> {
   if (req.method === "GET" && parts.length === 0) {
     const limit = Math.min(Math.max(Number(url.searchParams.get("limit") ?? 50), 1), 200);
     const offset = Math.max(Number(url.searchParams.get("offset") ?? 0), 0);
+    const recordType = url.searchParams.get("record_type");
+    const source = url.searchParams.get("source");
     try {
-      const result = await listDecisions(ctx.tenantId, limit, offset);
+      const result = await listDecisions(ctx.tenantId, limit, offset, recordType, source);
       return jsonResponse(result);
     } catch (err) {
       console.error("list decisions failed:", err);

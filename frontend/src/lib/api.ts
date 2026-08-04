@@ -283,8 +283,16 @@ export function searchDecisions(question: string): Promise<SearchResponse> {
   })
 }
 
-export function listDecisions(limit: number, offset: number): Promise<DecisionListResponse> {
-  return apiFetch<DecisionListResponse>(`/api/v1/decisions?limit=${limit}&offset=${offset}`)
+export function listDecisions(
+  limit: number,
+  offset: number,
+  recordType?: string,
+  source?: string,
+): Promise<DecisionListResponse> {
+  const params = new URLSearchParams({ limit: String(limit), offset: String(offset) })
+  if (recordType) params.set('record_type', recordType)
+  if (source) params.set('source', source)
+  return apiFetch<DecisionListResponse>(`/api/v1/decisions?${params.toString()}`)
 }
 
 /** Fetches one decision with its full reconstructed conversation thread -

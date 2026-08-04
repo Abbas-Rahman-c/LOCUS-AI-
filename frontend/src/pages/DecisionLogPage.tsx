@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useState } from 'react'
+import { Fragment, useEffect, useState } from 'react'
 import {
   ApiError,
   listDecisions,
@@ -91,7 +91,9 @@ export default function DecisionLogPage() {
     setError('')
 
     const offset = (page - 1) * PAGE_SIZE
-    return listDecisions(PAGE_SIZE, offset)
+    const recordType = selectedType === 'All Types' ? undefined : selectedType
+    const source = selectedSource === 'All Sources' ? undefined : selectedSource
+    return listDecisions(PAGE_SIZE, offset, recordType, source)
       .then((response) => {
         setEntries(response.items)
         setTotal(response.total)
@@ -108,20 +110,12 @@ export default function DecisionLogPage() {
   useEffect(() => {
     void loadPage(currentPage)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentPage])
+  }, [currentPage, selectedType, selectedSource])
 
-  // The backend does not support filtering by record_type or source server
-  // side (GET /api/v1/decisions only takes limit/offset), so both filters
-  // apply within the currently loaded page only, not across the full
-  // archive. "Showing X of Y" below reflects that: Y is this page's real
-  // count, not a globally-filtered total.
-  const filteredEntries = useMemo(() => {
-    return entries.filter((entry) => {
-      if (selectedType !== 'All Types' && entry.record_type !== selectedType) return false
-      if (selectedSource !== 'All Sources' && !entry.source_platforms.includes(selectedSource)) return false
-      return true
-    })
-  }, [entries, selectedType, selectedSource])
+  // Filtering by type and source now happens server-side (see loadPage), so
+  // `entries` already reflects the current filter across the whole archive,
+  // not just whatever page happened to be loaded first.
+  const filteredEntries = entries
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
 
@@ -251,7 +245,7 @@ export default function DecisionLogPage() {
             ) : filteredEntries.length === 0 ? (
               <tr>
                 <td colSpan={5} className="px-5 py-12 text-center text-[14px] text-[#6B7280]">
-                  No entries on this page match that filter.
+                  No entries match that filter.
                 </td>
               </tr>
             ) : (
