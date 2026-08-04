@@ -111,12 +111,33 @@ function extractEventText(rawContent: unknown, source: string): string {
 
 type ThreadMessage = { at: string; actor: string; source: string; text: string };
 
+// postgres.js's bytea decoding varies by how the column comes back over the
+// wire - normally a Uint8Array/Buffer, but a hex-encoded "\x4c4f..." string
+// (Postgres's default bytea_output) is also possible depending on the
+// driver path taken. Handle both rather than assuming one.
+function byteaToUint8Array(value: unknown): Uint8Array {
+  if (value instanceof Uint8Array) return value;
+  if (typeof value === "string") {
+    const hex = value.startsWith("\\x") ? value.slice(2) : value;
+    const bytes = new Uint8Array(hex.length / 2);
+    for (let i = 0; i < bytes.length; i++) bytes[i] = parseInt(hex.substr(i * 2, 2), 16);
+    return bytes;
+  }
+  return new Uint8Array(value as ArrayLike<number>);
+}
+
 // Reconstructs "what was the conversation that led to this decision" - not
 // just the single message that got extracted, every message sharing the
 // same thread_ref (a Slack thread, a Gmail thread, a Notion page's edit
 // history), in chronological order. Falls back to just the directly linked
 // raw_events when no thread_ref exists (e.g. a standalone Gmail message).
+// Takes the caller's already-open tenant-scoped `sql` handle rather than
+// opening its own nested withTenant connection - and never lets a failure
+// here take down the whole decision fetch, since this is a quality
+// enrichment, not core data; fails open to an empty thread on any error.
+// deno-lint-ignore no-explicit-any
 async function buildThreadContext(
+  sql: any,
   tenantId: string,
   originRawEventId: string | null,
   sourceRawEventIds: string[],
@@ -124,12 +145,12 @@ async function buildThreadContext(
   const rawEventIds = [...new Set([originRawEventId, ...sourceRawEventIds].filter((id): id is string => !!id))];
   if (rawEventIds.length === 0) return [];
 
-  return await withTenant(tenantId, async (sql) => {
+  try {
     const threadRefRows = await sql`
       SELECT DISTINCT thread_ref FROM public.raw_events
       WHERE id = ANY(${rawEventIds}) AND tenant_id = ${tenantId} AND thread_ref IS NOT NULL
     `;
-    const threadRefs = threadRefRows.map((r) => r.thread_ref as string);
+    const threadRefs = threadRefRows.map((r: { thread_ref: string }) => r.thread_ref);
 
     const eventRows = threadRefs.length > 0
       ? await sql`
@@ -146,7 +167,7 @@ async function buildThreadContext(
     const messages: ThreadMessage[] = [];
     for (const row of eventRows) {
       try {
-        const bytes = row.raw_content instanceof Uint8Array ? row.raw_content : new Uint8Array(row.raw_content);
+        const bytes = byteaToUint8Array(row.raw_content);
         const plaintext = await decryptRawContent(bytes);
         const envelope = JSON.parse(plaintext) as { raw_content?: unknown };
         const text = extractEventText(envelope.raw_content, row.source);
@@ -156,7 +177,10 @@ async function buildThreadContext(
       }
     }
     return messages;
-  });
+  } catch (err) {
+    console.error("buildThreadContext query failed:", err);
+    return [];
+  }
 }
 
 // ── Auth: Supabase token verification + tenant-scoped JWT issuance ────────
@@ -430,6 +454,7 @@ async function getDecisionById(tenantId: string, decisionId: string) {
       ...decisionOut,
       source_received_at: sourceReceivedAt,
       thread_context: await buildThreadContext(
+        sql,
         tenantId,
         row.origin_raw_event_id,
         sourceRows.map((sr) => sr.raw_event_id).filter(Boolean),

@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react'
 import { getSupabaseClient } from '../lib/supabase'
-import { ApiError, searchDecisions, type SearchResponse } from '../lib/api'
+import { ApiError, getDecision, searchDecisions, type SearchResponse } from '../lib/api'
 import { DEMO_EMAIL_KEY } from '../lib/sessionKeys'
+import { decisionToMemoryRecord } from '../lib/memoryRecord'
+import { MemoryRecordDetail, type MemoryRecord } from './MemoryRecordDetail'
 
 /**
  * Fire-and-forget: logs a completed search to search_history via the
@@ -45,6 +47,51 @@ function timeOfDayGreeting(hour = new Date().getHours()) {
   if (hour < 12) return 'Good morning'
   if (hour < 18) return 'Good afternoon'
   return 'Good evening'
+}
+
+/**
+ * One citation in a search answer, expandable into the same full context
+ * (source, exact time, conversation thread) the decision log shows - a
+ * search result shouldn't be a dead end, the reasoning behind it should be
+ * one click away, not a separate trip to Memory Explorer.
+ */
+function CitationRow({ decisionNumber, decisionId, decisionStatement }: {
+  decisionNumber: number
+  decisionId: string
+  decisionStatement: string
+}) {
+  const [isExpanded, setIsExpanded] = useState(false)
+  const [record, setRecord] = useState<MemoryRecord | null>(null)
+  const [loadError, setLoadError] = useState('')
+
+  const toggle = () => {
+    const next = !isExpanded
+    setIsExpanded(next)
+    if (next && !record && !loadError) {
+      getDecision(decisionId)
+        .then((detail) => setRecord(decisionToMemoryRecord(detail)))
+        .catch(() => setLoadError('Unable to load this decision.'))
+    }
+  }
+
+  return (
+    <li className="text-[13px] text-[#6B7280]">
+      <button type="button" onClick={toggle} className="text-left hover:text-[#374151]">
+        <span className="font-semibold text-[#5A45FF]">[{decisionNumber}]</span> {decisionStatement}
+      </button>
+      {isExpanded ? (
+        <div className="mt-2 rounded-lg border border-[#E8E8ED] bg-[#FAFAFB] p-3">
+          {loadError ? (
+            <span className="text-[#9CA3AF]">{loadError}</span>
+          ) : record ? (
+            <MemoryRecordDetail record={record} compactHeader />
+          ) : (
+            <span className="text-[#9CA3AF]">Loading…</span>
+          )}
+        </div>
+      ) : null}
+    </li>
+  )
 }
 
 export function DashboardSearch() {
@@ -175,12 +222,12 @@ export function DashboardSearch() {
           {result.citations.length > 0 ? (
             <ul className="mt-4 flex flex-col gap-2 border-t border-[#F0F0F4] pt-4">
               {result.citations.map((citation) => (
-                <li key={citation.decision_id} className="text-[13px] text-[#6B7280]">
-                  <span className="font-semibold text-[#5A45FF]">
-                    [{citation.decision_number}]
-                  </span>{' '}
-                  {citation.decision_statement}
-                </li>
+                <CitationRow
+                  key={citation.decision_id}
+                  decisionNumber={citation.decision_number}
+                  decisionId={citation.decision_id}
+                  decisionStatement={citation.decision_statement}
+                />
               ))}
             </ul>
           ) : null}
