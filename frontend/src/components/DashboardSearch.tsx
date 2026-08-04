@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { getSupabaseClient } from '../lib/supabase'
-import { ApiError, getDecision, searchDecisions, type SearchResponse } from '../lib/api'
+import { ApiError, getDecision, listDecisions, searchDecisions, type SearchResponse } from '../lib/api'
 import { DEMO_EMAIL_KEY } from '../lib/sessionKeys'
 import { decisionToMemoryRecord } from '../lib/memoryRecord'
 import { MemoryRecordDetail, type MemoryRecord } from './MemoryRecordDetail'
@@ -22,10 +22,14 @@ function recordSearchHistory(query: string, resultCount: number) {
     })
 }
 
-const SUGGESTIONS = [
-  'What does our org already know about the Q3 timeline?',
-  'What context do we have on the onboarding flow?',
-]
+/** Turns a real decision statement into a natural suggested question, e.g.
+ * "Adopt PostgreSQL for the context layer" -> "What do we know about
+ * adopt postgresql for the context layer?". Truncated so a long statement
+ * doesn't blow out the chip. */
+function toSuggestion(statement: string): string {
+  const trimmed = statement.length > 60 ? `${statement.slice(0, 60).trim()}…` : statement
+  return `What do we know about ${trimmed.replace(/[.?!]+$/, '').toLowerCase()}?`
+}
 
 type RecentSearch = { query: string; at: number }
 
@@ -101,6 +105,7 @@ export function DashboardSearch() {
   const [result, setResult] = useState<SearchResponse | null>(null)
   const [error, setError] = useState('')
   const [recentSearches, setRecentSearches] = useState<RecentSearch[]>([])
+  const [suggestions, setSuggestions] = useState<string[]>([])
 
   useEffect(() => {
     const demoEmail = sessionStorage.getItem(DEMO_EMAIL_KEY)
@@ -118,6 +123,20 @@ export function DashboardSearch() {
         null
       setGreetingName(firstName(user?.email, displayName))
     })
+  }, [])
+
+  // Suggestion chips reflect this tenant's own real decisions, not fixed
+  // demo examples - a tenant with no captures yet just sees none, rather
+  // than examples that imply data that isn't there.
+  useEffect(() => {
+    if (sessionStorage.getItem(DEMO_EMAIL_KEY)) return
+    listDecisions(3, 0)
+      .then((response) => {
+        setSuggestions(response.items.map((item) => toSuggestion(item.decision_statement)))
+      })
+      .catch(() => {
+        // No suggestions is a fine fallback - the search bar works without them.
+      })
   }, [])
 
   const runSearch = async (submittedQuestion: string) => {
@@ -192,21 +211,23 @@ export function DashboardSearch() {
         </div>
       </form>
 
-      <div className="mb-7 flex flex-wrap gap-2.5">
-        {SUGGESTIONS.map((text, i) => (
-          <button
-            key={`${text}-${i}`}
-            type="button"
-            onClick={() => {
-              setQuestion(text)
-              void runSearch(text)
-            }}
-            className="rounded-full border border-[#E5E7EB] bg-white px-4 py-2 text-[13px] font-medium text-[#374151] transition-colors hover:bg-[#F9FAFB]"
-          >
-            {text}
-          </button>
-        ))}
-      </div>
+      {suggestions.length > 0 ? (
+        <div className="mb-7 flex flex-wrap gap-2.5">
+          {suggestions.map((text, i) => (
+            <button
+              key={`${text}-${i}`}
+              type="button"
+              onClick={() => {
+                setQuestion(text)
+                void runSearch(text)
+              }}
+              className="rounded-full border border-[#E5E7EB] bg-white px-4 py-2 text-[13px] font-medium text-[#374151] transition-colors hover:bg-[#F9FAFB]"
+            >
+              {text}
+            </button>
+          ))}
+        </div>
+      ) : null}
 
       {error ? (
         <div className="mb-6 rounded-xl border border-[#F3D6D6] bg-[#FFF7F7] px-4 py-3 text-[14px] text-[#B4232C]">
