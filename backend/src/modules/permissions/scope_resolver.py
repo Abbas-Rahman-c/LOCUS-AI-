@@ -27,19 +27,53 @@ async def resolve_permission_scopes(ctx: TenantContext) -> list[str]:
     """Return the caller's authorized permission_scopes, derived only from
     the authenticated TenantContext - never from request input.
 
-    Currently: the caller's own auth email address, if resolvable, so
-    decisions scoped to their own connected account (e.g. their Gmail
-    address, which is exactly what gmail-manual-sync sets as
-    permission_scope) become visible to them. Everything else - decisions
-    with an empty scope (workspace-wide) - is already visible regardless,
-    via is_decision_accessible()'s existing empty-scope-is-public rule.
+    Two sources, both scoped to identifiers the caller can be shown to
+    have a legitimate claim on:
+
+    1. The caller's own auth email address, if resolvable - decisions
+       scoped to their own connected account become visible to them.
+    2. Every ACTIVE Gmail source_connections row within the caller's OWN
+       tenant (ctx.tenant_id - already authenticated, never request
+       input). source_connections has no per-connecting-user ownership
+       column today (it's tenant-scoped only, not user-scoped), so this
+       cannot verify "this specific teammate connected this specific
+       inbox" - only "this Gmail account is connected within a tenant I
+       am already a verified member of". That is exactly the granularity
+       Slack/Notion decisions already get via is_decision_accessible()'s
+       _is_unmapped_scope fallback (workspace-wide visibility for any
+       tenant member, since no finer per-channel/per-page ACL exists
+       either) - this brings Gmail in line with that existing model
+       rather than introducing new exposure. It never crosses a tenant
+       boundary: the explicit tenant_id predicate below is the only
+       enforcement here (this query runs on the RLS-bypassing admin pool,
+       same as the auth.users lookup already did), so ctx.tenant_id being
+       server-derived and authenticated is what keeps this safe - it is
+       never accepted from request input.
+
+    Everything else - decisions with an empty scope (workspace-wide) - is
+    already visible regardless, via is_decision_accessible()'s existing
+    empty-scope-is-public rule.
     """
     from database.pool import get_admin_db_pool
+
+    tenant_uuid = uuid.UUID(str(ctx.tenant_id))
 
     async with get_admin_db_pool().acquire() as conn:
         email = await conn.fetchval(
             "SELECT email FROM auth.users WHERE id = $1",
             uuid.UUID(ctx.user_id),
         )
+        gmail_rows = await conn.fetch(
+            """
+            SELECT external_workspace_id
+            FROM public.source_connections
+            WHERE tenant_id = $1 AND source = 'gmail' AND status = 'active'
+              AND external_workspace_id IS NOT NULL
+            """,
+            tenant_uuid,
+        )
 
-    return [email] if email else []
+    scopes = {row["external_workspace_id"] for row in gmail_rows}
+    if email:
+        scopes.add(email)
+    return list(scopes)

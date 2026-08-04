@@ -124,12 +124,30 @@ async function getCurrentTenant(req: Request): Promise<TenantContext> {
   return await verifyTenantJwt(match[1]);
 }
 
-async function resolvePermissionScopes(userId: string): Promise<string[]> {
-  const email = await withAdmin(async (sql) => {
-    const rows = await sql`SELECT email FROM auth.users WHERE id = ${userId}`;
-    return rows[0]?.email ?? null;
+// Mirrors modules.permissions.scope_resolver.resolve_permission_scopes():
+// the caller's own auth email, plus every ACTIVE Gmail source_connections
+// row within the caller's OWN tenant (tenantId - already authenticated,
+// never request input). No per-connecting-user ownership column exists on
+// source_connections today, so this only proves "connected within a
+// tenant I'm a verified member of", not "I personally connected this
+// inbox" - the same granularity Slack/Notion already get via
+// isUnmappedScope's workspace-wide fallback, not a new exposure.
+async function resolvePermissionScopes(userId: string, tenantId: string): Promise<string[]> {
+  return await withAdmin(async (sql) => {
+    const [userRows, gmailRows] = await Promise.all([
+      sql`SELECT email FROM auth.users WHERE id = ${userId}`,
+      sql`
+        SELECT external_workspace_id FROM public.source_connections
+        WHERE tenant_id = ${tenantId} AND source = 'gmail' AND status = 'active'
+          AND external_workspace_id IS NOT NULL
+      `,
+    ]);
+    const scopes = new Set<string>();
+    const email = userRows[0]?.email;
+    if (email) scopes.add(email as string);
+    for (const row of gmailRows) scopes.add(row.external_workspace_id as string);
+    return Array.from(scopes);
   });
-  return email ? [email] : [];
 }
 
 // ── Handler: POST /auth/session ────────────────────────────────────────
@@ -692,7 +710,7 @@ async function handleSearch(req: Request): Promise<Response> {
   const requestedTopK = Math.min(Math.max(body.top_k ?? DEFAULT_TOP_K, 1), MAX_TOP_K);
 
   try {
-    const permissionScopes = await resolvePermissionScopes(ctx.userId);
+    const permissionScopes = await resolvePermissionScopes(ctx.userId, ctx.tenantId);
     const analysis = await analyzeQuery(question);
 
     let effectiveTopK = Math.max(requestedTopK, RERANK_MIN_TOP_K);
@@ -869,7 +887,7 @@ async function handleDigest(req: Request, url: URL): Promise<Response> {
   if (scope !== "personal" && scope !== "team") return errorResponse(422, "scope must be 'personal' or 'team'");
 
   try {
-    const permissionScopes = await resolvePermissionScopes(ctx.userId);
+    const permissionScopes = await resolvePermissionScopes(ctx.userId, ctx.tenantId);
     const weekOf = digestWeekOf();
     const userId = scope === "personal" ? ctx.userId : null;
 

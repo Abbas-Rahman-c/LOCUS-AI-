@@ -51,8 +51,9 @@ Deno.serve(async (req: Request) => {
   if (url.pathname.endsWith("/callback")) {
     let tenantId: string;
     let redirectOrigin: string;
+    let syncMode: "full" | "new";
     try {
-      ({ tenantId, redirectOrigin } = parseTenantState(url.searchParams.get("state")));
+      ({ tenantId, redirectOrigin, syncMode } = parseTenantState(url.searchParams.get("state")));
     } catch (err) {
       return authorizeErrorResponse(SOURCE, err, resolveRedirectOrigin(url));
     }
@@ -106,12 +107,21 @@ Deno.serve(async (req: Request) => {
 
       // 3. Store the connection under tenant GUC (locus_app / APP_DATABASE_URL).
       // Token stored as plain text for now to unblock testing.
+      //
+      // syncMode "new" (see _shared/oauth_tenant.ts's SyncMode docstring)
+      // means "only pick up content from the moment of (re)connecting
+      // onward" - gmail-manual-sync's syncOneSource() treats a null
+      // last_synced_at as "never synced, run the historical backfill", so
+      // seeding it to now() here is what actually skips the backfill for
+      // this mode. "full" (default) leaves it null, which is exactly the
+      // existing/default backfill-on-first-sync behavior.
+      const initialLastSyncedAt = syncMode === "new" ? new Date().toISOString() : null;
       try {
         await withTenant(tenantId, async (sql) => {
           await sql`
             insert into public.source_connections (
               tenant_id, source, external_workspace_id, oauth_token_ref,
-              ingestion_mode, status, cursor_state
+              ingestion_mode, status, cursor_state, last_synced_at
             ) values (
               ${tenantId}::uuid,
               'gmail',
@@ -122,14 +132,16 @@ Deno.serve(async (req: Request) => {
               ${sql.json({
                 history_id: null,
                 refresh_token: tokenData.refresh_token ?? null,
-              })}::jsonb
+              })}::jsonb,
+              ${initialLastSyncedAt}
             )
             on conflict (tenant_id, source, external_workspace_id)
             do update set
               oauth_token_ref = excluded.oauth_token_ref,
               status = 'active',
               cursor_state = excluded.cursor_state,
-              ingestion_mode = excluded.ingestion_mode
+              ingestion_mode = excluded.ingestion_mode,
+              last_synced_at = excluded.last_synced_at
           `;
         });
       } catch (err) {
