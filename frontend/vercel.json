@@ -1,11 +1,3 @@
 {
-  "redirects": [
-    {
-      "source": "/:path*",
-      "has": [{ "type": "host", "value": "www.locusaiapp.com" }],
-      "destination": "https://locusaiapp.com/:path*",
-      "permanent": true
-    }
-  ],
   "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
 }
