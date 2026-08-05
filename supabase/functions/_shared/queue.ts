@@ -29,6 +29,15 @@ export interface IngestionEnvelope {
   // table row for `actor` so participants show a real name instead of a
   // raw email/id - see ai-worker's handleIngestionMessageInner.
   actor_display_name?: string;
+  // The source_connections row this event actually came from. When a
+  // tenant has more than one connection for the same source (e.g. several
+  // Gmail accounts), ai-worker previously had no way to know which one and
+  // fell back to guessing "the oldest active connection for this
+  // tenant+source" - which silently merged every connection's mail into
+  // whichever was connected first. Set this when the connector already
+  // knows its own source_connections.id (gmail-manual-sync does) so
+  // ai-worker can attribute raw_events correctly instead of guessing.
+  connection_id?: string;
 }
 
 export async function enqueueEvent(envelope: IngestionEnvelope) {

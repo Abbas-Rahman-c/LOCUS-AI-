@@ -359,6 +359,7 @@ async function handleIngestionMessageInner(msg: PgmqMsg): Promise<string> {
     tenant_id: string; source: string; source_id: string; actor: string;
     thread_ref?: string | null; permission_scope: string[]; raw_content: unknown;
     source_permalink?: string | null; received_at: string; actor_display_name?: string;
+    connection_id?: string;
   };
   const tenantId = payload.tenant_id;
 
@@ -385,12 +386,26 @@ async function handleIngestionMessageInner(msg: PgmqMsg): Promise<string> {
   const metadata = JSON.stringify({ ingested_via: "ai-worker-deno", encrypted: true });
 
   const rawEventId = await withTenant(tenantId, async (sql) => {
-    const connRows = await sql`
+    // Prefer the connection the connector actually knows it came from
+    // (payload.connection_id) over guessing. A tenant with several
+    // connections for the same source (e.g. multiple Gmail accounts) used
+    // to have every single one's mail silently merged into whichever
+    // connection happened to be connected first, since "oldest active
+    // connection for this tenant+source" was the only signal available.
+    // Still re-verified against tenant/status here rather than trusted
+    // blindly, in case it was disconnected between enqueue and processing.
+    const connRows = payload.connection_id
+      ? await sql`
+        SELECT id FROM public.source_connections
+        WHERE id = ${payload.connection_id} AND tenant_id = ${tenantId} AND status = 'active'
+      `
+      : [];
+    const fallbackRows = connRows.length > 0 ? connRows : await sql`
       SELECT id FROM public.source_connections
       WHERE tenant_id = ${tenantId} AND source = ${payload.source} AND status = 'active'
       ORDER BY created_at ASC LIMIT 1
     `;
-    if (connRows.length === 0) {
+    if (fallbackRows.length === 0) {
       // Non-retryable: this tenant no longer has an active connection for
       // this source (they disconnected it after this message was already
       // queued). It will never become active again on its own, so retrying
@@ -400,7 +415,7 @@ async function handleIngestionMessageInner(msg: PgmqMsg): Promise<string> {
         `No active source_connections row for tenant=${tenantId} source=${payload.source}`,
       );
     }
-    const connectionId = connRows[0].id;
+    const connectionId = fallbackRows[0].id;
 
     const inserted = await sql`
       INSERT INTO public.raw_events (

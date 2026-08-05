@@ -72,26 +72,17 @@ async function refreshAccessToken(source: any): Promise<string | null> {
   return newAccessToken;
 }
 
-// Backfill has no date lower-bound anymore - "full history" used to mean
-// "the last 30 days", which silently threw away everything older the
-// moment the first sync completed (last_synced_at gets set, isFirstSync
-// goes false forever, that 30-day wall never gets revisited). Instead each
-// 5-minute cron run pages BACKFILL_MAX_MESSAGES further back via Gmail's
-// own nextPageToken (resumed from cursor_state.backfill_page_token) until
-// Gmail reports no more history or BACKFILL_TOTAL_MAX_MESSAGES is hit -
-// only then does it flip to incremental mode. A single invocation still
-// only touches one page, so per-run cost is unchanged; it just no longer
-// gives up after page one. All overridable via Supabase secrets.
-// Kept small - removing the 30-day date bound means every one of a tenant's
-// gmail connections can now have a much bigger mailbox to page through, and
-// with SYNC_CONCURRENCY connections doing that in the SAME invocation, a
-// per-source cap of 200 was enough to blow the edge function's compute
-// budget outright (observed live: WORKER_RESOURCE_LIMIT, invocation killed
-// before any source got to persist its progress - worse than the old
-// 30-day wall, since nothing was saved at all). 20/run still finishes a
-// realistic mailbox in well under an hour of 5-minute cron ticks.
-const BACKFILL_MAX_MESSAGES = Number(Deno.env.get("GMAIL_BACKFILL_MAX_MESSAGES") ?? "20");
-const BACKFILL_TOTAL_MAX_MESSAGES = Number(Deno.env.get("GMAIL_BACKFILL_TOTAL_MAX_MESSAGES") ?? "5000");
+// Backfill is bounded to the 30 days before the connection was actually
+// made (source.created_at, not "now" at sync time) - unbounded full-history
+// backfill was tried and reverted: every previously-unseen old message costs
+// a real Claude API call (triage, sometimes extraction) in ai-worker, and
+// paging through months of a mailbox burned through tokens far faster than
+// intended for what's still an early/testing deployment. 30 days from
+// connect time is a fixed, deterministic window - no resumable "how far
+// back have we gotten" cursor needed, just re-list the same bounded window
+// each run until nothing new comes back, then flip to incremental.
+const BACKFILL_LOOKBACK_DAYS = Number(Deno.env.get("GMAIL_BACKFILL_LOOKBACK_DAYS") ?? "30");
+const BACKFILL_MAX_MESSAGES = Number(Deno.env.get("GMAIL_BACKFILL_MAX_MESSAGES") ?? "50");
 const INCREMENTAL_MAX_MESSAGES = Number(Deno.env.get("GMAIL_INCREMENTAL_MAX_MESSAGES") ?? "50");
 const LIST_PAGE_SIZE = 100; // Gmail's messages.list allows up to 500; 100 keeps each page fetch quick under fetchWithTimeout.
 
@@ -170,6 +161,58 @@ async function listGmailMessagesPage(
   return { ids: data.messages ?? [], nextPageToken: data.nextPageToken };
 }
 
+// Gmail nests multipart/mixed > multipart/alternative > leaf parts, sometimes
+// several levels deep. The old extraction only ever looked at the top-level
+// payload.body.data (used unconditionally regardless of mimeType - a
+// single-part HTML-only message, common for newsletters with no plain-text
+// alternative, dumped raw <!DOCTYPE>/<meta>/CSS straight into the stored
+// body) or a one-level-deep search for a text/plain part (missing anything
+// nested, and never falling back to text/html at all). This walks the whole
+// tree and prefers text/plain, falling back to text/html.
+type GmailMimePart = { mimeType?: string; body?: { data?: string }; parts?: GmailMimePart[] };
+
+function findGmailBodyPart(node: GmailMimePart | undefined): { mimeType: string; data: string } | null {
+  if (!node) return null;
+  if (node.body?.data && (!node.parts || node.parts.length === 0)) {
+    return { mimeType: node.mimeType ?? "", data: node.body.data };
+  }
+  if (node.parts) {
+    let htmlFallback: { mimeType: string; data: string } | null = null;
+    for (const part of node.parts) {
+      const found = findGmailBodyPart(part);
+      if (!found) continue;
+      if (found.mimeType === "text/plain") return found;
+      if (found.mimeType === "text/html" && !htmlFallback) htmlFallback = found;
+    }
+    return htmlFallback;
+  }
+  return null;
+}
+
+function decodeGmailBase64(data: string): string {
+  return atob(data.replace(/-/g, "+").replace(/_/g, "/"));
+}
+
+// Lightweight tag-stripping, not a real HTML parser - good enough to turn a
+// newsletter's markup into readable text without pulling in a DOM dependency
+// inside a Deno edge function.
+function htmlToPlainText(html: string): string {
+  return html
+    .replace(/<(script|style)[^>]*>[\s\S]*?<\/\1>/gi, " ")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/(p|div|tr|li|h[1-6])>/gi, "\n")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, "\"")
+    .replace(/&#39;/gi, "'")
+    .replace(/[ \t]+/g, " ")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
 // Lowered alongside BACKFILL_MAX_MESSAGES for the same reason - fewer
 // sources doing full-history paging in parallel within one invocation.
 const SYNC_CONCURRENCY = 2;
@@ -223,62 +266,35 @@ Deno.serve(async (_req) => {
       // last_synced_at is set only once a source's backfill has fully
       // finished (see the update at the end of this function) - null here
       // means backfill is still in progress (or hasn't started), so this
-      // run continues paging further back through history rather than
-      // switching to incremental catch-up.
+      // run continues paging through the bounded backfill window rather
+      // than switching to incremental catch-up.
       const cursorState = (source.cursor_state ?? {}) as Record<string, unknown>;
       const backfilling = !source.last_synced_at;
-      const backfillTotalSoFar = Number(cursorState.backfill_total_synced ?? 0);
 
       let messages: { id: string }[];
       let query: string;
       let nextBackfillPageToken: string | undefined;
 
       if (backfilling) {
-        // Gmail lists newest-first with no date bound. This connection was
-        // already kept current by incremental sync before backfill even
-        // started, so page 1 onward is entirely mail already ingested -
-        // paging from the top would spend potentially hundreds of pages
-        // re-listing (and duplicate-skipping) known mail before ever
-        // reaching anything actually new. Instead, jump straight past it:
-        // anchor the very first backfill page to `before:` the oldest
-        // message already stored for THIS connection, so every page from
-        // page 1 onward is unseen history. Stored in cursor_state once so
-        // resumed pages (which must reuse the same query as their
-        // pageToken) don't recompute a moving target as new mail arrives.
-        if (typeof cursorState.backfill_query === "string") {
-          query = cursorState.backfill_query;
-        } else {
-          const earliestKnown = await withTenant(String(source.tenant_id), async (sql) => {
-            const rows = await sql`
-              SELECT min(received_at) AS earliest FROM public.raw_events
-              WHERE tenant_id = ${source.tenant_id} AND connection_id = ${source.id}
-            `;
-            return rows[0]?.earliest as string | null;
-          });
-          query = earliestKnown ? `before:${formatGmailAfterDate(new Date(earliestKnown))}` : "";
-          await withTenant(String(source.tenant_id), async (sql) => {
-            await sql`
-              update public.source_connections
-              set cursor_state = cursor_state || ${sql.json({ backfill_query: query })}::jsonb
-              where id = ${source.id}
-            `;
-          });
-        }
-
-        const remainingBudget = Math.max(0, BACKFILL_TOTAL_MAX_MESSAGES - backfillTotalSoFar);
-        const pageSize = Math.min(BACKFILL_MAX_MESSAGES, remainingBudget);
-        const page = pageSize > 0
-          ? await listGmailMessagesPage(
-            accessToken,
-            query,
-            cursorState.backfill_page_token as string | undefined,
-            pageSize,
-          )
-          : { ids: [], nextPageToken: undefined };
+        // Fixed window anchored to when this connection was actually made,
+        // not "now" - a connection that's sat idle for two weeks still only
+        // backfills the 30 days before it was connected, not 30 days before
+        // today. Deterministic from source.created_at, so no cursor_state
+        // lookup is needed to know the query - only the pageToken (if this
+        // connection's window has more than BACKFILL_MAX_MESSAGES in it)
+        // needs to persist across runs.
+        const cutoff = new Date(
+          new Date(source.created_at).getTime() - BACKFILL_LOOKBACK_DAYS * 24 * 60 * 60 * 1000,
+        );
+        query = `after:${formatGmailAfterDate(cutoff)}`;
+        const page = await listGmailMessagesPage(
+          accessToken,
+          query,
+          cursorState.backfill_page_token as string | undefined,
+          BACKFILL_MAX_MESSAGES,
+        );
         messages = page.ids;
-        // Stop paginating once the safety ceiling is hit even if Gmail has
-        // more - remainingBudget is already 0 next run either way.
-        nextBackfillPageToken = remainingBudget > 0 ? page.nextPageToken : undefined;
+        nextBackfillPageToken = page.nextPageToken;
       } else {
         query = `after:${formatGmailAfterDate(new Date(source.last_synced_at))}`;
         messages = await listGmailMessageIds(accessToken, query, INCREMENTAL_MAX_MESSAGES);
@@ -311,16 +327,10 @@ Deno.serve(async (_req) => {
 
         let body = "";
         const payload = rawMsg.payload || {};
-        if (payload.body?.data) {
-          body = atob(payload.body.data.replace(/-/g, "+").replace(/_/g, "/"));
-        } else if (payload.parts) {
-          const textPart = payload.parts.find(
-            (p: { mimeType?: string; body?: { data?: string } }) =>
-              p.mimeType === "text/plain" && p.body?.data,
-          );
-          if (textPart) {
-            body = atob(textPart.body.data.replace(/-/g, "+").replace(/_/g, "/"));
-          }
+        const bodyPart = findGmailBodyPart(payload);
+        if (bodyPart) {
+          const decoded = decodeGmailBase64(bodyPart.data);
+          body = bodyPart.mimeType === "text/html" ? htmlToPlainText(decoded) : decoded;
         }
         if (!body) body = rawMsg.snippet || "";
 
@@ -348,6 +358,7 @@ Deno.serve(async (_req) => {
 
         const envelope: IngestionEnvelope = {
           tenant_id: source.tenant_id,
+          connection_id: source.id,
           source: "gmail",
           source_id: rawMsg.id,
           actor: actor || "unknown",
@@ -373,27 +384,24 @@ Deno.serve(async (_req) => {
       }
 
       if (backfilling) {
-        const totalSynced = backfillTotalSoFar + syncedCount;
         if (nextBackfillPageToken) {
-          // More history remains (or the safety ceiling isn't hit yet) -
-          // stay in backfill mode, save the resume point for the next cron
-          // run. last_synced_at stays null on purpose.
+          // More messages remain within the 30-day window - stay in
+          // backfill mode, save the resume point for the next cron run.
+          // last_synced_at stays null on purpose.
           await withTenant(String(source.tenant_id), async (sql) => {
             await sql`
               update public.source_connections
-              set cursor_state = cursor_state || ${
-              sql.json({ backfill_page_token: nextBackfillPageToken, backfill_total_synced: totalSynced })
-            }::jsonb
+              set cursor_state = cursor_state || ${sql.json({ backfill_page_token: nextBackfillPageToken })}::jsonb
               where id = ${source.id}
             `;
           });
         } else {
-          // Reached the true bottom of the mailbox, or hit the safety
-          // ceiling - backfill is done, switch to incremental going forward.
+          // Reached the end of the 30-day window - backfill is done,
+          // switch to incremental going forward.
           await withTenant(String(source.tenant_id), async (sql) => {
             await sql`
               update public.source_connections
-              set cursor_state = cursor_state || ${sql.json({ backfill_total_synced: totalSynced })}::jsonb,
+              set cursor_state = cursor_state - 'backfill_page_token',
                   last_synced_at = ${syncStartedAt.toISOString()}
               where id = ${source.id}
             `;
