@@ -38,6 +38,10 @@ export interface IngestionEnvelope {
   // knows its own source_connections.id (gmail-manual-sync does) so
   // ai-worker can attribute raw_events correctly instead of guessing.
   connection_id?: string;
+  // Set when the connector can cheaply tell this is bulk/marketing mail
+  // (e.g. Gmail's List-Unsubscribe header) before any AI call. ai-worker
+  // skips triage+extraction entirely for these - $0 cost, not a discount.
+  likely_bulk_mail?: boolean;
 }
 
 export async function enqueueEvent(envelope: IngestionEnvelope) {

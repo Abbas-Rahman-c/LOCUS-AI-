@@ -356,6 +356,18 @@ Deno.serve(async (_req) => {
           ? new Date(internalDateMs).toISOString()
           : new Date().toISOString();
 
+        // List-Unsubscribe (RFC 2369/8058) is the header every compliant
+        // bulk/marketing mailer includes - real personal or work
+        // correspondence essentially never carries it, so its presence is a
+        // safe, conservative signal that this is a newsletter/digest/
+        // automated notice. Skipping the Claude call entirely for these
+        // (see ai-worker's handleIngestionMessageInner) costs nothing and
+        // avoids triage spend on content that was always going to be
+        // discarded anyway - this is what the Charger Bands newsletter
+        // false-positive decision should have hit before it ever reached
+        // the model.
+        const likelyBulkMail = Boolean(getHeader("List-Unsubscribe"));
+
         const envelope: IngestionEnvelope = {
           tenant_id: source.tenant_id,
           connection_id: source.id,
@@ -365,6 +377,7 @@ Deno.serve(async (_req) => {
           actor_display_name: actorDisplayName,
           thread_ref: rawMsg.threadId,
           permission_scope: source.external_workspace_id ? [String(source.external_workspace_id)] : [],
+          likely_bulk_mail: likelyBulkMail,
           raw_content: {
             subject: getHeader("Subject"),
             body,

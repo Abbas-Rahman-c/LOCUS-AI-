@@ -25,7 +25,9 @@ const corsHeaders = { "Access-Control-Allow-Origin": "*" };
 // ── Config ──────────────────────────────────────────────────────────────
 
 const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY") ?? "";
-const TRIAGE_MODEL = Deno.env.get("ANTHROPIC_TRIAGE_MODEL") ?? "claude-haiku-4-5-20251001";
+// One model for the merged triage+extraction call now that it's a single
+// request; kept as ANTHROPIC_EXTRACT_MODEL rather than introducing a new
+// env var name, so existing Supabase secrets don't need to change.
 const EXTRACT_MODEL = Deno.env.get("ANTHROPIC_EXTRACT_MODEL") ?? "claude-haiku-4-5-20251001";
 const VOYAGE_API_KEY = Deno.env.get("VOYAGE_API_KEY") ?? "";
 const VOYAGE_MODEL = Deno.env.get("VOYAGE_EMBED_MODEL") ?? "voyage-4-large";
@@ -95,6 +97,15 @@ async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: numbe
 
 // ── Anthropic (forced tool-use, matches modules.ai.triage/extraction) ────
 
+const CLAUDE_MAX_RETRIES = 3;
+
+// cacheable=true marks the system prompt with cache_control so Anthropic
+// reuses it across invocations instead of re-billing the full static
+// instructions every single call - this is the biggest win for a pipeline
+// that sends the same system prompt thousands of times a day. Only worth
+// setting on prompts long enough to actually clear the model's minimum
+// cacheable prefix (see TRIAGE_EXTRACTION_SYSTEM_PROMPT's comment) - below
+// that floor cache_control is silently a no-op, not an error.
 async function callClaude(
   system: string,
   userMessage: string,
@@ -103,38 +114,109 @@ async function callClaude(
   maxTokens: number,
   model: string,
   timeoutMs: number,
+  cacheable = false,
 ): Promise<Record<string, unknown>> {
-  const resp = await fetchWithTimeout("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: {
-      "x-api-key": ANTHROPIC_API_KEY,
-      "anthropic-version": "2023-06-01",
-      "content-type": "application/json",
-    },
-    body: JSON.stringify({
-      model,
-      max_tokens: maxTokens,
-      temperature: 0,
-      system,
-      messages: [{ role: "user", content: userMessage }],
-      tools: [tool],
-      tool_choice: { type: "tool", name: toolName },
-    }),
-  }, timeoutMs);
-  if (!resp.ok) {
-    throw new Error(`Anthropic API error ${resp.status}: ${await resp.text()}`);
+  const systemParam = cacheable
+    ? [{ type: "text", text: system, cache_control: { type: "ephemeral" } }]
+    : system;
+
+  let lastErr: Error | null = null;
+  for (let attempt = 0; attempt <= CLAUDE_MAX_RETRIES; attempt++) {
+    let resp: Response;
+    try {
+      resp = await fetchWithTimeout("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "x-api-key": ANTHROPIC_API_KEY,
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          model,
+          max_tokens: maxTokens,
+          temperature: 0,
+          system: systemParam,
+          messages: [{ role: "user", content: userMessage }],
+          tools: [tool],
+          tool_choice: { type: "tool", name: toolName },
+        }),
+      }, timeoutMs);
+    } catch (err) {
+      // Network-level failure (timeout, connection reset) - retryable, same
+      // backoff as a 429/5xx.
+      lastErr = err instanceof Error ? err : new Error(String(err));
+      if (attempt === CLAUDE_MAX_RETRIES) throw lastErr;
+      await sleep(backoffMs(attempt));
+      continue;
+    }
+
+    if (resp.ok) {
+      const data = await resp.json();
+      const block = (data.content ?? []).find((b: { type?: string }) => b.type === "tool_use");
+      if (!block) throw new Error(`Claude did not return a tool_use block for ${toolName}`);
+      return block.input as Record<string, unknown>;
+    }
+
+    const bodyText = await resp.text();
+    // Only 429 (rate limit) and 5xx (server-side, including 529 overloaded)
+    // are transient - retrying a 400 (bad request, or the account's credit
+    // balance being empty) just burns another failed call for nothing, so
+    // those fail immediately instead of retrying blind.
+    const retryable = resp.status === 429 || resp.status >= 500;
+    lastErr = new Error(`Anthropic API error ${resp.status}: ${bodyText}`);
+    if (!retryable || attempt === CLAUDE_MAX_RETRIES) throw lastErr;
+
+    const retryAfterHeader = resp.headers.get("retry-after");
+    const retryAfterMs = retryAfterHeader ? Number(retryAfterHeader) * 1000 : null;
+    await sleep(retryAfterMs && Number.isFinite(retryAfterMs) ? retryAfterMs : backoffMs(attempt));
   }
-  const data = await resp.json();
-  const block = (data.content ?? []).find((b: { type?: string }) => b.type === "tool_use");
-  if (!block) throw new Error(`Claude did not return a tool_use block for ${toolName}`);
-  return block.input as Record<string, unknown>;
+  // Unreachable (the loop always returns or throws), but keeps TS satisfied.
+  throw lastErr ?? new Error(`Anthropic API call failed for ${toolName}`);
 }
 
-const TRIAGE_SYSTEM_PROMPT = `You are the triage stage of Locus AI, a decision-intelligence system that extracts durable decisions, action items, and blockers from day-to-day workplace communication (Slack, Gmail, Notion).
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
-Your only job is to classify ONE event as KEEP, UNCERTAIN, or DISCARD, using only the text of that event below. Do not infer facts, participants, prior messages, or outcomes that are not stated in the event itself - you have no access to surrounding conversation or any other context.
+// Exponential backoff with jitter: 500ms, 1000ms, 2000ms (+/- up to 25%) -
+// bounded well under pgmq's 60s visibility timeout so a retried message
+// still finishes (or genuinely fails) before another invocation could pick
+// the same message up again.
+function backoffMs(attempt: number): number {
+  const base = 500 * Math.pow(2, attempt);
+  const jitter = base * 0.25 * (Math.random() * 2 - 1);
+  return Math.round(base + jitter);
+}
 
-Decision rules:
+// Combined triage+extraction: one call instead of two. The old design sent
+// the same raw event text to Claude twice (once to classify KEEP/UNCERTAIN/
+// DISCARD, a second time - only if not discarded - to extract the record),
+// paying for the full content twice and paying for two round trips even
+// though extraction only ever runs against content triage already read.
+// Merged: one system prompt, one tool call. For DISCARD, only the triage
+// fields are filled; extraction fields are omitted. For KEEP/UNCERTAIN, both
+// are filled in the same response. This alone roughly halves cost on every
+// message that would have gone to extraction, and removes a full API round
+// trip's latency from the common path.
+//
+// Deliberately long, with real few-shot examples covering the edge cases
+// that matter most (newsletters, automated notifications, tentative
+// proposals, multi-actor decisions, corrections/supersessions) - this is
+// not padding for its own sake. Anthropic will not cache a system prompt
+// below the model's minimum cacheable prefix; for Haiku 4.5 specifically
+// that minimum is 4096 tokens, not the 1024-token figure that applies to
+// Sonnet-tier models. A short prompt would simply never cache - no error,
+// cache_creation_input_tokens just stays 0 forever - so this is sized to
+// genuinely clear that floor while the examples do real work disambiguating
+// exactly the cases this pipeline has gotten wrong before.
+const TRIAGE_EXTRACTION_SYSTEM_PROMPT = `You are the triage-and-extraction stage of Locus AI, a decision-intelligence system that turns day-to-day workplace communication (Slack, Gmail, Notion) into a durable record of decisions, action items, and blockers.
+
+You will be given ONE event. Using only the text of that event - you have no access to surrounding conversation, prior messages, or any other context - do two things in a single response:
+
+1. Classify the event as KEEP, UNCERTAIN, or DISCARD.
+2. If KEEP or UNCERTAIN, also extract exactly one record (a decision, action item, or blocker) from it, in the same response. If DISCARD, leave every extraction field null/empty - do not extract anything.
+
+## Step 1: classification
 
 KEEP - the event contains at least one of:
   - a clear decision that was made
@@ -143,6 +225,7 @@ KEEP - the event contains at least one of:
   - a confirmed change (e.g. to a plan, schedule, scope, or system)
   - an ownership assignment or deadline
   - an operational commitment ("we will...", "I'll have this done by...")
+  - a clear, actionable request directed at the team or a named person (e.g. an RSVP deadline, a form to fill out) - treat this as an action_item even though it is a request rather than a commitment already made
 
 UNCERTAIN - the event might matter but is incomplete on its own:
   - a tentative proposal that has not been confirmed
@@ -159,11 +242,86 @@ DISCARD - the event is clearly NOT decision-relevant:
   - spam
   - content unrelated to any decision, action item, or blocker
 
-Do not classify by keyword-matching alone. Call the record_triage_result tool exactly once with your decision, a confidence score between 0 and 1, and the single reason_code that best explains your decision.`;
+Do not classify by keyword-matching alone.
 
-const TRIAGE_TOOL = {
-  name: "record_triage_result",
-  description: "Record the triage decision for one event.",
+## Step 2: extraction (only when KEEP or UNCERTAIN)
+
+Extract only what is explicitly present:
+  - record_type: "decision", "action_item", or "blocker" - whichever the event actually is.
+  - decision_statement: state the decision, action, or blocker in the event's own terms. Do not add detail, context, or consequences that are not stated.
+  - status: "decided" only if the event states the decision/action is final or confirmed. "proposed" if it is tentative, suggested, or awaiting approval. "superseded" only if the event explicitly says a prior decision was replaced or reversed.
+  - rationale: the reason given, in the event's own terms. If no reason is stated, return null. Never invent a plausible-sounding rationale.
+  - alternatives_considered: other options explicitly mentioned as considered or rejected. Empty list if none mentioned.
+  - actors: people explicitly named in connection with this record. role "decided_by" (at most one) if the event explicitly states this person made the decision/owns the item/is responsible for the blocker. role "mentioned" otherwise. Empty list if no actor is named. Never invent or guess an owner.
+  - confidence: 0-1, based only on how explicit and unambiguous the text is.
+
+Call record_triage_and_extraction exactly once with your classification, a confidence score, the single reason_code that best explains it, and - when not DISCARD - the extracted record.
+
+## Examples
+
+1. "Team, we've decided to use PostgreSQL for the context layer instead of MongoDB, mainly because our schema is relational-heavy." (Slack)
+-> KEEP, confidence 0.95, EXPLICIT_DECISION, record_type=decision, status=decided, decision_statement="Use PostgreSQL for the context layer instead of MongoDB", rationale="Schema is relational-heavy", alternatives_considered=["MongoDB"], actors=[]
+
+2. "I'll have the API docs updated by Friday." (Slack, actor: U0123ABCD)
+-> KEEP, confidence 0.9, ACTION_ASSIGNED, record_type=action_item, status=decided, decision_statement="Update the API docs by Friday", rationale=null, alternatives_considered=[], actors=[{source_actor_id:"U0123ABCD", role:"decided_by"}]
+
+3. "We're blocked on legal sign-off before we can ship the new terms of service." (Slack)
+-> KEEP, confidence 0.9, BLOCKER_IDENTIFIED, record_type=blocker, status=decided, decision_statement="Blocked on legal sign-off before shipping the new terms of service", rationale=null, alternatives_considered=[], actors=[]
+
+4. "Moved the launch date from March 1 to March 15 to give QA more time." (Notion page update)
+-> KEEP, confidence 0.9, CONFIRMED_CHANGE, record_type=decision, status=decided, decision_statement="Move the launch date from March 1 to March 15", rationale="Give QA more time", alternatives_considered=[], actors=[]
+
+5. "Maybe we should consider switching to Redis for caching at some point?" (Slack)
+-> UNCERTAIN, confidence 0.6, TENTATIVE_PROPOSAL, record_type=decision, status=proposed, decision_statement="Consider switching to Redis for caching", rationale=null, alternatives_considered=[], actors=[]
+
+6. "Submitted the budget request for the new hire, waiting on Sarah to sign off." (Gmail)
+-> UNCERTAIN, confidence 0.65, AWAITING_APPROVAL, record_type=action_item, status=proposed, decision_statement="Budget request for the new hire submitted, pending Sarah's sign-off", rationale=null, alternatives_considered=[], actors=[]
+
+7. "Happy Friday everyone! Hope you all have a great weekend :tada:" (Slack)
+-> DISCARD, confidence 0.97, SOCIAL_CHATTER (no extraction)
+
+8. "👍" (Slack reaction-only message)
+-> DISCARD, confidence 0.98, SOCIAL_CHATTER (no extraction)
+
+9. Subject: "Charger Bands Weekly Newsletter - August 2" - a multi-section HTML digest with unrelated club announcements and an unsubscribe footer. (Gmail)
+-> DISCARD, confidence 0.95, AUTOMATED_NOTIFICATION (no extraction)
+
+10. "Your pull request #123 was merged by github-actions[bot]." (Gmail, automated)
+-> DISCARD, confidence 0.95, AUTOMATED_NOTIFICATION (no extraction)
+
+11. "CONGRATULATIONS! You've been selected for a free cruise! Click here to claim your prize now!!!" (Gmail)
+-> DISCARD, confidence 0.9, UNRELATED_CONTENT (no extraction)
+
+12. "Yeah let's go with that." (Slack, no prior message visible in this event)
+-> UNCERTAIN, confidence 0.4, INSUFFICIENT_CONTEXT, record_type=decision, status=proposed, decision_statement="Team agreed to go with an unspecified option referenced in this message", rationale=null, alternatives_considered=[], actors=[]
+
+13. "Alice will own the frontend migration, Bob will handle the backend piece." (Slack, actors: U_ALICE, U_BOB)
+-> KEEP, confidence 0.9, ACTION_ASSIGNED, record_type=action_item, status=decided, decision_statement="Alice owns the frontend migration, Bob owns the backend migration", rationale=null, alternatives_considered=[], actors=[{source_actor_id:"U_ALICE", role:"decided_by"}, {source_actor_id:"U_BOB", role:"mentioned"}]
+
+14. "We chose Stripe over Braintree because their docs and webhook support are better." (Notion)
+-> KEEP, confidence 0.9, EXPLICIT_DECISION, record_type=decision, status=decided, decision_statement="Use Stripe for payments", rationale="Better docs and webhook support than Braintree", alternatives_considered=["Braintree"], actors=[]
+
+15. "Correction: we are NOT moving to the new office next month, we're staying at the current location for now." (Slack)
+-> KEEP, confidence 0.85, CONFIRMED_CHANGE, record_type=decision, status=superseded, decision_statement="Not moving to the new office next month, staying at the current location", rationale=null, alternatives_considered=[], actors=[]
+
+16. "Please RSVP for Parent Preview Night on Tuesday, August 4 at 6pm - one form per family." (Gmail)
+-> KEEP, confidence 0.8, ACTION_ASSIGNED, record_type=action_item, status=decided, decision_statement="Fill out the RSVP form for Parent Preview Night on Tuesday, August 4 at 6pm (one form per family)", rationale=null, alternatives_considered=[], actors=[]
+
+17. "Let's block 12-1pm Eastern every weekday for the Project Status meeting going forward." (Slack)
+-> KEEP, confidence 0.85, CONFIRMED_CHANGE, record_type=decision, status=decided, decision_statement="Block 12pm-1pm Eastern every weekday for the Project Status meeting", rationale=null, alternatives_considered=[], actors=[]
+
+18. "Abbas is replacing the previous backend lead to improve task follow-up and tracking." (Notion)
+-> KEEP, confidence 0.85, ACTION_ASSIGNED, record_type=decision, status=decided, decision_statement="Abbas replaces the previous backend lead to improve task follow-up, coordination, and tracking", rationale="Improve task follow-up and tracking", alternatives_considered=[], actors=[]
+
+19. "Reminder: your subscription renews in 3 days." (Gmail, automated billing reminder)
+-> DISCARD, confidence 0.9, AUTOMATED_NOTIFICATION (no extraction)
+
+20. "Thanks so much for your help today, really appreciate it!" (Slack)
+-> DISCARD, confidence 0.95, SOCIAL_CHATTER (no extraction)`;
+
+const TRIAGE_EXTRACTION_TOOL = {
+  name: "record_triage_and_extraction",
+  description: "Record the triage classification for one event, and - when the event is not DISCARD - the single decision, action item, or blocker extracted from it, in one call.",
   input_schema: {
     type: "object",
     properties: {
@@ -177,35 +335,12 @@ const TRIAGE_TOOL = {
           "SOCIAL_CHATTER", "AUTOMATED_NOTIFICATION", "UNRELATED_CONTENT",
         ],
       },
-    },
-    required: ["decision", "confidence", "reason_code"],
-    additionalProperties: false,
-  },
-};
-
-const EXTRACTION_SYSTEM_PROMPT = `You are the extraction stage of Locus AI, a decision-intelligence system that turns workplace communication (Slack, Gmail, Notion) into a durable record of decisions, action items, and blockers.
-
-You will be given ONE event that has already been judged worth extracting. Using only the text of that event, extract exactly one record: a decision, an action item, or a blocker.
-
-Ground rules - extract only what is explicitly present:
-  - decision_statement: state the decision, action, or blocker in the event's own terms. Do not add detail, context, or consequences that are not stated.
-  - status: "decided" only if the event states the decision/action is final or confirmed. "proposed" if it is tentative, suggested, or awaiting approval. "superseded" only if the event explicitly says a prior decision was replaced or reversed.
-  - rationale: the reason given, in the event's own terms. If no reason is stated, return null. Never invent a plausible-sounding rationale.
-  - alternatives_considered: other options explicitly mentioned as considered or rejected. Empty list if none mentioned.
-  - actors: people explicitly named in connection with this record. role "decided_by" (at most one) if the event explicitly states this person made the decision/owns the item/is responsible for the blocker. role "mentioned" otherwise. Empty list if no actor is named. Never invent or guess an owner.
-  - confidence: 0-1, based only on how explicit and unambiguous the text is.
-
-Call the record_extraction_result tool exactly once with the extracted record.`;
-
-const EXTRACTION_TOOL = {
-  name: "record_extraction_result",
-  description: "Record the single decision, action item, or blocker extracted from one event.",
-  input_schema: {
-    type: "object",
-    properties: {
-      record_type: { type: "string", enum: ["decision", "action_item", "blocker"] },
-      status: { type: "string", enum: ["proposed", "decided", "superseded"] },
-      decision_statement: { type: "string", minLength: 1 },
+      // Extraction fields - required by the schema so the tool call always
+      // validates, but left null/empty by the model whenever decision is
+      // DISCARD (see the prompt and the examples above).
+      record_type: { type: ["string", "null"], enum: ["decision", "action_item", "blocker", null] },
+      status: { type: ["string", "null"], enum: ["proposed", "decided", "superseded", null] },
+      decision_statement: { type: ["string", "null"] },
       rationale: { type: ["string", "null"] },
       alternatives_considered: { type: "array", items: { type: "string" } },
       actors: {
@@ -220,9 +355,11 @@ const EXTRACTION_TOOL = {
           additionalProperties: false,
         },
       },
-      confidence: { type: "number", minimum: 0, maximum: 1 },
     },
-    required: ["record_type", "status", "decision_statement", "alternatives_considered", "actors", "confidence"],
+    required: [
+      "decision", "confidence", "reason_code", "record_type", "status",
+      "decision_statement", "rationale", "alternatives_considered", "actors",
+    ],
     additionalProperties: false,
   },
 };
@@ -359,7 +496,7 @@ async function handleIngestionMessageInner(msg: PgmqMsg): Promise<string> {
     tenant_id: string; source: string; source_id: string; actor: string;
     thread_ref?: string | null; permission_scope: string[]; raw_content: unknown;
     source_permalink?: string | null; received_at: string; actor_display_name?: string;
-    connection_id?: string;
+    connection_id?: string; likely_bulk_mail?: boolean;
   };
   const tenantId = payload.tenant_id;
 
@@ -462,11 +599,33 @@ async function handleIngestionMessageInner(msg: PgmqMsg): Promise<string> {
     }
   }
 
-  // Triage
-  const userMsg = buildEventUserMessage(payload as never);
-  const triage = await callClaude(TRIAGE_SYSTEM_PROMPT, userMsg, TRIAGE_TOOL, "record_triage_result", 128, TRIAGE_MODEL, 15_000);
+  // Pre-filter: connectors that can cheaply tell this is bulk/marketing
+  // mail (Gmail's List-Unsubscribe header) skip the Claude call entirely -
+  // $0, not a discount. This is what should have caught the "Charger Bands
+  // Newsletter" false-positive decision before it ever reached the model.
+  if (payload.likely_bulk_mail) {
+    await withTenant(tenantId, async (sql) => {
+      await sql`UPDATE public.raw_events SET pipeline_status = 'done' WHERE id = ${rawEventId}`;
+    });
+    await pgmqDelete("ingestion", msg.msg_id);
+    return "prefiltered_bulk_mail";
+  }
 
-  if (triage.decision === "DISCARD") {
+  // Triage + extraction, merged into one call (see TRIAGE_EXTRACTION_SYSTEM_PROMPT's
+  // comment for why) - one round trip, one transmission of the raw content,
+  // cached system prompt across every invocation.
+  const userMsg = buildEventUserMessage(payload as never);
+  const result = await callClaude(
+    TRIAGE_EXTRACTION_SYSTEM_PROMPT, userMsg, TRIAGE_EXTRACTION_TOOL, "record_triage_and_extraction",
+    512, EXTRACT_MODEL, 30_000, true,
+  ) as {
+    decision: string; confidence: number; reason_code: string;
+    record_type: string | null; status: string | null; decision_statement: string | null;
+    rationale: string | null; alternatives_considered: string[];
+    actors: { source_actor_id: string; role: string }[];
+  };
+
+  if (result.decision === "DISCARD") {
     await withTenant(tenantId, async (sql) => {
       await sql`UPDATE public.raw_events SET pipeline_status = 'done' WHERE id = ${rawEventId}`;
     });
@@ -474,13 +633,11 @@ async function handleIngestionMessageInner(msg: PgmqMsg): Promise<string> {
     return "discarded";
   }
 
-  // Extraction
-  const extraction = await callClaude(
-    EXTRACTION_SYSTEM_PROMPT, userMsg, EXTRACTION_TOOL, "record_extraction_result", 512, EXTRACT_MODEL, 30_000,
-  ) as {
+  const extraction = result as {
     record_type: string; status: string; decision_statement: string; rationale: string | null;
     alternatives_considered: string[]; actors: { source_actor_id: string; role: string }[]; confidence: number;
   };
+  extraction.confidence = result.confidence;
 
   // Persist (decision + source + actors), mark done, enqueue embedding
   const decisionId = await withTenant(tenantId, async (sql) => {
