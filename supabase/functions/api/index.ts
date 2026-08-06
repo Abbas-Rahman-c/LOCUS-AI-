@@ -68,6 +68,278 @@ async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: numbe
   }
 }
 
+// ── Decryption (reverse of ai-worker/index.ts's encryptRawContent, same
+// AES-256-GCM / "LOCUS1" blob format) - needed to reconstruct the actual
+// conversation thread behind a decision from the encrypted raw_events it
+// came from, not just the single triggering message. ──────────────────────
+
+const LOCUS_MAGIC = new TextEncoder().encode("LOCUS1");
+const NONCE_LEN = 12;
+
+async function getAesKey(): Promise<CryptoKey> {
+  const secret = Deno.env.get("RAW_EVENTS_ENCRYPTION_KEY") || Deno.env.get("APP_SECRET_KEY");
+  if (!secret) throw new Error("RAW_EVENTS_ENCRYPTION_KEY or APP_SECRET_KEY is not set");
+  const hash = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(secret));
+  return crypto.subtle.importKey("raw", hash, "AES-GCM", false, ["decrypt"]);
+}
+
+async function decryptRawContent(encrypted: Uint8Array): Promise<string> {
+  const key = await getAesKey();
+  const nonce = encrypted.slice(LOCUS_MAGIC.length, LOCUS_MAGIC.length + NONCE_LEN);
+  const ciphertext = encrypted.slice(LOCUS_MAGIC.length + NONCE_LEN);
+  const plaintext = await crypto.subtle.decrypt({ name: "AES-GCM", iv: nonce }, key, ciphertext);
+  return new TextDecoder().decode(plaintext);
+}
+
+// notion-poller stores raw_content as the entire raw Notion API page object
+// (properties, ids, timestamps, everything), not flat text - reads a
+// human-readable value back out of each property by its Notion type,
+// instead of dumping the whole structure as JSON.
+// deno-lint-ignore no-explicit-any
+function notionPropertyText(prop: any): string | null {
+  if (!prop || typeof prop !== "object") return null;
+  switch (prop.type) {
+    case "title":
+    case "rich_text": {
+      const parts = (prop[prop.type] ?? []).map((t: { plain_text?: string }) => t.plain_text).filter(Boolean);
+      return parts.length > 0 ? parts.join("") : null;
+    }
+    case "select":
+      return prop.select?.name ?? null;
+    case "status":
+      return prop.status?.name ?? null;
+    case "multi_select": {
+      const names = (prop.multi_select ?? []).map((s: { name?: string }) => s.name).filter(Boolean);
+      return names.length > 0 ? names.join(", ") : null;
+    }
+    case "date":
+      return prop.date?.start ?? null;
+    case "number":
+      return prop.number !== null && prop.number !== undefined ? String(prop.number) : null;
+    case "checkbox":
+      return prop.checkbox ? "yes" : null;
+    case "email":
+    case "url":
+    case "phone_number":
+      return prop[prop.type] ?? null;
+    case "people": {
+      const names = (prop.people ?? []).map((p: { name?: string }) => p.name).filter(Boolean);
+      return names.length > 0 ? names.join(", ") : null;
+    }
+    default:
+      return null;
+  }
+}
+
+// deno-lint-ignore no-explicit-any
+function extractNotionPageText(page: any): string {
+  const properties = page.properties ?? {};
+  const titleEntry = Object.entries(properties).find(([, p]: [string, any]) => p?.type === "title");
+  const title = titleEntry ? notionPropertyText(titleEntry[1]) : null;
+
+  const lines: string[] = [];
+  if (title) lines.push(title);
+  for (const [name, prop] of Object.entries(properties)) {
+    if (titleEntry && name === titleEntry[0]) continue;
+    const value = notionPropertyText(prop);
+    if (value) lines.push(`${name}: ${value}`);
+  }
+  return lines.length > 0 ? lines.join("\n") : (page.url ?? "Notion page");
+}
+
+// Same field-extraction rules as modules.retrieval.service.extract_event_text:
+// Gmail gets its subject prefixed onto the body; Notion reads its page
+// properties into readable text (see extractNotionPageText); everything
+// else falls back to the first populated text-shaped field, never
+// invents content.
+function extractEventText(rawContent: unknown, source: string): string {
+  if (!rawContent || typeof rawContent !== "object") return String(rawContent ?? "");
+  const content = rawContent as Record<string, unknown>;
+  if (source === "gmail") {
+    const subject = typeof content.subject === "string" ? content.subject : "";
+    const body = typeof content.body === "string" ? content.body : "";
+    return subject ? `Subject: ${subject}\n${body}` : body;
+  }
+  if (source === "notion" && "properties" in content) {
+    return extractNotionPageText(content);
+  }
+  for (const field of ["text", "body", "content", "message", "description", "snippet"]) {
+    const val = content[field];
+    if (typeof val === "string" && val) return val;
+  }
+  return JSON.stringify(content);
+}
+
+type ThreadMessage = { at: string; actor: string; source: string; text: string };
+
+// postgres.js's bytea decoding varies by how the column comes back over the
+// wire - normally a Uint8Array/Buffer, but a hex-encoded "\x4c4f..." string
+// (Postgres's default bytea_output) is also possible depending on the
+// driver path taken. Handle both rather than assuming one.
+function byteaToUint8Array(value: unknown): Uint8Array {
+  if (value instanceof Uint8Array) return value;
+  if (typeof value === "string") {
+    const hex = value.startsWith("\\x") ? value.slice(2) : value;
+    const bytes = new Uint8Array(hex.length / 2);
+    for (let i = 0; i < bytes.length; i++) bytes[i] = parseInt(hex.substr(i * 2, 2), 16);
+    return bytes;
+  }
+  return new Uint8Array(value as ArrayLike<number>);
+}
+
+// The actors table only ever has a row for people extracted as an actual
+// decision participant (role decided_by/mentioned) - someone who just
+// chatted in the reconstructed thread without ever being named in a
+// decision has no row to look up. Falls back to a live Slack users.info
+// call per unresolved id (bounded, only for ids that miss the table), and
+// caches the result back into actors so the next lookup is a normal
+// table hit instead of another live call.
+// deno-lint-ignore no-explicit-any
+async function resolveSlackNamesLive(sql: any, tenantId: string, slackUserIds: string[]): Promise<Map<string, string>> {
+  const resolved = new Map<string, string>();
+  if (slackUserIds.length === 0) return resolved;
+
+  try {
+    const connRows = await sql`
+      SELECT oauth_token_ref FROM public.source_connections
+      WHERE tenant_id = ${tenantId} AND source = 'slack' AND status = 'active'
+      ORDER BY created_at ASC LIMIT 1
+    `;
+    const accessToken = connRows[0]?.oauth_token_ref;
+    if (!accessToken) return resolved;
+
+    for (const slackUserId of slackUserIds) {
+      try {
+        const resp = await fetchWithTimeout(
+          `https://slack.com/api/users.info?user=${encodeURIComponent(slackUserId)}`,
+          { headers: { Authorization: `Bearer ${accessToken}` } },
+          8_000,
+        );
+        const data = await resp.json();
+        if (!data.ok) continue;
+        const name = data.user?.profile?.real_name || data.user?.real_name || data.user?.name;
+        if (!name) continue;
+        resolved.set(slackUserId, name);
+
+        // No unique constraint on (tenant_id, slack_user_id) exists to
+        // support ON CONFLICT - select-then-insert/update instead, same
+        // pattern already proven in ai-worker's resolveActorId.
+        const existing = await sql`
+          SELECT id FROM public.actors WHERE tenant_id = ${tenantId} AND slack_user_id = ${slackUserId}
+        `;
+        if (existing.length > 0) {
+          await sql`UPDATE public.actors SET display_name = ${name} WHERE id = ${existing[0].id}`;
+        } else {
+          await sql`
+            INSERT INTO public.actors (tenant_id, slack_user_id, display_name, kind)
+            VALUES (${tenantId}, ${slackUserId}, ${name}, 'internal')
+          `;
+        }
+      } catch (err) {
+        console.error(`Slack users.info failed for ${slackUserId}:`, err);
+      }
+    }
+  } catch (err) {
+    console.error("resolveSlackNamesLive failed:", err);
+  }
+  return resolved;
+}
+
+// Reconstructs "what was the conversation that led to this decision" - not
+// just the single message that got extracted, every message sharing the
+// same thread_ref (a Slack thread, a Gmail thread, a Notion page's edit
+// history), in chronological order. Falls back to just the directly linked
+// raw_events when no thread_ref exists (e.g. a standalone Gmail message).
+// Takes the caller's already-open tenant-scoped `sql` handle rather than
+// opening its own nested withTenant connection - and never lets a failure
+// here take down the whole decision fetch, since this is a quality
+// enrichment, not core data; fails open to an empty thread on any error.
+// deno-lint-ignore no-explicit-any
+async function buildThreadContext(
+  sql: any,
+  tenantId: string,
+  originRawEventId: string | null,
+  sourceRawEventIds: string[],
+): Promise<ThreadMessage[]> {
+  const rawEventIds = [...new Set([originRawEventId, ...sourceRawEventIds].filter((id): id is string => !!id))];
+  if (rawEventIds.length === 0) return [];
+
+  try {
+    const threadRefRows = await sql`
+      SELECT DISTINCT thread_ref FROM public.raw_events
+      WHERE id = ANY(${rawEventIds}) AND tenant_id = ${tenantId} AND thread_ref IS NOT NULL
+    `;
+    const threadRefs = threadRefRows.map((r: { thread_ref: string }) => r.thread_ref);
+
+    // raw_events has no plain-text "actor" column - only actor_id (a
+    // foreign key the current ingestion pipeline never populates). The
+    // real actor identity only ever existed inside the encrypted envelope
+    // itself, which is already being decrypted below anyway.
+    const eventRows = threadRefs.length > 0
+      ? await sql`
+          SELECT id, source, received_at, raw_content FROM public.raw_events
+          WHERE thread_ref = ANY(${threadRefs}) AND tenant_id = ${tenantId}
+          ORDER BY received_at ASC
+        `
+      : await sql`
+          SELECT id, source, received_at, raw_content FROM public.raw_events
+          WHERE id = ANY(${rawEventIds}) AND tenant_id = ${tenantId}
+          ORDER BY received_at ASC
+        `;
+
+    // deno-lint-ignore no-explicit-any
+    const decrypted: { at: string; rawActor: string; source: string; text: string }[] = [];
+    for (const row of eventRows) {
+      try {
+        const bytes = byteaToUint8Array(row.raw_content);
+        const plaintext = await decryptRawContent(bytes);
+        const envelope = JSON.parse(plaintext) as { raw_content?: unknown; actor?: string };
+        const text = extractEventText(envelope.raw_content, row.source);
+        decrypted.push({ at: row.received_at, rawActor: envelope.actor ?? "unknown", source: row.source, text });
+      } catch (err) {
+        console.error(`Failed to decrypt/parse raw_event ${row.id}:`, err);
+      }
+    }
+
+    // Envelopes only ever carry the raw platform identifier (a Slack "U..."
+    // id, a Notion user id, a Gmail address) - resolve to real names the
+    // same way decision participants already are, instead of showing raw
+    // ids in the reconstructed conversation.
+    const rawActorIds = [...new Set(decrypted.map((m) => m.rawActor))];
+    const actorNameByRawId = new Map<string, string>();
+    if (rawActorIds.length > 0) {
+      const actorRows = await sql`
+        SELECT display_name, email, notion_user_id, slack_user_id FROM public.actors
+        WHERE tenant_id = ${tenantId}
+          AND (slack_user_id = ANY(${rawActorIds}) OR notion_user_id = ANY(${rawActorIds}) OR email = ANY(${rawActorIds}))
+      `;
+      for (const ar of actorRows) {
+        const name = guessActorName(ar.display_name, ar.email, ar.notion_user_id, ar.slack_user_id);
+        if (!name) continue;
+        for (const rawId of [ar.slack_user_id, ar.notion_user_id, ar.email]) {
+          if (rawId) actorNameByRawId.set(rawId, name);
+        }
+      }
+    }
+
+    const unresolvedSlackIds = rawActorIds.filter((id) => !actorNameByRawId.has(id) && SLACK_USER_ID_RE.test(id));
+    if (unresolvedSlackIds.length > 0) {
+      const liveResolved = await resolveSlackNamesLive(sql, tenantId, unresolvedSlackIds);
+      for (const [id, name] of liveResolved) actorNameByRawId.set(id, name);
+    }
+
+    return decrypted.map((m) => ({
+      at: m.at,
+      actor: actorNameByRawId.get(m.rawActor) ?? m.rawActor,
+      source: m.source,
+      text: m.text,
+    }));
+  } catch (err) {
+    console.error("buildThreadContext query failed:", err);
+    return [];
+  }
+}
+
 // ── Auth: Supabase token verification + tenant-scoped JWT issuance ────────
 // Mirrors backend/src/modules/auth/service.py + supabase_verifier.py exactly:
 // verify the Supabase-issued access_token via JWKS, look up the caller's
@@ -124,12 +396,34 @@ async function getCurrentTenant(req: Request): Promise<TenantContext> {
   return await verifyTenantJwt(match[1]);
 }
 
-async function resolvePermissionScopes(userId: string): Promise<string[]> {
+// source_connections has no per-user column at all - it's tenant-wide, not
+// tied to whichever member happened to click "Connect". Scoping access to
+// only the caller's own login email meant a decision captured from a
+// connected Gmail account was invisible to every tenant member except the
+// one whose Supabase login email happened to exactly match the connected
+// Gmail address - in practice, "log in with Gmail and connect with that
+// same Gmail" was the only way anything ever showed up. Real fix: grant
+// every tenant member visibility into every source actually connected to
+// their tenant, not just their own identity. Broader than Gmail alone
+// (also covers Slack/Notion workspace ids) since the same gap applies to
+// all three connectors identically, not just Gmail.
+async function resolvePermissionScopes(userId: string, tenantId: string): Promise<string[]> {
   const email = await withAdmin(async (sql) => {
     const rows = await sql`SELECT email FROM auth.users WHERE id = ${userId}`;
     return rows[0]?.email ?? null;
   });
-  return email ? [email] : [];
+
+  const connectedScopes = await withTenant(tenantId, async (sql) => {
+    const rows = await sql`
+      SELECT DISTINCT external_workspace_id FROM public.source_connections
+      WHERE tenant_id = ${tenantId} AND status = 'active' AND external_workspace_id IS NOT NULL
+    `;
+    return rows.map((r) => r.external_workspace_id as string);
+  });
+
+  const scopes = new Set<string>(connectedScopes);
+  if (email) scopes.add(email);
+  return [...scopes];
 }
 
 // ── Handler: POST /auth/session ────────────────────────────────────────
@@ -209,16 +503,35 @@ function buildDecisionOut(row: any, actors: unknown[], sourceLinks: string[], so
   };
 }
 
-async function listDecisions(tenantId: string, limit: number, offset: number) {
+async function listDecisions(
+  tenantId: string,
+  limit: number,
+  offset: number,
+  recordType?: string | null,
+  source?: string | null,
+) {
   return await withTenant(tenantId, async (sql) => {
+    // Filtering happens here, not client-side, so "Gmail only" (etc.) reflects
+    // the full archive across all pages, not just whatever page was loaded
+    // before the filter was picked.
+    const recordTypeFilter = recordType ? sql`AND d.record_type = ${recordType}` : sql``;
+    const sourceFilter = source ? sql`AND re.source = ${source}` : sql``;
+
     const rows = await sql`
-      SELECT id, tenant_id, record_type, decision_statement, rationale,
-             alternatives_considered, status, superseded_by, scope, confidence,
-             origin_raw_event_id, created_at, updated_at
-      FROM decisions WHERE tenant_id = ${tenantId}
-      ORDER BY created_at DESC LIMIT ${limit} OFFSET ${offset}
+      SELECT d.id, d.tenant_id, d.record_type, d.decision_statement, d.rationale,
+             d.alternatives_considered, d.status, d.superseded_by, d.scope, d.confidence,
+             d.origin_raw_event_id, d.created_at, d.updated_at
+      FROM decisions d
+      LEFT JOIN raw_events re ON re.id = d.origin_raw_event_id AND re.tenant_id = d.tenant_id
+      WHERE d.tenant_id = ${tenantId} ${recordTypeFilter} ${sourceFilter}
+      ORDER BY d.created_at DESC LIMIT ${limit} OFFSET ${offset}
     `;
-    const totalRows = await sql`SELECT COUNT(*)::int AS total FROM decisions WHERE tenant_id = ${tenantId}`;
+    const totalRows = await sql`
+      SELECT COUNT(*)::int AS total
+      FROM decisions d
+      LEFT JOIN raw_events re ON re.id = d.origin_raw_event_id AND re.tenant_id = d.tenant_id
+      WHERE d.tenant_id = ${tenantId} ${recordTypeFilter} ${sourceFilter}
+    `;
     const total = totalRows[0]?.total ?? 0;
 
     const decisionIds = rows.map((r) => r.id);
@@ -294,25 +607,68 @@ async function getDecisionById(tenantId: string, decisionId: string) {
       LEFT JOIN public.actors a ON a.id = da.actor_id AND a.tenant_id = da.tenant_id
       WHERE da.decision_id = ${decisionId} AND da.tenant_id = ${tenantId}
     `;
+    // A single decision has few enough participants that a live Slack
+    // lookup for each still-unresolved one is cheap here - unlike
+    // listDecisions, which returns up to 200 rows at once and would turn
+    // into 200x live API calls if it did the same.
+    const unresolvedParticipantIds = actorRows
+      .filter((ar) => !guessActorName(ar.display_name, ar.email, ar.notion_user_id, ar.slack_user_id) && ar.slack_user_id)
+      .map((ar) => ar.slack_user_id as string);
+    const liveParticipantNames = unresolvedParticipantIds.length > 0
+      ? await resolveSlackNamesLive(sql, tenantId, unresolvedParticipantIds)
+      : new Map<string, string>();
+
     const actors = actorRows.map((ar) => ({
       id: String(ar.actor_id), role: ar.role,
-      name: guessActorName(ar.display_name, ar.email, ar.notion_user_id, ar.slack_user_id),
+      name: guessActorName(ar.display_name, ar.email, ar.notion_user_id, ar.slack_user_id)
+        ?? (ar.slack_user_id ? liveParticipantNames.get(ar.slack_user_id) : undefined)
+        ?? null,
     }));
 
     const sourceRows = await sql`
-      SELECT permalink FROM decision_sources WHERE decision_id = ${decisionId} AND tenant_id = ${tenantId}
+      SELECT permalink, raw_event_id FROM decision_sources WHERE decision_id = ${decisionId} AND tenant_id = ${tenantId}
     `;
     const sourceLinks = sourceRows.map((sr) => sr.permalink);
 
     let sourcePlatforms: string[] = [];
+    let sourceReceivedAt: string | null = null;
     if (row.origin_raw_event_id) {
       const platformRows = await sql`
-        SELECT source FROM raw_events WHERE id = ${row.origin_raw_event_id} AND tenant_id = ${tenantId}
+        SELECT source, received_at FROM raw_events WHERE id = ${row.origin_raw_event_id} AND tenant_id = ${tenantId}
       `;
       if (platformRows[0]?.source) sourcePlatforms = [platformRows[0].source];
+      if (platformRows[0]?.received_at) sourceReceivedAt = platformRows[0].received_at;
     }
 
-    return buildDecisionOut(row, actors, sourceLinks, sourcePlatforms);
+    // Symmetric in meaning even though stored asymmetrically (decision_id
+    // is always "whichever one was captured second") - a conflict shows up
+    // regardless of which side of the pair you're looking at.
+    const conflictRows = await sql`
+      SELECT dc.relationship, dc.reason, dc.confidence,
+             CASE WHEN dc.decision_id = ${decisionId} THEN dc.related_decision_id ELSE dc.decision_id END AS other_id,
+             CASE WHEN dc.decision_id = ${decisionId} THEN d2.decision_statement ELSE d1.decision_statement END AS other_statement
+      FROM public.decision_conflicts dc
+      JOIN public.decisions d1 ON d1.id = dc.decision_id AND d1.tenant_id = dc.tenant_id
+      JOIN public.decisions d2 ON d2.id = dc.related_decision_id AND d2.tenant_id = dc.tenant_id
+      WHERE dc.tenant_id = ${tenantId} AND (dc.decision_id = ${decisionId} OR dc.related_decision_id = ${decisionId})
+    `;
+    const conflicts = conflictRows.map((cr) => ({
+      decision_id: cr.other_id, decision_statement: cr.other_statement,
+      relationship: cr.relationship, reason: cr.reason, confidence: Number(cr.confidence),
+    }));
+
+    const decisionOut = buildDecisionOut(row, actors, sourceLinks, sourcePlatforms);
+    return {
+      ...decisionOut,
+      source_received_at: sourceReceivedAt,
+      conflicts,
+      thread_context: await buildThreadContext(
+        sql,
+        tenantId,
+        row.origin_raw_event_id,
+        sourceRows.map((sr) => sr.raw_event_id).filter(Boolean),
+      ),
+    };
   });
 }
 
@@ -613,6 +969,7 @@ function buildSystemPrompt(analysis: QueryAnalysis | null): string {
   return `You are Locus AI, answering questions about a company's recorded decisions using ONLY the context supplied below.
 
 Rules:
+- The input is not always phrased as a question. If it is a bare topic, name, or keyword (e.g. "billing" or "Marcus Webb") rather than a question, treat it as an implicit "what do we know about this", using the same context and citation rules below, rather than refusing for lack of a literal question mark.
 - Answer ONLY using the supplied context. Never use outside knowledge, general assumptions, or anything about what a company "probably" did.
 - Never invent facts, decisions, owners, dates, or outcomes that are not explicitly present in the context.
 - Cite every factual statement you make with its specific decision number (e.g. "Decision 2"). A sentence with no citation should not contain a specific claim from the context.
@@ -692,7 +1049,7 @@ async function handleSearch(req: Request): Promise<Response> {
   const requestedTopK = Math.min(Math.max(body.top_k ?? DEFAULT_TOP_K, 1), MAX_TOP_K);
 
   try {
-    const permissionScopes = await resolvePermissionScopes(ctx.userId);
+    const permissionScopes = await resolvePermissionScopes(ctx.userId, ctx.tenantId);
     const analysis = await analyzeQuery(question);
 
     let effectiveTopK = Math.max(requestedTopK, RERANK_MIN_TOP_K);
@@ -869,7 +1226,7 @@ async function handleDigest(req: Request, url: URL): Promise<Response> {
   if (scope !== "personal" && scope !== "team") return errorResponse(422, "scope must be 'personal' or 'team'");
 
   try {
-    const permissionScopes = await resolvePermissionScopes(ctx.userId);
+    const permissionScopes = await resolvePermissionScopes(ctx.userId, ctx.tenantId);
     const weekOf = digestWeekOf();
     const userId = scope === "personal" ? ctx.userId : null;
 
@@ -968,8 +1325,10 @@ async function handleDecisions(req: Request, url: URL): Promise<Response> {
   if (req.method === "GET" && parts.length === 0) {
     const limit = Math.min(Math.max(Number(url.searchParams.get("limit") ?? 50), 1), 200);
     const offset = Math.max(Number(url.searchParams.get("offset") ?? 0), 0);
+    const recordType = url.searchParams.get("record_type");
+    const source = url.searchParams.get("source");
     try {
-      const result = await listDecisions(ctx.tenantId, limit, offset);
+      const result = await listDecisions(ctx.tenantId, limit, offset, recordType, source);
       return jsonResponse(result);
     } catch (err) {
       console.error("list decisions failed:", err);

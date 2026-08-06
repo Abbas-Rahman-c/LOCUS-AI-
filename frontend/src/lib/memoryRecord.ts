@@ -42,6 +42,16 @@ function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
+function formatExactTime(iso: string): string {
+  return new Date(iso).toLocaleString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  })
+}
+
 /**
  * Adapts a real DecisionOut row into the MemoryRecordDetail panel's display
  * shape. All fields come from the actual decision - nothing here is
@@ -65,5 +75,7 @@ export function decisionToMemoryRecord(decision: DecisionOut): MemoryRecord {
     listSource: platformLabel,
     date: formatDate(decision.created_at),
     sourceLink: decision.source_links[0],
+    hasContext: Boolean(decision.rationale),
+    exactTime: formatExactTime(decision.created_at),
   }
 }

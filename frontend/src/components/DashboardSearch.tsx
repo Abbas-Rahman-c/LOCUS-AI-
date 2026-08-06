@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react'
 import { getSupabaseClient } from '../lib/supabase'
-import { ApiError, searchDecisions, type SearchResponse } from '../lib/api'
+import { ApiError, getDecision, listDecisions, searchDecisions, type SearchResponse } from '../lib/api'
 import { DEMO_EMAIL_KEY } from '../lib/sessionKeys'
+import { decisionToMemoryRecord } from '../lib/memoryRecord'
+import { MemoryRecordDetail, type MemoryRecord } from './MemoryRecordDetail'
 
 /**
  * Fire-and-forget: logs a completed search to search_history via the
@@ -20,10 +22,14 @@ function recordSearchHistory(query: string, resultCount: number) {
     })
 }
 
-const SUGGESTIONS = [
-  'What does our org already know about the Q3 timeline?',
-  'What context do we have on the onboarding flow?',
-]
+/** Turns a real decision statement into a natural suggested question, e.g.
+ * "Adopt PostgreSQL for the context layer" -> "What do we know about
+ * adopt postgresql for the context layer?". Truncated so a long statement
+ * doesn't blow out the chip. */
+function toSuggestion(statement: string): string {
+  const trimmed = statement.length > 60 ? `${statement.slice(0, 60).trim()}…` : statement
+  return `What do we know about ${trimmed.replace(/[.?!]+$/, '').toLowerCase()}?`
+}
 
 type RecentSearch = { query: string; at: number }
 
@@ -41,6 +47,57 @@ function timeAgo(at: number, now = Date.now()) {
   return `${Math.floor(hours / 24)}d ago`
 }
 
+function timeOfDayGreeting(hour = new Date().getHours()) {
+  if (hour < 12) return 'Good morning'
+  if (hour < 18) return 'Good afternoon'
+  return 'Good evening'
+}
+
+/**
+ * One citation in a search answer, expandable into the same full context
+ * (source, exact time, conversation thread) the decision log shows - a
+ * search result shouldn't be a dead end, the reasoning behind it should be
+ * one click away, not a separate trip to Memory Explorer.
+ */
+function CitationRow({ decisionNumber, decisionId, decisionStatement }: {
+  decisionNumber: number
+  decisionId: string
+  decisionStatement: string
+}) {
+  const [isExpanded, setIsExpanded] = useState(false)
+  const [record, setRecord] = useState<MemoryRecord | null>(null)
+  const [loadError, setLoadError] = useState('')
+
+  const toggle = () => {
+    const next = !isExpanded
+    setIsExpanded(next)
+    if (next && !record && !loadError) {
+      getDecision(decisionId)
+        .then((detail) => setRecord(decisionToMemoryRecord(detail)))
+        .catch(() => setLoadError('Unable to load this decision.'))
+    }
+  }
+
+  return (
+    <li className="text-[13px] text-[#6B7280]">
+      <button type="button" onClick={toggle} className="text-left hover:text-[#374151]">
+        <span className="font-semibold text-[#5A45FF]">[{decisionNumber}]</span> {decisionStatement}
+      </button>
+      {isExpanded ? (
+        <div className="mt-2 rounded-lg border border-[#E8E8ED] bg-[#FAFAFB] p-3">
+          {loadError ? (
+            <span className="text-[#9CA3AF]">{loadError}</span>
+          ) : record ? (
+            <MemoryRecordDetail record={record} compactHeader />
+          ) : (
+            <span className="text-[#9CA3AF]">Loading…</span>
+          )}
+        </div>
+      ) : null}
+    </li>
+  )
+}
+
 export function DashboardSearch() {
   const [greetingName, setGreetingName] = useState('there')
   const [question, setQuestion] = useState('')
@@ -48,6 +105,7 @@ export function DashboardSearch() {
   const [result, setResult] = useState<SearchResponse | null>(null)
   const [error, setError] = useState('')
   const [recentSearches, setRecentSearches] = useState<RecentSearch[]>([])
+  const [suggestions, setSuggestions] = useState<string[]>([])
 
   useEffect(() => {
     const demoEmail = sessionStorage.getItem(DEMO_EMAIL_KEY)
@@ -65,6 +123,20 @@ export function DashboardSearch() {
         null
       setGreetingName(firstName(user?.email, displayName))
     })
+  }, [])
+
+  // Suggestion chips reflect this tenant's own real decisions, not fixed
+  // demo examples - a tenant with no captures yet just sees none, rather
+  // than examples that imply data that isn't there.
+  useEffect(() => {
+    if (sessionStorage.getItem(DEMO_EMAIL_KEY)) return
+    listDecisions(3, 0)
+      .then((response) => {
+        setSuggestions(response.items.map((item) => toSuggestion(item.decision_statement)))
+      })
+      .catch(() => {
+        // No suggestions is a fine fallback - the search bar works without them.
+      })
   }, [])
 
   const runSearch = async (submittedQuestion: string) => {
@@ -95,7 +167,7 @@ export function DashboardSearch() {
   return (
     <section className="mb-8">
       <h1 className="mb-5 text-[32px] font-bold leading-tight tracking-[-0.02em] text-[#111827]">
-        Good morning, {greetingName}
+        {timeOfDayGreeting()}, {greetingName}
       </h1>
 
       <form
@@ -139,21 +211,23 @@ export function DashboardSearch() {
         </div>
       </form>
 
-      <div className="mb-7 flex flex-wrap gap-2.5">
-        {SUGGESTIONS.map((text, i) => (
-          <button
-            key={`${text}-${i}`}
-            type="button"
-            onClick={() => {
-              setQuestion(text)
-              void runSearch(text)
-            }}
-            className="rounded-full border border-[#E5E7EB] bg-white px-4 py-2 text-[13px] font-medium text-[#374151] transition-colors hover:bg-[#F9FAFB]"
-          >
-            {text}
-          </button>
-        ))}
-      </div>
+      {suggestions.length > 0 ? (
+        <div className="mb-7 flex flex-wrap gap-2.5">
+          {suggestions.map((text, i) => (
+            <button
+              key={`${text}-${i}`}
+              type="button"
+              onClick={() => {
+                setQuestion(text)
+                void runSearch(text)
+              }}
+              className="rounded-full border border-[#E5E7EB] bg-white px-4 py-2 text-[13px] font-medium text-[#374151] transition-colors hover:bg-[#F9FAFB]"
+            >
+              {text}
+            </button>
+          ))}
+        </div>
+      ) : null}
 
       {error ? (
         <div className="mb-6 rounded-xl border border-[#F3D6D6] bg-[#FFF7F7] px-4 py-3 text-[14px] text-[#B4232C]">
@@ -169,12 +243,12 @@ export function DashboardSearch() {
           {result.citations.length > 0 ? (
             <ul className="mt-4 flex flex-col gap-2 border-t border-[#F0F0F4] pt-4">
               {result.citations.map((citation) => (
-                <li key={citation.decision_id} className="text-[13px] text-[#6B7280]">
-                  <span className="font-semibold text-[#5A45FF]">
-                    [{citation.decision_number}]
-                  </span>{' '}
-                  {citation.decision_statement}
-                </li>
+                <CitationRow
+                  key={citation.decision_id}
+                  decisionNumber={citation.decision_number}
+                  decisionId={citation.decision_id}
+                  decisionStatement={citation.decision_statement}
+                />
               ))}
             </ul>
           ) : null}

@@ -100,6 +100,18 @@ Deno.serve(async (req: Request) => {
     return new Response("OK", { status: 200 });
   }
 
+  // A "message" event with a subtype is never a new message someone
+  // typed - message_changed (an edit, with its own new event ts, so the
+  // dedup-by-source_id constraint never catches it and the edited message
+  // gets captured a second time as if it were brand new), message_deleted,
+  // channel_join ("<@U...> has joined the channel"), bot_message echoes,
+  // etc. Confirmed live: this exact gap produced both the duplicate
+  // "3 tests failing"/"simpler auth flow" decisions and literal
+  // "has joined the channel" noise showing up as captured content.
+  if (event.subtype) {
+    return new Response("OK (subtype excluded)", { status: 200 });
+  }
+
   // The Privacy settings page states as an unconditional commitment that
   // DMs and group DMs are never read or captured - channel_type is "im"
   // for a 1:1 DM and "mpim" for a group DM (vs "channel"/"group" for
@@ -150,7 +162,15 @@ Deno.serve(async (req: Request) => {
       source: "slack",
       source_id: sourceId,
       actor: String(event.user ?? "unknown"),
-      thread_ref: String(event.thread_ts ?? event.channel ?? ""),
+      // A real reply thread uses thread_ts (the parent message's own ts,
+      // which the parent itself is also addressable by in Slack's
+      // threading model). Falling back to the channel id here previously
+      // meant every message ever posted in that channel counted as "the
+      // same thread" as this one - a decision about joining the team
+      // ended up reconstructed alongside completely unrelated channel
+      // chatter. Falling back to this message's own ts instead means an
+      // unthreaded message only ever groups with its own real replies.
+      thread_ref: String(event.thread_ts ?? event.ts ?? ""),
       permission_scope: event.channel ? [String(event.channel)] : [],
       raw_content: { text: String(event.text ?? "") },
       source_permalink: slackDeepLink,

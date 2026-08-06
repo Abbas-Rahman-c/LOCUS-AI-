@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useState } from 'react'
+import { Fragment, useEffect, useState } from 'react'
 import {
   ApiError,
   listDecisions,
@@ -14,12 +14,20 @@ import {
 } from '../components/MemoryRecordDetail'
 
 type FilterType = 'All Types' | DecisionRecordType
+type SourceFilter = 'All Sources' | 'slack' | 'gmail' | 'notion'
 
 const FILTERS: { id: FilterType; label: string }[] = [
   { id: 'All Types', label: 'All Types' },
   { id: 'decision', label: 'Decision' },
   { id: 'action_item', label: 'Action Item' },
   { id: 'blocker', label: 'Blocker' },
+]
+
+const SOURCE_FILTERS: { id: SourceFilter; label: string }[] = [
+  { id: 'All Sources', label: 'All Sources' },
+  { id: 'slack', label: 'Slack' },
+  { id: 'gmail', label: 'Gmail' },
+  { id: 'notion', label: 'Notion' },
 ]
 
 const TYPE_LABELS: Record<DecisionRecordType, MemoryRecordType> = {
@@ -68,58 +76,86 @@ function SourceCell({ sourceLinks, sourcePlatforms }: { sourceLinks: string[]; s
 
 export default function DecisionLogPage() {
   const [selectedType, setSelectedType] = useState<FilterType>('All Types')
+  const [selectedSource, setSelectedSource] = useState<SourceFilter>('All Sources')
   const [currentPage, setCurrentPage] = useState(1)
   const [entries, setEntries] = useState<DecisionOut[]>([])
   const [total, setTotal] = useState(0)
   const [isLoading, setIsLoading] = useState(true)
+  const [isRefreshing, setIsRefreshing] = useState(false)
   const [error, setError] = useState('')
   const [expandedId, setExpandedId] = useState<string | null>(null)
 
-  useEffect(() => {
-    let active = true
-    setIsLoading(true)
+  const loadPage = (page: number, isManualRefresh = false) => {
+    if (isManualRefresh) setIsRefreshing(true)
+    else setIsLoading(true)
     setError('')
 
-    const offset = (currentPage - 1) * PAGE_SIZE
-    listDecisions(PAGE_SIZE, offset)
+    const offset = (page - 1) * PAGE_SIZE
+    const recordType = selectedType === 'All Types' ? undefined : selectedType
+    const source = selectedSource === 'All Sources' ? undefined : selectedSource
+    return listDecisions(PAGE_SIZE, offset, recordType, source)
       .then((response) => {
-        if (!active) return
         setEntries(response.items)
         setTotal(response.total)
       })
       .catch((err: unknown) => {
-        if (!active) return
         setError(err instanceof ApiError ? err.message : 'Unable to load the decision log.')
       })
       .finally(() => {
-        if (active) setIsLoading(false)
+        if (isManualRefresh) setIsRefreshing(false)
+        else setIsLoading(false)
       })
+  }
 
-    return () => {
-      active = false
-    }
-  }, [currentPage])
+  useEffect(() => {
+    void loadPage(currentPage)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentPage, selectedType, selectedSource])
 
-  // The backend does not support filtering by record_type server side
-  // (GET /api/v1/decisions only takes limit/offset), so this filters within
-  // the currently loaded page only, not across the full archive.
-  // "Showing X of Y" below reflects that: Y is this page's real count, not a
-  // globally-filtered total.
-  const filteredEntries = useMemo(() => {
-    if (selectedType === 'All Types') return entries
-    return entries.filter((entry) => entry.record_type === selectedType)
-  }, [entries, selectedType])
+  // Filtering by type and source now happens server-side (see loadPage), so
+  // `entries` already reflects the current filter across the whole archive,
+  // not just whatever page happened to be loaded first.
+  const filteredEntries = entries
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
 
   return (
     <main className="mx-auto max-w-[1120px] px-8 py-8">
-      <h1 className="text-[32px] font-bold leading-tight tracking-[-0.02em] text-[#111827]">
-        Memory Explorer
-      </h1>
-      <p className="mt-2 text-[15px] text-[#6B7280]">
-        Every captured decision, action item, and blocker is searchable and cited.
-      </p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-[32px] font-bold leading-tight tracking-[-0.02em] text-[#111827]">
+            Memory Explorer
+          </h1>
+          <p className="mt-2 text-[15px] text-[#6B7280]">
+            Every captured decision, action item, and blocker is searchable and cited.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => void loadPage(currentPage, true)}
+          disabled={isRefreshing || isLoading}
+          aria-label="Refresh"
+          className="mt-1 flex shrink-0 items-center gap-2 rounded-full border border-[#E5E7EB] bg-white px-4 py-2 text-[13px] font-semibold text-[#374151] transition-colors hover:bg-[#F9FAFB] disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            aria-hidden="true"
+            className={isRefreshing ? 'animate-spin' : ''}
+          >
+            <path
+              d="M4 4v6h6M20 20v-6h-6M4.5 15a8 8 0 0 0 14.6 2.5M19.5 9A8 8 0 0 0 4.9 6.5"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+          {isRefreshing ? 'Refreshing…' : 'Refresh'}
+        </button>
+      </div>
 
       <div
         className="mt-6 flex flex-wrap gap-2.5"
@@ -142,6 +178,35 @@ export default function DecisionLogPage() {
                 isSelected
                   ? 'bg-[#5A45FF] text-white'
                   : 'border border-[#E5E7EB] bg-white text-[#374151] hover:bg-[#F9FAFB]'
+              }`}
+            >
+              {filter.label}
+            </button>
+          )
+        })}
+      </div>
+
+      <div
+        className="mt-2.5 flex flex-wrap gap-2.5"
+        role="radiogroup"
+        aria-label="Filter by source"
+      >
+        {SOURCE_FILTERS.map((filter) => {
+          const isSelected = selectedSource === filter.id
+          return (
+            <button
+              key={filter.id}
+              type="button"
+              role="radio"
+              aria-checked={isSelected}
+              onClick={() => {
+                setSelectedSource(filter.id)
+                setCurrentPage(1)
+              }}
+              className={`rounded-full px-3.5 py-1.5 text-[12px] font-semibold transition-colors ${
+                isSelected
+                  ? 'bg-[#111827] text-white'
+                  : 'border border-[#E5E7EB] bg-white text-[#6B7280] hover:bg-[#F9FAFB]'
               }`}
             >
               {filter.label}
@@ -180,7 +245,7 @@ export default function DecisionLogPage() {
             ) : filteredEntries.length === 0 ? (
               <tr>
                 <td colSpan={5} className="px-5 py-12 text-center text-[14px] text-[#6B7280]">
-                  No entries on this page match that filter.
+                  No entries match that filter.
                 </td>
               </tr>
             ) : (

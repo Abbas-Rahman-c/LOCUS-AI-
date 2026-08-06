@@ -23,6 +23,25 @@ export interface IngestionEnvelope {
   // decision_sources - this is what "View Original" in the frontend opens.
   // No connector set this before, so the button was always disabled.
   source_permalink?: string;
+  // A human-readable name for `actor`, when the connector can get one for
+  // free from the message itself (Gmail's From header is usually
+  // "Real Name" <email>, not just the address). Attached to the actors
+  // table row for `actor` so participants show a real name instead of a
+  // raw email/id - see ai-worker's handleIngestionMessageInner.
+  actor_display_name?: string;
+  // The source_connections row this event actually came from. When a
+  // tenant has more than one connection for the same source (e.g. several
+  // Gmail accounts), ai-worker previously had no way to know which one and
+  // fell back to guessing "the oldest active connection for this
+  // tenant+source" - which silently merged every connection's mail into
+  // whichever was connected first. Set this when the connector already
+  // knows its own source_connections.id (gmail-manual-sync does) so
+  // ai-worker can attribute raw_events correctly instead of guessing.
+  connection_id?: string;
+  // Set when the connector can cheaply tell this is bulk/marketing mail
+  // (e.g. Gmail's List-Unsubscribe header) before any AI call. ai-worker
+  // skips triage+extraction entirely for these - $0 cost, not a discount.
+  likely_bulk_mail?: boolean;
 }
 
 export async function enqueueEvent(envelope: IngestionEnvelope) {
