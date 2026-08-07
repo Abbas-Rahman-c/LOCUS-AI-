@@ -794,6 +794,26 @@ async function searchDecisionsKeyword(tenantId: string, question: string, topK: 
 
 const DEFAULT_RRF_K = 60;
 
+// Recency re-rank: created_at was only ever a keyword-search tiebreaker
+// inside fuseRrf's tie cases, never an actual re-rank stage - a
+// month-old decision with marginally higher vector similarity could
+// permanently outrank yesterday's near-equally-relevant one for "what did
+// we decide recently?"-style questions. This nudges scores toward fresher
+// matches without letting recency override a real relevance gap: the
+// multiplier decays from 2x (today) to 1x (RECENCY_HALF_LIFE_DAYS old) to
+// approaching 1x asymptotically for anything older, so a much stronger RRF
+// score still wins over a much fresher weak one. No created_at (shouldn't
+// happen, but the type allows null) gets no boost, same as year-old items.
+const RECENCY_HALF_LIFE_DAYS = 14;
+const RECENCY_MAX_BOOST = 1.0;
+
+function recencyMultiplier(createdAt: string | null, now: number): number {
+  if (!createdAt) return 1;
+  const ageDays = Math.max(0, (now - new Date(createdAt).getTime()) / (24 * 60 * 60 * 1000));
+  const decay = Math.pow(0.5, ageDays / RECENCY_HALF_LIFE_DAYS);
+  return 1 + RECENCY_MAX_BOOST * decay;
+}
+
 function fuseRrf(vectorMatches: RetrievalMatch[], keywordMatches: RetrievalMatch[], topK: number, k = DEFAULT_RRF_K): RetrievalMatch[] {
   const scores = new Map<string, number>();
   const byId = new Map<string, RetrievalMatch>();
@@ -804,7 +824,13 @@ function fuseRrf(vectorMatches: RetrievalMatch[], keywordMatches: RetrievalMatch
       if (!byId.has(match.decision_id)) byId.set(match.decision_id, match);
     });
   }
-  const fused = [...byId.values()].sort((a, b) => (scores.get(b.decision_id)! - scores.get(a.decision_id)!));
+  const now = Date.now();
+  const blended = new Map<string, number>();
+  for (const [id, score] of scores) {
+    const match = byId.get(id)!;
+    blended.set(id, score * recencyMultiplier(match.created_at, now));
+  }
+  const fused = [...byId.values()].sort((a, b) => (blended.get(b.decision_id)! - blended.get(a.decision_id)!));
   return fused.slice(0, topK);
 }
 
@@ -1106,6 +1132,10 @@ async function handleSearch(req: Request): Promise<Response> {
         question_type: analysis.question_type,
         is_multi_document: analysis.is_multi_document,
         reranked: false,
+        // Separate from `reranked` (the cross-encoder pass, still skipped -
+        // see file header) - this is the RRF-stage recency blend in
+        // fuseRrf, which does run.
+        recency_reranked: true,
       },
     });
   } catch (err) {
@@ -1218,6 +1248,10 @@ async function generateTeamPulse(tenantId: string, permissionScopes: string[], s
   const items = authorized.map((m) => ({
     decision_statement: m.decision_statement, rationale: m.rationale,
     confidence: m.confidence, created_at: m.created_at,
+    // record_type wasn't on digest items before - TeamPulse.tsx needs it to
+    // bucket into its Decisions/Action items/Blockers sections the same way
+    // it already does for listAllDecisions() results.
+    record_type: m.decision_type,
   }));
 
   const now = new Date();

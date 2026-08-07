@@ -276,6 +276,7 @@ export interface DigestItem {
   rationale: string | null
   confidence: number
   created_at: string | null
+  record_type: DecisionRecordType | null
 }
 
 export interface DigestResponse {
@@ -320,8 +321,8 @@ export function getDecision(id: string): Promise<DecisionDetail> {
   return apiFetch<DecisionDetail>(`/api/v1/decisions/${id}`)
 }
 
-export function getDigest(scope: 'team' | 'personal'): Promise<DigestResponse> {
-  return apiFetch<DigestResponse>(`/digest?scope=${scope}`)
+export function getDigest(scope: 'team' | 'personal', refresh = false): Promise<DigestResponse> {
+  return apiFetch<DigestResponse>(`/digest?scope=${scope}${refresh ? '&refresh=true' : ''}`)
 }
 
 export interface CheckoutResponse {
