@@ -25,6 +25,7 @@
 // frontend-initiated call) is ported.
 
 import { withAdmin, withTenant } from "../_shared/db.ts";
+import { cleanDisplayText } from "../_shared/htmlText.ts";
 import * as jose from "npm:jose@5";
 
 const corsHeaders = {
@@ -152,22 +153,32 @@ function extractNotionPageText(page: any): string {
 // properties into readable text (see extractNotionPageText); everything
 // else falls back to the first populated text-shaped field, never
 // invents content.
+// Reads back envelope.raw_content.body exactly as gmail-manual-sync stored
+// it. That's clean plain text for anything ingested after the source-side
+// HTML fix, but rows captured before that fix (or any other future gap)
+// have raw HTML baked permanently into the encrypted blob - re-extracting
+// isn't possible since only the processed body was ever stored, not the
+// original MIME payload. cleanDisplayText() is the defensive fallback: it
+// strips HTML if the stored text still looks like markup, and swaps in a
+// plain placeholder if nothing readable survives, rather than rendering a
+// wall of raw tags (or a near-empty fragment like a stray "96" from a style
+// attribute) straight into the conversation thread.
 function extractEventText(rawContent: unknown, source: string): string {
-  if (!rawContent || typeof rawContent !== "object") return String(rawContent ?? "");
+  if (!rawContent || typeof rawContent !== "object") return cleanDisplayText(String(rawContent ?? ""));
   const content = rawContent as Record<string, unknown>;
   if (source === "gmail") {
     const subject = typeof content.subject === "string" ? content.subject : "";
-    const body = typeof content.body === "string" ? content.body : "";
+    const body = typeof content.body === "string" ? cleanDisplayText(content.body) : "";
     return subject ? `Subject: ${subject}\n${body}` : body;
   }
   if (source === "notion" && "properties" in content) {
-    return extractNotionPageText(content);
+    return cleanDisplayText(extractNotionPageText(content));
   }
   for (const field of ["text", "body", "content", "message", "description", "snippet"]) {
     const val = content[field];
-    if (typeof val === "string" && val) return val;
+    if (typeof val === "string" && val) return cleanDisplayText(val);
   }
-  return JSON.stringify(content);
+  return cleanDisplayText(JSON.stringify(content));
 }
 
 type ThreadMessage = { at: string; actor: string; source: string; text: string };
