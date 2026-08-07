@@ -1321,7 +1321,11 @@ export default function SettingsPage() {
                   {
                     id: 'raw-deleted',
                     icon: <ClockIcon />,
-                    text: 'Raw messages deleted within 24 hours of ingestion.',
+                    // Matches the real enforced retention (raw_events.expires_at
+                    // = 30 days, purged by a real daily job) - this card
+                    // previously said "24 hours", contradicting the Privacy tab's
+                    // own "Raw message retention: 30 days" a click away.
+                    text: 'Raw messages deleted within 30 days of ingestion.',
                   },
                   {
                     id: 'no-training',
@@ -1332,21 +1336,6 @@ export default function SettingsPage() {
                       </svg>
                     ),
                     text: 'We never train AI models on your workspace data.',
-                  },
-                  {
-                    id: 'readonly-oauth-check',
-                    icon: (
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                        <path
-                          d="M12 3l8 3v6c0 5-3.5 8.5-8 9-4.5-.5-8-4-8-9V6l8-3z"
-                          stroke="#5A45FF"
-                          strokeWidth="1.8"
-                          strokeLinejoin="round"
-                        />
-                        <path d="M9 12l2 2 4-4" stroke="#5A45FF" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-                      </svg>
-                    ),
-                    text: 'Read-only OAuth. Locus never writes to Slack, Notion, or Gmail.',
                   },
                 ].map((item) => (
                   <div

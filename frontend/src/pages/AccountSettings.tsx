@@ -336,6 +336,8 @@ export default function AccountSettings() {
   const [accountActionError, setAccountActionError] = useState('')
   const [isExporting, setIsExporting] = useState(false)
   const [exportError, setExportError] = useState('')
+  const [isSavingName, setIsSavingName] = useState(false)
+  const [nameSaveError, setNameSaveError] = useState('')
 
   useEffect(() => {
     const demoEmail = sessionStorage.getItem(DEMO_EMAIL_KEY)
@@ -364,10 +366,19 @@ export default function AccountSettings() {
           .filter(Boolean)
           .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
           .join(' ') || 'Locus User'
+      // Google OAuth sometimes only populates given_name/family_name and
+      // leaves full_name/name/display_name empty - falling straight through
+      // to the email-derived name in that case showed a name with no
+      // relation to the account's real one. Combining the two Google fields
+      // first still beats the email guess whenever either is present.
+      const googleName = [user.user_metadata.given_name, user.user_metadata.family_name]
+        .filter(Boolean)
+        .join(' ')
       const displayName =
         user.user_metadata.full_name ||
         user.user_metadata.name ||
         user.user_metadata.display_name ||
+        googleName ||
         emailName
 
       setName(String(displayName))
@@ -394,12 +405,29 @@ export default function AccountSettings() {
 
   const openEditor = () => {
     setDraftName(name)
+    setNameSaveError('')
     setIsEditing(true)
   }
 
-  const saveEditor = () => {
+  const saveEditor = async () => {
     const nextName = draftName.trim()
     if (!nextName) return
+    setNameSaveError('')
+
+    // Previously only called setName() - a local state update with nothing
+    // written back to Supabase, so the edit was lost on the next reload
+    // (applyUser() re-derives the name from user_metadata, which never
+    // changed) even though the UI showed the new name until then.
+    if (isSupabaseConfigured()) {
+      setIsSavingName(true)
+      const { error } = await getSupabaseClient().auth.updateUser({ data: { full_name: nextName } })
+      setIsSavingName(false)
+      if (error) {
+        setNameSaveError(error.message)
+        return
+      }
+    }
+
     setName(nextName)
     setIsEditing(false)
   }
@@ -539,6 +567,11 @@ export default function AccountSettings() {
                 />
                 <span className="text-[15px] font-medium text-[#24242A]">Email</span>
                 <span className="min-w-0 truncate text-[15px] text-[#7A8292]">{email}</span>
+                {nameSaveError ? (
+                  <p role="alert" className="col-span-2 text-[13px] text-[#B4232C]">
+                    {nameSaveError}
+                  </p>
+                ) : null}
               </div>
             ) : (
               <div className="min-w-0">
@@ -549,11 +582,11 @@ export default function AccountSettings() {
           </div>
           <button
             type="button"
-            onClick={isEditing ? saveEditor : openEditor}
-            disabled={isEditing && !draftName.trim()}
-            className="h-11 w-full shrink-0 rounded-[8px] bg-[#4B3BD4] px-8 text-[15px] font-semibold text-white transition-colors hover:bg-[#3F30BC] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#4B3BD4] sm:w-auto"
+            onClick={() => void (isEditing ? saveEditor() : openEditor())}
+            disabled={isSavingName || (isEditing && !draftName.trim())}
+            className="h-11 w-full shrink-0 rounded-[8px] bg-[#4B3BD4] px-8 text-[15px] font-semibold text-white transition-colors hover:bg-[#3F30BC] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#4B3BD4] disabled:cursor-wait disabled:opacity-70 sm:w-auto"
           >
-            {isEditing ? 'Save Edit' : 'Edit Info'}
+            {isSavingName ? 'Saving...' : isEditing ? 'Save Edit' : 'Edit Info'}
           </button>
         </div>
 
