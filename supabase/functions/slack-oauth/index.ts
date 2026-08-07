@@ -4,15 +4,15 @@
 // names. Real table (from Lam's migrations, matching the DS lead's schema)
 // is "source_connections" — see backend/src/database/migrations/003.
 //
-// TODO (Rebira): oauth_token_ref is meant to be a *reference* to a Supabase
-// Vault secret, not the raw token. This version stores the raw token
-// directly for now, to unblock testing tonight — flagged clearly so it
-// doesn't get forgotten before any real (non-test) credentials touch this.
-// Proper fix: create a small Postgres function that wraps vault.create_secret,
-// call it via RPC here, store the returned secret id instead.
+// oauth_token_ref now holds an AES-256-GCM-encrypted token (see
+// _shared/tokenCrypto.ts), not the raw value - was plaintext, flagged with
+// a TODO here as an interim state pending a real fix. AES-GCM here is that
+// fix's interim step (Vault/KMS remains a real future upgrade, but doesn't
+// block closing the plaintext-in-the-database gap now).
 
 import { withTenant } from "../_shared/db.ts";
 import { enqueueEvent } from "../_shared/queue.ts";
+import { encryptToken } from "../_shared/tokenCrypto.ts";
 import {
   authorizeErrorResponse,
   encodeState,
@@ -167,6 +167,7 @@ Deno.serve(async (req: Request) => {
     }
 
     try {
+      const encryptedToken = await encryptToken(tokenData.access_token);
       await withTenant(tenantId, async (sql) => {
         await sql`
           insert into public.source_connections (
@@ -176,7 +177,7 @@ Deno.serve(async (req: Request) => {
             ${tenantId}::uuid,
             'slack',
             ${tokenData.team?.id ?? null},
-            ${tokenData.access_token},
+            ${encryptedToken},
             'realtime',
             'active',
             ${sql.json({ bot_user_id: tokenData.bot_user_id ?? null })}::jsonb

@@ -1,5 +1,7 @@
 import { withAdmin, withTenant } from "../_shared/db.ts";
 import { enqueueEvent, IngestionEnvelope } from "../_shared/queue.ts";
+import { htmlToPlainText } from "../_shared/htmlText.ts";
+import { encryptToken } from "../_shared/tokenCrypto.ts";
 
 console.log("Gmail manual sync started!");
 
@@ -61,10 +63,11 @@ async function refreshAccessToken(source: any): Promise<string | null> {
   const newAccessToken = data.access_token as string | undefined;
   if (!newAccessToken) return null;
 
+  const encryptedToken = await encryptToken(newAccessToken);
   await withTenant(String(source.tenant_id), async (sql) => {
     await sql`
       update public.source_connections
-      set oauth_token_ref = ${newAccessToken}
+      set oauth_token_ref = ${encryptedToken}
       where id = ${source.id}
     `;
   });
@@ -191,26 +194,6 @@ function findGmailBodyPart(node: GmailMimePart | undefined): { mimeType: string;
 
 function decodeGmailBase64(data: string): string {
   return atob(data.replace(/-/g, "+").replace(/_/g, "/"));
-}
-
-// Lightweight tag-stripping, not a real HTML parser - good enough to turn a
-// newsletter's markup into readable text without pulling in a DOM dependency
-// inside a Deno edge function.
-function htmlToPlainText(html: string): string {
-  return html
-    .replace(/<(script|style)[^>]*>[\s\S]*?<\/\1>/gi, " ")
-    .replace(/<br\s*\/?>/gi, "\n")
-    .replace(/<\/(p|div|tr|li|h[1-6])>/gi, "\n")
-    .replace(/<[^>]+>/g, " ")
-    .replace(/&nbsp;/gi, " ")
-    .replace(/&amp;/gi, "&")
-    .replace(/&lt;/gi, "<")
-    .replace(/&gt;/gi, ">")
-    .replace(/&quot;/gi, "\"")
-    .replace(/&#39;/gi, "'")
-    .replace(/[ \t]+/g, " ")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
 }
 
 // Lowered alongside BACKFILL_MAX_MESSAGES for the same reason - fewer

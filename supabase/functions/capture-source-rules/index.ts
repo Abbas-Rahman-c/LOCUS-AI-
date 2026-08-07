@@ -15,6 +15,7 @@
 //   toggle -> { source, item_id, item_name, included } -> { included }
 
 import { getServiceClient } from "../_shared/supabase.ts";
+import { decryptToken } from "../_shared/tokenCrypto.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -154,7 +155,7 @@ Deno.serve(async (req: Request) => {
     const itemsByKey = new Map<string, RealItem>();
     for (const row of sources ?? []) {
       const source = row.source as Source;
-      const accessToken = row.oauth_token_ref as string | null;
+      const accessToken = await decryptToken(row.oauth_token_ref as string | null);
       if (!accessToken) continue;
       try {
         for (const item of await fetchRealItems(source, accessToken)) {

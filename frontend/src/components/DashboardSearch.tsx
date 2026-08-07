@@ -34,7 +34,11 @@ function toSuggestion(statement: string): string {
 type RecentSearch = { query: string; at: number }
 
 function firstName(email: string | null | undefined, displayName: string | null | undefined) {
-  if (displayName) return displayName.split(/\s+/)[0]
+  // displayName's first token was returned raw - Supabase/Google metadata
+  // is lowercase for some accounts, so the greeting read "Good evening,
+  // shubham" instead of "Shubham". Only the email-prefix fallback below
+  // ever title-cased.
+  if (displayName) return displayName.split(/\s+/)[0].replace(/^\w/, (c) => c.toUpperCase())
   if (!email) return 'there'
   return email.split('@')[0].split(/[._-]+/)[0].replace(/^\w/, (c) => c.toUpperCase())
 }

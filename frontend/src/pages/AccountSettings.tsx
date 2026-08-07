@@ -3,7 +3,12 @@ import { useNavigate } from 'react-router-dom'
 import type { User } from '@supabase/supabase-js'
 import { getSupabaseClient, isSupabaseConfigured } from '../lib/supabase'
 import { DEMO_EMAIL_KEY, WORKSPACES_DONE_KEY } from '../lib/sessionKeys'
-import { clearBackendSession, createCheckoutSession } from '../lib/api'
+import { clearBackendSession, createCheckoutSession, getTenantPlan } from '../lib/api'
+
+const PLAN_LABELS: Record<string, string> = {
+  self_serve: 'Individual',
+  team: 'Team',
+}
 
 function TrashIcon() {
   return (
@@ -71,19 +76,24 @@ function PlanFeature({
   )
 }
 
-function PlanPicker({ onClose }: { onClose: () => void }) {
-  const [isUpgrading, setIsUpgrading] = useState(false)
-  const [upgradeError, setUpgradeError] = useState('')
+function PlanPicker({ onClose, currentPlan }: { onClose: () => void; currentPlan: string }) {
+  // Previously hardcoded: Individual's button was always a disabled
+  // "Current" and Team's always called checkout for 'team' - correct only
+  // for a tenant already on Individual. A tenant actually on Team saw a
+  // "Current" badge on the plan they'd already left and an "Upgrade" button
+  // for the one they already had.
+  const [switchingTo, setSwitchingTo] = useState<'self_serve' | 'team' | null>(null)
+  const [checkoutError, setCheckoutError] = useState('')
 
-  const handleUpgrade = async () => {
-    setIsUpgrading(true)
-    setUpgradeError('')
+  const startCheckout = async (plan: 'self_serve' | 'team') => {
+    setSwitchingTo(plan)
+    setCheckoutError('')
     try {
-      const { checkout_url } = await createCheckoutSession('team')
+      const { checkout_url } = await createCheckoutSession(plan)
       window.location.href = checkout_url
     } catch (error) {
-      setUpgradeError(error instanceof Error ? error.message : 'Unable to start checkout.')
-      setIsUpgrading(false)
+      setCheckoutError(error instanceof Error ? error.message : 'Unable to start checkout.')
+      setSwitchingTo(null)
     }
   }
 
@@ -149,13 +159,24 @@ function PlanPicker({ onClose }: { onClose: () => void }) {
                 </PlanFeature>
               </ul>
               <div className="mt-auto border-t border-[#E0E2E8] pt-6">
-                <button
-                  type="button"
-                  disabled
-                  className="h-12 w-full rounded-[8px] border border-[#DCE0E7] bg-white text-[16px] font-medium text-[#4B3BD4]"
-                >
-                  Current
-                </button>
+                {currentPlan === 'self_serve' ? (
+                  <button
+                    type="button"
+                    disabled
+                    className="h-12 w-full rounded-[8px] border border-[#DCE0E7] bg-white text-[16px] font-medium text-[#4B3BD4]"
+                  >
+                    Current
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    disabled={switchingTo !== null}
+                    onClick={() => void startCheckout('self_serve')}
+                    className="h-12 w-full rounded-[8px] border border-[#DCE0E7] bg-white text-[16px] font-medium text-[#4B3BD4] hover:bg-[#F8F7FF] disabled:cursor-wait disabled:opacity-70"
+                  >
+                    {switchingTo === 'self_serve' ? 'Starting checkout...' : 'Switch to Individual'}
+                  </button>
+                )}
               </div>
             </div>
           </article>
@@ -199,17 +220,27 @@ function PlanPicker({ onClose }: { onClose: () => void }) {
                 </PlanFeature>
               </ul>
               <div className="mt-auto border-t border-[#E0E2E8] pt-6">
-                <button
-                  type="button"
-                  disabled={isUpgrading}
-                  onClick={() => void handleUpgrade()}
-                  className="h-12 w-full rounded-[8px] bg-[#4B3BD4] text-[16px] font-semibold text-white hover:bg-[#3F30BC] disabled:cursor-wait disabled:opacity-70"
-                >
-                  {isUpgrading ? 'Starting checkout...' : 'Upgrade'}
-                </button>
-                {upgradeError ? (
+                {currentPlan === 'team' ? (
+                  <button
+                    type="button"
+                    disabled
+                    className="h-12 w-full rounded-[8px] border border-[#DCE0E7] bg-white text-[16px] font-medium text-[#4B3BD4]"
+                  >
+                    Current
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    disabled={switchingTo !== null}
+                    onClick={() => void startCheckout('team')}
+                    className="h-12 w-full rounded-[8px] bg-[#4B3BD4] text-[16px] font-semibold text-white hover:bg-[#3F30BC] disabled:cursor-wait disabled:opacity-70"
+                  >
+                    {switchingTo === 'team' ? 'Starting checkout...' : 'Upgrade'}
+                  </button>
+                )}
+                {checkoutError ? (
                   <p role="alert" className="mt-2 text-[13px] text-[#B4232C]">
-                    {upgradeError}
+                    {checkoutError}
                   </p>
                 ) : null}
               </div>
@@ -336,6 +367,14 @@ export default function AccountSettings() {
   const [accountActionError, setAccountActionError] = useState('')
   const [isExporting, setIsExporting] = useState(false)
   const [exportError, setExportError] = useState('')
+  const [isSavingName, setIsSavingName] = useState(false)
+  const [nameSaveError, setNameSaveError] = useState('')
+  // Was a hardcoded "Free" literal in the JSX below, completely disconnected
+  // from tenants.plan - it never changed no matter what plan the tenant was
+  // actually on, or after actually completing checkout. Real values are
+  // 'self_serve' ($12/mo, "Individual") or 'team' ($15/mo) - there is no
+  // "Free" plan in the schema.
+  const [plan, setPlan] = useState<string | null>(null)
 
   useEffect(() => {
     const demoEmail = sessionStorage.getItem(DEMO_EMAIL_KEY)
@@ -364,10 +403,19 @@ export default function AccountSettings() {
           .filter(Boolean)
           .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
           .join(' ') || 'Locus User'
+      // Google OAuth sometimes only populates given_name/family_name and
+      // leaves full_name/name/display_name empty - falling straight through
+      // to the email-derived name in that case showed a name with no
+      // relation to the account's real one. Combining the two Google fields
+      // first still beats the email guess whenever either is present.
+      const googleName = [user.user_metadata.given_name, user.user_metadata.family_name]
+        .filter(Boolean)
+        .join(' ')
       const displayName =
         user.user_metadata.full_name ||
         user.user_metadata.name ||
         user.user_metadata.display_name ||
+        googleName ||
         emailName
 
       setName(String(displayName))
@@ -385,6 +433,18 @@ export default function AccountSettings() {
     return () => data.subscription.unsubscribe()
   }, [])
 
+  useEffect(() => {
+    if (sessionStorage.getItem(DEMO_EMAIL_KEY)) return
+    if (!isSupabaseConfigured()) return
+    getTenantPlan()
+      .then(setPlan)
+      .catch(() => {
+        // No real backend session (not signed in, or the tenant-session
+        // exchange failed) - leave plan null rather than showing a wrong
+        // guess; the badge below just hides in that case.
+      })
+  }, [])
+
   const initials = name
     .split(/\s+/)
     .filter(Boolean)
@@ -394,12 +454,29 @@ export default function AccountSettings() {
 
   const openEditor = () => {
     setDraftName(name)
+    setNameSaveError('')
     setIsEditing(true)
   }
 
-  const saveEditor = () => {
+  const saveEditor = async () => {
     const nextName = draftName.trim()
     if (!nextName) return
+    setNameSaveError('')
+
+    // Previously only called setName() - a local state update with nothing
+    // written back to Supabase, so the edit was lost on the next reload
+    // (applyUser() re-derives the name from user_metadata, which never
+    // changed) even though the UI showed the new name until then.
+    if (isSupabaseConfigured()) {
+      setIsSavingName(true)
+      const { error } = await getSupabaseClient().auth.updateUser({ data: { full_name: nextName } })
+      setIsSavingName(false)
+      if (error) {
+        setNameSaveError(error.message)
+        return
+      }
+    }
+
     setName(nextName)
     setIsEditing(false)
   }
@@ -539,6 +616,11 @@ export default function AccountSettings() {
                 />
                 <span className="text-[15px] font-medium text-[#24242A]">Email</span>
                 <span className="min-w-0 truncate text-[15px] text-[#7A8292]">{email}</span>
+                {nameSaveError ? (
+                  <p role="alert" className="col-span-2 text-[13px] text-[#B4232C]">
+                    {nameSaveError}
+                  </p>
+                ) : null}
               </div>
             ) : (
               <div className="min-w-0">
@@ -549,11 +631,11 @@ export default function AccountSettings() {
           </div>
           <button
             type="button"
-            onClick={isEditing ? saveEditor : openEditor}
-            disabled={isEditing && !draftName.trim()}
-            className="h-11 w-full shrink-0 rounded-[8px] bg-[#4B3BD4] px-8 text-[15px] font-semibold text-white transition-colors hover:bg-[#3F30BC] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#4B3BD4] sm:w-auto"
+            onClick={() => void (isEditing ? saveEditor() : openEditor())}
+            disabled={isSavingName || (isEditing && !draftName.trim())}
+            className="h-11 w-full shrink-0 rounded-[8px] bg-[#4B3BD4] px-8 text-[15px] font-semibold text-white transition-colors hover:bg-[#3F30BC] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#4B3BD4] disabled:cursor-wait disabled:opacity-70 sm:w-auto"
           >
-            {isEditing ? 'Save Edit' : 'Edit Info'}
+            {isSavingName ? 'Saving...' : isEditing ? 'Save Edit' : 'Edit Info'}
           </button>
         </div>
 
@@ -561,9 +643,11 @@ export default function AccountSettings() {
           <div>
             <div className="flex items-center gap-2.5">
               <h2 className="text-[15px] font-semibold text-[#24242A]">Subscription</h2>
-              <span className="rounded-full bg-[#E8E9ED] px-2.5 py-1 text-[13px] font-medium text-[#7B8290]">
-                Free
-              </span>
+              {plan ? (
+                <span className="rounded-full bg-[#E8E9ED] px-2.5 py-1 text-[13px] font-medium text-[#7B8290]">
+                  {PLAN_LABELS[plan] ?? plan}
+                </span>
+              ) : null}
             </div>
             <p className="mt-1.5 text-[14px] text-[#7A8292]">Learn our plans.</p>
           </div>
@@ -757,7 +841,9 @@ export default function AccountSettings() {
         </div>
       ) : null}
 
-      {isPlanPickerOpen ? <PlanPicker onClose={() => setIsPlanPickerOpen(false)} /> : null}
+      {isPlanPickerOpen ? (
+        <PlanPicker onClose={() => setIsPlanPickerOpen(false)} currentPlan={plan ?? 'self_serve'} />
+      ) : null}
 
       {isBillingOpen ? (
         <BillingInformation

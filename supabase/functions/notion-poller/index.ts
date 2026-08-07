@@ -1,5 +1,6 @@
 import { withAdmin, withTenant } from "../_shared/db.ts";
 import { enqueueEvent, IngestionEnvelope } from "../_shared/queue.ts";
+import { decryptToken } from "../_shared/tokenCrypto.ts";
 
 console.log("Notion poller started!");
 
@@ -20,7 +21,7 @@ Deno.serve(async (_req) => {
     try {
       console.log(`Polling workspace: ${source.external_workspace_id}`);
 
-      const accessToken = source.oauth_token_ref;
+      const accessToken = await decryptToken(source.oauth_token_ref);
       if (!accessToken) {
         console.error(`No access token for source ${source.id}`);
         continue;

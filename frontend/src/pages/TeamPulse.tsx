@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { listAllDecisions, type DecisionOut, type DecisionRecordType } from '../lib/api'
+import { getDigest, listAllDecisions, type DecisionOut, type DecisionRecordType } from '../lib/api'
 import { decisionToMemoryRecord } from '../lib/memoryRecord'
 import { MemoryRecordDetail } from '../components/MemoryRecordDetail'
+import { TEAM_PULSE_SEEN_EVENT, TEAM_PULSE_SEEN_KEY } from '../lib/sessionKeys'
 
 type PulseSection = {
   count: number
@@ -181,6 +182,28 @@ export default function TeamPulse() {
   const [isLoading, setIsLoading] = useState(true)
   const [loadError, setLoadError] = useState('')
   const [feedback, setFeedback] = useState<'up' | 'down' | null>(null)
+  // The page's own copy promises "your week, synthesized" - previously
+  // nothing on the page was actually synthesized, just a client-side
+  // record_type/date filter over the raw decision list. GET /digest?scope=team
+  // (real Claude-generated summary, persisted per ISO week in weekly_digests,
+  // regenerated at most once per week unless refresh=true) only covers the
+  // current week server-side, so it's fetched alongside the existing
+  // per-item list rather than replacing it - the items below still come from
+  // listAllDecisions() so they keep full fidelity (real participant names,
+  // clickable through to full memory detail) that the lighter digest
+  // response doesn't carry.
+  const [digestSummary, setDigestSummary] = useState('')
+  const [isDigestLoading, setIsDigestLoading] = useState(false)
+
+  // Was a static `badge: true` on the nav link, always on regardless of
+  // whether Team Pulse had ever actually been opened - this is what marks
+  // it seen, once, when the page is actually visited.
+  useEffect(() => {
+    if (localStorage.getItem(TEAM_PULSE_SEEN_KEY)) return
+    localStorage.setItem(TEAM_PULSE_SEEN_KEY, 'true')
+    window.dispatchEvent(new Event(TEAM_PULSE_SEEN_EVENT))
+  }, [])
+
   const rangeDays = Math.round((rangeEnd.getTime() - rangeStart.getTime()) / DAY_IN_MS) + 1
   const isFullWeek = rangeDays === 7 && rangeStart.getDay() === 1
   const isCurrentWeek =
@@ -192,11 +215,11 @@ export default function TeamPulse() {
       ? 'Selected Week'
       : 'Selected Date Range'
 
-  // Real backend has no per-range digest endpoint (GET /digest only covers a
-  // fixed trailing 7 days), so this pulls every decision the tenant has via
-  // GET /api/v1/decisions and filters by record_type + created_at client
-  // side — real data for whatever range the picker above selects, not just
-  // the current week.
+  // Real backend has no per-range digest endpoint (GET /digest only covers
+  // the current ISO week), so the actual per-item list - for any range,
+  // including the current week - still pulls every decision the tenant has
+  // via GET /api/v1/decisions and filters by record_type + created_at
+  // client side, real data for whatever range the picker above selects.
   useEffect(() => {
     let active = true
     setIsLoading(true)
@@ -229,6 +252,35 @@ export default function TeamPulse() {
       active = false
     }
   }, [rangeEnd, rangeStart])
+
+  // The actual synthesized summary - only fetched for the current week,
+  // since that's all the real digest endpoint covers. Reads the persisted
+  // weekly_digests row if one already exists for this ISO week rather than
+  // regenerating (no refresh=true here), same real caching the backend
+  // already had, just never called from this page before.
+  useEffect(() => {
+    if (!isCurrentWeek) {
+      setDigestSummary('')
+      return
+    }
+    let active = true
+    setIsDigestLoading(true)
+    getDigest('team')
+      .then((digest) => {
+        if (active) setDigestSummary(digest.summary)
+      })
+      .catch(() => {
+        // Fails quietly - the per-item breakdown below still loads
+        // independently and is the more load-bearing part of the page.
+        if (active) setDigestSummary('')
+      })
+      .finally(() => {
+        if (active) setIsDigestLoading(false)
+      })
+    return () => {
+      active = false
+    }
+  }, [isCurrentWeek])
 
   const moveRange = (amount: number) => {
     const dayOffset = amount * rangeDays
@@ -371,6 +423,15 @@ export default function TeamPulse() {
               </p>
             ) : pulse ? (
               <>
+                {isCurrentWeek ? (
+                  isDigestLoading ? (
+                    <p className="text-[13px] italic text-[#9CA3AF]">Synthesizing this week…</p>
+                  ) : digestSummary ? (
+                    <p className="rounded-[6px] bg-[#F7F7FB] p-4 text-[14px] leading-relaxed text-[#3F424C]">
+                      {digestSummary}
+                    </p>
+                  ) : null
+                ) : null}
                 <PulseGroup title="Decisions" color="#5644DF" section={pulse.decisions} />
                 <PulseGroup title="Action items" color="#9CDD24" section={pulse.actionItems} />
                 <PulseGroup title="Blockers" color="#F3464B" section={pulse.blockers} />

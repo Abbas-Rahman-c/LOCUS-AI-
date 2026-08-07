@@ -17,6 +17,7 @@ interface BackendSession {
   token: string
   tenantId: string
   role: string
+  plan: string
   expiresAt: number
 }
 
@@ -88,6 +89,7 @@ async function exchangeForBackendSession(): Promise<BackendSession> {
     token: string
     tenant_id: string
     role: string
+    plan: string
     expires_in: number
   }
 
@@ -95,6 +97,7 @@ async function exchangeForBackendSession(): Promise<BackendSession> {
     token: body.token,
     tenantId: body.tenant_id,
     role: body.role,
+    plan: body.plan,
     // Refresh a minute early rather than exactly at expiry.
     expiresAt: Date.now() + Math.max(0, body.expires_in - 60) * 1000,
   }
@@ -136,6 +139,21 @@ export async function getTenantId(): Promise<string> {
   }
   const session = await pendingExchange
   return session.tenantId
+}
+
+/** Returns the tenant's real subscription plan ('self_serve' | 'team'), exchanging as needed. */
+export async function getTenantPlan(): Promise<string> {
+  assertNotDemoMode()
+  if (cachedSession && cachedSession.expiresAt > Date.now()) {
+    return cachedSession.plan
+  }
+  if (!pendingExchange) {
+    pendingExchange = exchangeForBackendSession().finally(() => {
+      pendingExchange = null
+    })
+  }
+  const session = await pendingExchange
+  return session.plan
 }
 
 /**
@@ -258,6 +276,7 @@ export interface DigestItem {
   rationale: string | null
   confidence: number
   created_at: string | null
+  record_type: DecisionRecordType | null
 }
 
 export interface DigestResponse {
@@ -302,8 +321,8 @@ export function getDecision(id: string): Promise<DecisionDetail> {
   return apiFetch<DecisionDetail>(`/api/v1/decisions/${id}`)
 }
 
-export function getDigest(scope: 'team' | 'personal'): Promise<DigestResponse> {
-  return apiFetch<DigestResponse>(`/digest?scope=${scope}`)
+export function getDigest(scope: 'team' | 'personal', refresh = false): Promise<DigestResponse> {
+  return apiFetch<DigestResponse>(`/digest?scope=${scope}${refresh ? '&refresh=true' : ''}`)
 }
 
 export interface CheckoutResponse {
