@@ -7,6 +7,7 @@ import {
   resolveRedirectOrigin,
   resolveTenantFromAuthorize,
 } from "../_shared/oauth_tenant.ts";
+import { encryptToken } from "../_shared/tokenCrypto.ts";
 
 console.log("Notion OAuth handler started!");
 
@@ -93,6 +94,7 @@ Deno.serve(async (req: Request) => {
       const lastSyncedAt = syncMode === "new" ? new Date().toISOString() : null;
 
       try {
+        const encryptedToken = await encryptToken(tokenData.access_token);
         await withTenant(tenantId, async (sql) => {
           await sql`
             insert into public.source_connections (
@@ -102,7 +104,7 @@ Deno.serve(async (req: Request) => {
               ${tenantId}::uuid,
               'notion',
               ${tokenData.workspace_id},
-              ${tokenData.access_token},
+              ${encryptedToken},
               'polling',
               'active',
               '{}'::jsonb,

@@ -1,6 +1,7 @@
 import { withAdmin, withTenant } from "../_shared/db.ts";
 import { enqueueEvent, IngestionEnvelope } from "../_shared/queue.ts";
 import { htmlToPlainText } from "../_shared/htmlText.ts";
+import { encryptToken } from "../_shared/tokenCrypto.ts";
 
 console.log("Gmail manual sync started!");
 
@@ -62,10 +63,11 @@ async function refreshAccessToken(source: any): Promise<string | null> {
   const newAccessToken = data.access_token as string | undefined;
   if (!newAccessToken) return null;
 
+  const encryptedToken = await encryptToken(newAccessToken);
   await withTenant(String(source.tenant_id), async (sql) => {
     await sql`
       update public.source_connections
-      set oauth_token_ref = ${newAccessToken}
+      set oauth_token_ref = ${encryptedToken}
       where id = ${source.id}
     `;
   });

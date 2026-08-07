@@ -7,6 +7,7 @@ import {
   resolveRedirectOrigin,
   resolveTenantFromAuthorize,
 } from "../_shared/oauth_tenant.ts";
+import { encryptToken } from "../_shared/tokenCrypto.ts";
 
 console.log("Gmail OAuth handler started!");
 
@@ -116,7 +117,7 @@ Deno.serve(async (req: Request) => {
       const lastSyncedAt = syncMode === "new" ? new Date().toISOString() : null;
 
       // 3. Store the connection under tenant GUC (locus_app / APP_DATABASE_URL).
-      // Token stored as plain text for now to unblock testing.
+      const encryptedToken = await encryptToken(tokenData.access_token);
       try {
         await withTenant(tenantId, async (sql) => {
           await sql`
@@ -127,7 +128,7 @@ Deno.serve(async (req: Request) => {
               ${tenantId}::uuid,
               'gmail',
               ${email},
-              ${tokenData.access_token},
+              ${encryptedToken},
               'polling',
               'active',
               ${sql.json({

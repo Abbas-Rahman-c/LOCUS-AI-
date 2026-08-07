@@ -26,6 +26,7 @@
 
 import { withAdmin, withTenant } from "../_shared/db.ts";
 import { cleanDisplayText } from "../_shared/htmlText.ts";
+import { decryptToken } from "../_shared/tokenCrypto.ts";
 import * as jose from "npm:jose@5";
 
 const corsHeaders = {
@@ -216,7 +217,7 @@ async function resolveSlackNamesLive(sql: any, tenantId: string, slackUserIds: s
       WHERE tenant_id = ${tenantId} AND source = 'slack' AND status = 'active'
       ORDER BY created_at ASC LIMIT 1
     `;
-    const accessToken = connRows[0]?.oauth_token_ref;
+    const accessToken = await decryptToken(connRows[0]?.oauth_token_ref);
     if (!accessToken) return resolved;
 
     for (const slackUserId of slackUserIds) {
