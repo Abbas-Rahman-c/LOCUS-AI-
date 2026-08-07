@@ -19,6 +19,7 @@
 // No infinite loop - the cron interval is the poll loop.
 
 import { withAdmin, withTenant } from "../_shared/db.ts";
+import { decryptToken } from "../_shared/tokenCrypto.ts";
 
 const corsHeaders = { "Access-Control-Allow-Origin": "*" };
 
@@ -575,6 +576,40 @@ async function resolveActorId(
   return created[0].id;
 }
 
+// slack-webhook only had enough data to build a slack:// deep link (opens
+// the desktop app, not something a browser's "View Original" button can do
+// anything useful with - most browsers either no-op or prompt to open an
+// app that may not be installed). Real https:// permalinks need
+// chat.getPermalink, which needs a bot token - not worth calling for every
+// raw event (most get discarded), so it only runs here, once per message
+// that actually becomes a decision. Falls back to the slack:// link (still
+// better than nothing) if the API call fails for any reason.
+// deno-lint-ignore no-explicit-any
+async function resolveSlackPermalink(
+  sql: any, tenantId: string, channel: string, messageTs: string, fallback: string | null | undefined,
+): Promise<string | null | undefined> {
+  try {
+    const connRows = await sql`
+      SELECT oauth_token_ref FROM public.source_connections
+      WHERE tenant_id = ${tenantId} AND source = 'slack' AND status = 'active'
+      ORDER BY created_at ASC LIMIT 1
+    `;
+    const accessToken = await decryptToken(connRows[0]?.oauth_token_ref);
+    if (!accessToken) return fallback;
+
+    const resp = await fetchWithTimeout(
+      `https://slack.com/api/chat.getPermalink?channel=${encodeURIComponent(channel)}&message_ts=${encodeURIComponent(messageTs)}`,
+      { headers: { Authorization: `Bearer ${accessToken}` } },
+      8_000,
+    );
+    const data = await resp.json();
+    return data.ok && typeof data.permalink === "string" ? data.permalink : fallback;
+  } catch (err) {
+    console.error(`resolveSlackPermalink failed for channel=${channel} ts=${messageTs}:`, err);
+    return fallback;
+  }
+}
+
 // ── pgmq helpers (raw SQL, mirrors queues.pgmq.client) ────────────────────
 
 type PgmqMsg = { msg_id: number; message: Record<string, unknown>; read_ct: number };
@@ -812,10 +847,14 @@ async function handleIngestionMessageInner(msg: PgmqMsg): Promise<string> {
     `;
     const newDecisionId = decisionRows[0].id as string;
 
-    if (payload.source_permalink) {
+    const permalink = payload.source === "slack" && payload.permission_scope?.[0]
+      ? await resolveSlackPermalink(sql, tenantId, payload.permission_scope[0], payload.source_id, payload.source_permalink)
+      : payload.source_permalink;
+
+    if (permalink) {
       await sql`
         INSERT INTO public.decision_sources (tenant_id, decision_id, raw_event_id, permalink)
-        VALUES (${tenantId}, ${newDecisionId}, ${rawEventId}, ${payload.source_permalink})
+        VALUES (${tenantId}, ${newDecisionId}, ${rawEventId}, ${permalink})
         ON CONFLICT (decision_id, permalink) DO NOTHING
       `;
     }

@@ -40,16 +40,35 @@ export function looksLikeHtml(text: string): boolean {
   return (tagMatches?.length ?? 0) >= 3;
 }
 
-// Defensive cleanup for any stored body that might still carry raw HTML
+// Strips CSS that survives even when looksLikeHtml() finds no angle-bracket
+// tags to trigger on - e.g. a legacy row whose stored body ended up being
+// (or containing) the inside of a <style> block with the tags themselves
+// already gone, leaving bare rule blocks and declarations. Confirmed live:
+// one such row rendered as a lone "96" (a fragment of
+// "<o:PixelsPerInch>96</o:PixelsPerInch>") with no HTML tags left to strip.
+function stripCssRemnants(text: string): string {
+  return text
+    .replace(/[.#@]?[\w-]+\s*\{[^{}]*\}/g, " ") // rule blocks: .foo { ... }
+    .replace(/[a-zA-Z-]+\s*:\s*[^;{}\n]+;/g, " ") // bare declarations: color: red;
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
+// A body counts as real prose only if it has several actual word-like
+// tokens - catches style-property soup ("family Arial sans-serif") that a
+// raw letter count would wrongly accept as "meaningful" text.
+function isReadableProse(text: string): boolean {
+  const words = text.split(/\s+/).filter((w) => /^[A-Za-z][A-Za-z'.,!?-]*$/.test(w) && w.length >= 2);
+  return words.length >= 4;
+}
+
+// Defensive cleanup for any stored body that might still carry raw HTML/CSS
 // (legacy rows ingested before the source-side fix, or any future gap in
-// it) - runs htmlToPlainText only when the text actually looks like markup,
-// so already-clean bodies pass through untouched. Falls back to a plain
-// placeholder when nothing readable survives (e.g. a legacy row whose
-// stored body was already reduced to a stray HTML fragment like "96" from
-// a style attribute, with nothing left to recover), instead of rendering
-// a near-empty wall of whitespace.
+// it) - so already-clean bodies pass through untouched, but nothing
+// readable surviving falls back to a plain placeholder instead of
+// rendering a near-empty wall of whitespace or a stray markup fragment.
 export function cleanDisplayText(text: string): string {
-  const cleaned = looksLikeHtml(text) ? htmlToPlainText(text) : text.trim();
-  const meaningful = cleaned.replace(/[^a-zA-Z]/g, "").length;
-  return meaningful >= 5 ? cleaned : "(no readable message content captured)";
+  const htmlStripped = looksLikeHtml(text) ? htmlToPlainText(text) : text;
+  const cleaned = stripCssRemnants(htmlStripped);
+  return isReadableProse(cleaned) ? cleaned : "(no readable message content captured)";
 }
