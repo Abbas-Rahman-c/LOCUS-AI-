@@ -35,6 +35,29 @@ const IP_LIMIT = 60; // messages
 const IP_WINDOW_MS = 60 * 60 * 1000; // 1 hour
 const MAX_MESSAGE_CHARS = 2000; // guards against someone pasting a novel to inflate token cost per call
 
+// ── Global daily spend cap ────────────────────────────────────────────
+// Per-session/per-IP limits (above) stop any one visitor from running up
+// cost, but say nothing about total traffic across every visitor combined.
+// This is the backstop: track real Anthropic usage per UTC day and refuse
+// to place new calls once the day's estimated spend clears the cap, rather
+// than relying on the Anthropic account-wide limit (which would also take
+// the core Locus AI pipeline down with it - see this session's Aug 4
+// incident). Haiku 4.5 pricing: $1/$5 per MTok input/output; cache write
+// (5-minute) ~1.25x base input, cache read ~0.1x base input.
+const DAILY_SPEND_CAP_USD = Number(Deno.env.get("LOCI_DAILY_SPEND_CAP_USD") ?? "5");
+const PRICE_PER_MTOK = { input: 1.0, output: 5.0, cacheWrite: 1.25, cacheRead: 0.1 };
+
+function estimateCostUsd(u: {
+  input_tokens: number; output_tokens: number; cache_creation_input_tokens: number; cache_read_input_tokens: number;
+}): number {
+  return (
+    (u.input_tokens / 1_000_000) * PRICE_PER_MTOK.input +
+    (u.output_tokens / 1_000_000) * PRICE_PER_MTOK.output +
+    (u.cache_creation_input_tokens / 1_000_000) * PRICE_PER_MTOK.cacheWrite +
+    (u.cache_read_input_tokens / 1_000_000) * PRICE_PER_MTOK.cacheRead
+  );
+}
+
 // deno-lint-ignore no-explicit-any
 async function ensureSchema(sql: any) {
   await sql`
@@ -56,6 +79,47 @@ async function ensureSchema(sql: any) {
       window_start timestamptz NOT NULL DEFAULT now(),
       request_count int NOT NULL DEFAULT 0
     )
+  `;
+  // One row per UTC day. request_count here is successful Claude calls only
+  // (rate-limited/rejected requests never reach the point this is updated),
+  // which is what basic query-volume analytics also wants to read.
+  await sql`
+    CREATE TABLE IF NOT EXISTS public.loci_daily_usage (
+      usage_date date PRIMARY KEY,
+      input_tokens bigint NOT NULL DEFAULT 0,
+      output_tokens bigint NOT NULL DEFAULT 0,
+      cache_creation_input_tokens bigint NOT NULL DEFAULT 0,
+      cache_read_input_tokens bigint NOT NULL DEFAULT 0,
+      request_count int NOT NULL DEFAULT 0
+    )
+  `;
+}
+
+// deno-lint-ignore no-explicit-any
+async function todaysSpendUsd(sql: any): Promise<number> {
+  const rows = await sql`
+    SELECT input_tokens, output_tokens, cache_creation_input_tokens, cache_read_input_tokens
+    FROM public.loci_daily_usage WHERE usage_date = CURRENT_DATE
+  `;
+  if (rows.length === 0) return 0;
+  return estimateCostUsd(rows[0] as {
+    input_tokens: number; output_tokens: number; cache_creation_input_tokens: number; cache_read_input_tokens: number;
+  });
+}
+
+// deno-lint-ignore no-explicit-any
+async function recordUsage(sql: any, usage: {
+  input_tokens?: number; output_tokens?: number; cache_creation_input_tokens?: number; cache_read_input_tokens?: number;
+}) {
+  await sql`
+    INSERT INTO public.loci_daily_usage (usage_date, input_tokens, output_tokens, cache_creation_input_tokens, cache_read_input_tokens, request_count)
+    VALUES (CURRENT_DATE, ${usage.input_tokens ?? 0}, ${usage.output_tokens ?? 0}, ${usage.cache_creation_input_tokens ?? 0}, ${usage.cache_read_input_tokens ?? 0}, 1)
+    ON CONFLICT (usage_date) DO UPDATE SET
+      input_tokens = public.loci_daily_usage.input_tokens + EXCLUDED.input_tokens,
+      output_tokens = public.loci_daily_usage.output_tokens + EXCLUDED.output_tokens,
+      cache_creation_input_tokens = public.loci_daily_usage.cache_creation_input_tokens + EXCLUDED.cache_creation_input_tokens,
+      cache_read_input_tokens = public.loci_daily_usage.cache_read_input_tokens + EXCLUDED.cache_read_input_tokens,
+      request_count = public.loci_daily_usage.request_count + 1
   `;
 }
 
@@ -174,6 +238,12 @@ Deno.serve(async (req) => {
       const ipOk = await checkRateLimit(sql, `ip:${ip}`, IP_LIMIT, IP_WINDOW_MS);
       if (!ipOk) return { rateLimited: "ip" as const };
 
+      const spentToday = await todaysSpendUsd(sql);
+      if (spentToday >= DAILY_SPEND_CAP_USD) {
+        console.warn(JSON.stringify({ event: "loci_daily_cap_reached", spent_usd: spentToday, cap_usd: DAILY_SPEND_CAP_USD }));
+        return { budgetExceeded: true as const };
+      }
+
       // Last 10 turns of real history for this session - enough for a
       // coherent conversation without unboundedly growing the prompt.
       const history = await sql`
@@ -211,6 +281,7 @@ Deno.serve(async (req) => {
       const textBlock = (data.content ?? []).find((b: { type?: string }) => b.type === "text");
       const replyText = textBlock?.text ?? "Sorry, I couldn't generate a response - try again in a moment.";
 
+      await recordUsage(sql, data.usage ?? {});
       await sql`INSERT INTO public.loci_conversations (session_id, role, content) VALUES (${sessionId}, 'user', ${message})`;
       await sql`INSERT INTO public.loci_conversations (session_id, role, content) VALUES (${sessionId}, 'assistant', ${replyText})`;
 
@@ -222,6 +293,11 @@ Deno.serve(async (req) => {
         error: result.rateLimited === "session"
           ? "You've sent a lot of messages - give it a bit and try again."
           : "Too many requests from this network - give it a bit and try again.",
+      });
+    }
+    if (result.budgetExceeded) {
+      return buildCorsResponse(503, {
+        error: "Loci has reached its usage budget for today - please try again tomorrow, or contact support directly.",
       });
     }
     if (result.error) {

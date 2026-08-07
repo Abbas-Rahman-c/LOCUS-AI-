@@ -517,20 +517,26 @@ async function listDecisions(
     const recordTypeFilter = recordType ? sql`AND d.record_type = ${recordType}` : sql``;
     const sourceFilter = source ? sql`AND re.source = ${source}` : sql``;
 
+    // Superseded rows (duplicates ai-worker's conflict detection already
+    // resolved, or the admin-dedupe-decisions backfill resolved) are
+    // excluded from the default feed - they're kept in the table for audit
+    // history via decisions.superseded_by, but a resolved duplicate showing
+    // up next to the entry it duplicates is exactly the clutter this is
+    // supposed to prevent.
     const rows = await sql`
       SELECT d.id, d.tenant_id, d.record_type, d.decision_statement, d.rationale,
              d.alternatives_considered, d.status, d.superseded_by, d.scope, d.confidence,
              d.origin_raw_event_id, d.created_at, d.updated_at
       FROM decisions d
       LEFT JOIN raw_events re ON re.id = d.origin_raw_event_id AND re.tenant_id = d.tenant_id
-      WHERE d.tenant_id = ${tenantId} ${recordTypeFilter} ${sourceFilter}
+      WHERE d.tenant_id = ${tenantId} AND d.superseded_by IS NULL ${recordTypeFilter} ${sourceFilter}
       ORDER BY d.created_at DESC LIMIT ${limit} OFFSET ${offset}
     `;
     const totalRows = await sql`
       SELECT COUNT(*)::int AS total
       FROM decisions d
       LEFT JOIN raw_events re ON re.id = d.origin_raw_event_id AND re.tenant_id = d.tenant_id
-      WHERE d.tenant_id = ${tenantId} ${recordTypeFilter} ${sourceFilter}
+      WHERE d.tenant_id = ${tenantId} AND d.superseded_by IS NULL ${recordTypeFilter} ${sourceFilter}
     `;
     const total = totalRows[0]?.total ?? 0;
 
