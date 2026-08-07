@@ -8,13 +8,18 @@ import {
   rememberAccountFromSession,
   type KnownAccount,
 } from '../lib/accountRegistry'
-import { DEMO_EMAIL_KEY, WORKSPACES_DONE_KEY } from '../lib/sessionKeys'
+import {
+  DEMO_EMAIL_KEY,
+  TEAM_PULSE_SEEN_EVENT,
+  TEAM_PULSE_SEEN_KEY,
+  WORKSPACES_DONE_KEY,
+} from '../lib/sessionKeys'
 
 const NAV_LINKS = [
   { label: 'How it works', to: '/dashboard/how-it-works' },
   { label: 'Dashboard', to: '/dashboard' },
   { label: 'Memory Explorer', to: '/decision-log' },
-  { label: 'Team Pulse', to: '/team-pulse', badge: true },
+  { label: 'Team Pulse', to: '/team-pulse' },
   { label: 'Settings', to: '/settings' },
 ] as const
 
@@ -61,6 +66,21 @@ export function DashboardNav() {
   const [switchError, setSwitchError] = useState<string | null>(null)
   const menuRef = useRef<HTMLDivElement>(null)
   const isDemo = Boolean(sessionStorage.getItem(DEMO_EMAIL_KEY))
+  // Was `badge: true` hardcoded on the Team Pulse nav link - the dot never
+  // cleared no matter how many times the page had been viewed. Mirrors
+  // TeamPulse's own mount effect: 'true' present means seen.
+  const [pulseUnseen, setPulseUnseen] = useState(() => !localStorage.getItem(TEAM_PULSE_SEEN_KEY))
+
+  useEffect(() => {
+    const markSeen = () => setPulseUnseen(false)
+    window.addEventListener(TEAM_PULSE_SEEN_EVENT, markSeen)
+    // Also covers Team Pulse being marked seen in another tab.
+    window.addEventListener('storage', markSeen)
+    return () => {
+      window.removeEventListener(TEAM_PULSE_SEEN_EVENT, markSeen)
+      window.removeEventListener('storage', markSeen)
+    }
+  }, [])
 
   useEffect(() => {
     const demoEmail = sessionStorage.getItem(DEMO_EMAIL_KEY)
@@ -212,7 +232,7 @@ export function DashboardNav() {
                 <>
                   <span className="relative">
                     {link.label}
-                    {'badge' in link && link.badge ? (
+                    {link.label === 'Team Pulse' && pulseUnseen ? (
                       <span className="absolute -right-2.5 top-0 h-[6px] w-[6px] rounded-full bg-[#5A45FF]" />
                     ) : null}
                   </span>

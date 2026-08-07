@@ -456,9 +456,10 @@ async function handleAuthSession(req: Request): Promise<Response> {
 
   const membership = await withAdmin(async (sql) => {
     const rows = await sql`
-      SELECT tenant_id, role FROM memberships
-      WHERE user_id = ${authUserId}
-      ORDER BY created_at ASC LIMIT 1
+      SELECT m.tenant_id, m.role, t.plan FROM memberships m
+      JOIN tenants t ON t.id = m.tenant_id
+      WHERE m.user_id = ${authUserId}
+      ORDER BY m.created_at ASC LIMIT 1
     `;
     return rows[0] ?? null;
   });
@@ -472,9 +473,10 @@ async function handleAuthSession(req: Request): Promise<Response> {
 
   const tenantId = membership.tenant_id as string;
   const role = membership.role as string;
+  const plan = membership.plan as string;
   const token = await signTenantJwt(authUserId, tenantId, role);
 
-  return jsonResponse({ token, tenant_id: tenantId, role, expires_in: TENANT_JWT_TTL_SECONDS });
+  return jsonResponse({ token, tenant_id: tenantId, role, plan, expires_in: TENANT_JWT_TTL_SECONDS });
 }
 
 // ── Decisions: list + get (mirrors modules/decisions/service.py) ─────────

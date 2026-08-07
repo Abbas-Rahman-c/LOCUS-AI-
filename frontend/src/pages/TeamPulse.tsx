@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { listAllDecisions, type DecisionOut, type DecisionRecordType } from '../lib/api'
 import { decisionToMemoryRecord } from '../lib/memoryRecord'
 import { MemoryRecordDetail } from '../components/MemoryRecordDetail'
+import { TEAM_PULSE_SEEN_EVENT, TEAM_PULSE_SEEN_KEY } from '../lib/sessionKeys'
 
 type PulseSection = {
   count: number
@@ -181,6 +182,16 @@ export default function TeamPulse() {
   const [isLoading, setIsLoading] = useState(true)
   const [loadError, setLoadError] = useState('')
   const [feedback, setFeedback] = useState<'up' | 'down' | null>(null)
+
+  // Was a static `badge: true` on the nav link, always on regardless of
+  // whether Team Pulse had ever actually been opened - this is what marks
+  // it seen, once, when the page is actually visited.
+  useEffect(() => {
+    if (localStorage.getItem(TEAM_PULSE_SEEN_KEY)) return
+    localStorage.setItem(TEAM_PULSE_SEEN_KEY, 'true')
+    window.dispatchEvent(new Event(TEAM_PULSE_SEEN_EVENT))
+  }, [])
+
   const rangeDays = Math.round((rangeEnd.getTime() - rangeStart.getTime()) / DAY_IN_MS) + 1
   const isFullWeek = rangeDays === 7 && rangeStart.getDay() === 1
   const isCurrentWeek =
