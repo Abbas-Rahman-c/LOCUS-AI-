@@ -145,7 +145,14 @@ function RequireAuth() {
   }
 
   if (!userEmail) {
-    return <Navigate to="/welcome" replace />
+    // "/" (not "/welcome") on purpose - logging out from a protected page
+    // (Settings, Dashboard, ...) fires this guard's own redirect the moment
+    // userEmail clears, racing the logout button's own explicit
+    // navigate('/', {replace:true}) call. Whichever one "wins" needs to
+    // land on the same real marketing page AuthRoutes already shows a
+    // logged-out visitor at "/" - not the bare "/welcome" sign-in screen,
+    // which is where this race was actually ending up.
+    return <Navigate to="/" replace />
   }
 
   return <Outlet />
@@ -165,7 +172,14 @@ function ConnectWorkspacesRoute() {
   }
 
   if (!userEmail) {
-    return <Navigate to="/welcome" replace />
+    // "/" (not "/welcome") on purpose - logging out from a protected page
+    // (Settings, Dashboard, ...) fires this guard's own redirect the moment
+    // userEmail clears, racing the logout button's own explicit
+    // navigate('/', {replace:true}) call. Whichever one "wins" needs to
+    // land on the same real marketing page AuthRoutes already shows a
+    // logged-out visitor at "/" - not the bare "/welcome" sign-in screen,
+    // which is where this race was actually ending up.
+    return <Navigate to="/" replace />
   }
 
   if (workspacesConnected) {

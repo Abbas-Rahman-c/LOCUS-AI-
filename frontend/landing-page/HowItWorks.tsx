@@ -4,8 +4,10 @@ import { SourceLogo } from '../src/components/SourceLogo'
 
 type StepId = 1 | 2 | 3
 
-const STEP_HOLD_DURATION_MS = 2000
-const STEP_TRANSITION_DURATION_MS = 1000
+// Was 2000/1000 - each step (including the "Ask anything" search results
+// panel) barely stayed on screen long enough to read before auto-advancing.
+const STEP_HOLD_DURATION_MS = 5000
+const STEP_TRANSITION_DURATION_MS = 1200
 
 const STEPS: { id: StepId; label: string }[] = [
   { id: 1, label: '1. Connect tools' },

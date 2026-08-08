@@ -377,9 +377,16 @@ Deno.serve(async (_req) => {
             date: getHeader("Date"),
             snippet: rawMsg.snippet,
           },
-          // #all/{id} works regardless of which label the message is
-          // filed under (inbox, archived, etc.), unlike #inbox/{id}.
-          source_permalink: `https://mail.google.com/mail/u/0/#all/${rawMsg.id}`,
+          // #all/{id} works regardless of which label the message is filed
+          // under (inbox, archived, etc.), unlike #inbox/{id}. authuser must
+          // be the real email, not a hardcoded /u/0/ index - /u/0/ is
+          // whichever Google account happens to be first in that browser's
+          // own session, which is almost never guaranteed to be the one
+          // Locus is actually connected to. Confirmed live: a PM with more
+          // than one Google account logged in clicked "View Original" and
+          // landed on their own default mailbox's inbox, not the specific
+          // message, because /u/0/ pointed at the wrong account entirely.
+          source_permalink: `https://mail.google.com/mail/?authuser=${encodeURIComponent(source.external_workspace_id ?? "")}#all/${rawMsg.id}`,
           received_at: messageReceivedAt,
         };
 
