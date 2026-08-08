@@ -1,4 +1,5 @@
 import { useNavigate } from 'react-router-dom'
+import { LocusLogo } from './components/LocusLogo'
 
 function SparkleIcon() {
   return (
@@ -105,18 +106,7 @@ function BoltIcon() {
 }
 
 function FooterLogo() {
-  return (
-    <div className="flex items-center gap-2.5">
-      <img
-        src="/locus-mark.png"
-        alt=""
-        className="h-8 w-8 rounded-lg"
-      />
-      <span className="text-[14px] font-bold tracking-[0.06em] text-white">
-        LOCUS <span className="text-[#a5b4fc]">AI</span>
-      </span>
-    </div>
-  )
+  return <LocusLogo variant="light" size={32} />
 }
 
 const FEATURES = [

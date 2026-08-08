@@ -29,7 +29,7 @@ export function DashboardCaptures() {
   return (
     <section>
       <h2 className="mb-3 text-[11px] font-semibold tracking-[0.08em] text-[#9CA3AF] uppercase">
-        Memory Feed
+        Build Memory
       </h2>
       <div className="overflow-hidden rounded-2xl border border-[#E8E8ED] bg-white shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
         {isLoading ? (
@@ -56,15 +56,15 @@ export function DashboardCaptures() {
                     <button
                       type="button"
                       onClick={() => setExpandedId(capture.id)}
-                      className="flex w-full items-center gap-3 px-4 py-3.5 text-left transition-colors hover:bg-[#FAFAFB]"
+                      className="grid w-full grid-cols-[92px_minmax(0,1fr)_auto] items-center gap-3 px-4 py-3.5 text-left transition-colors hover:bg-[#FAFAFB]"
                       aria-expanded={false}
                     >
                       <span
-                        className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold ${TYPE_STYLES[record.type]}`}
+                        className={`inline-flex w-[92px] justify-center rounded-full px-2.5 py-1 text-[11px] font-semibold ${TYPE_STYLES[record.type]}`}
                       >
                         {record.type}
                       </span>
-                      <p className="min-w-0 flex-1 truncate text-[14px] text-[#111827]">
+                      <p className="min-w-0 truncate text-[14px] text-[#111827]">
                         {record.title}
                       </p>
                       <span className="shrink-0 text-[12px] text-[#9CA3AF]">{record.meta}</span>
