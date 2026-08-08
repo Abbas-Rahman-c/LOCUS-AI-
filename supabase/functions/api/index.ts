@@ -1174,6 +1174,18 @@ function digestWeekOf(): string {
   return monday.toISOString().slice(0, 10);
 }
 
+// Snaps an arbitrary requested date to its own ISO week's Monday - used for
+// looking up an already-cached historical digest by whatever week the
+// frontend's date picker landed on, distinct from digestWeekOf()'s "now"
+// (which also has a just-past-midnight-Monday grace period that only makes
+// sense for the live current week, not an explicit past-week lookup).
+function mondayOfDate(d: Date): string {
+  const day = d.getUTCDay();
+  const diffToMonday = (day + 6) % 7;
+  const monday = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() - diffToMonday));
+  return monday.toISOString().slice(0, 10);
+}
+
 function periodBoundsForWeek(weekOf: string): { start: string; end: string } {
   const end = new Date(weekOf + "T00:00:00Z");
   const start = new Date(end);
@@ -1289,19 +1301,40 @@ async function handleDigest(req: Request, url: URL): Promise<Response> {
   const refresh = url.searchParams.get("refresh") === "true";
   if (scope !== "personal" && scope !== "team") return errorResponse(422, "scope must be 'personal' or 'team'");
 
+  const currentWeekOf = digestWeekOf();
+  const weekOfParam = url.searchParams.get("week_of");
+  let requestedWeekOf = currentWeekOf;
+  if (weekOfParam) {
+    const parsed = new Date(`${weekOfParam}T00:00:00Z`);
+    if (!Number.isNaN(parsed.getTime())) requestedWeekOf = mondayOfDate(parsed);
+  }
+  const isCurrentWeek = requestedWeekOf === currentWeekOf;
+
   try {
     const permissionScopes = await resolvePermissionScopes(ctx.userId, ctx.tenantId);
-    const weekOf = digestWeekOf();
     const userId = scope === "personal" ? ctx.userId : null;
 
+    // A non-current week can only ever be served from what's already
+    // cached - retrieval isn't date-filtered, so "generating" one now would
+    // just re-summarize whatever's currently semantically top-ranked and
+    // mislabel it with a past date range instead of reflecting what that
+    // week actually was. Once a week has been generated while it WAS the
+    // current week, it stays available here indefinitely; a week nobody
+    // opened Team Pulse during never got cached and has nothing to show.
+    if (!isCurrentWeek) {
+      const stored = await loadWeeklyDigest(ctx.tenantId, scope, requestedWeekOf, userId);
+      if (stored) return jsonResponse(stored);
+      return errorResponse(404, "No digest available for this week");
+    }
+
     if (!refresh) {
-      const stored = await loadWeeklyDigest(ctx.tenantId, scope, weekOf, userId);
+      const stored = await loadWeeklyDigest(ctx.tenantId, scope, requestedWeekOf, userId);
       if (stored) return jsonResponse(stored);
     }
 
     const digest = await generateTeamPulse(ctx.tenantId, permissionScopes, scope, userId);
     try {
-      await saveWeeklyDigest(ctx.tenantId, digest, weekOf, userId);
+      await saveWeeklyDigest(ctx.tenantId, digest, requestedWeekOf, userId);
     } catch (err) {
       console.error("Failed to persist digest:", err);
     }

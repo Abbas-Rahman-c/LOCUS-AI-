@@ -185,10 +185,11 @@ export default function TeamPulse() {
   // The page's own copy promises "your week, synthesized" - previously
   // nothing on the page was actually synthesized, just a client-side
   // record_type/date filter over the raw decision list. GET /digest?scope=team
-  // (real Claude-generated summary, persisted per ISO week in weekly_digests,
-  // regenerated at most once per week unless refresh=true) only covers the
-  // current week server-side, so it's fetched alongside the existing
-  // per-item list rather than replacing it - the items below still come from
+  // (real Claude-generated summary, persisted per ISO week in weekly_digests)
+  // is only ever generated fresh for the current week server-side; any other
+  // week is served strictly from whatever's already cached, since retrieval
+  // isn't date-filtered. It's fetched alongside the existing per-item list
+  // rather than replacing it - the items below still come from
   // listAllDecisions() so they keep full fidelity (real participant names,
   // clickable through to full memory detail) that the lighter digest
   // response doesn't carry.
@@ -253,25 +254,31 @@ export default function TeamPulse() {
     }
   }, [rangeEnd, rangeStart])
 
-  // The actual synthesized summary - only fetched for the current week,
-  // since that's all the real digest endpoint covers. Reads the persisted
-  // weekly_digests row if one already exists for this ISO week rather than
-  // regenerating (no refresh=true here), same real caching the backend
-  // already had, just never called from this page before.
+  // The actual synthesized summary. Only meaningful for a full Mon-Sun
+  // week (a custom partial range from the date picker doesn't map to one
+  // ISO week), and only ever generated fresh for the CURRENT week - the
+  // backend serves any other week strictly from whatever's already cached
+  // in weekly_digests, since retrieval isn't date-filtered and regenerating
+  // for a past week would just mislabel today's top matches with an old
+  // date range. That means: from here on, every week that gets visited
+  // while it's current stays available when you navigate back to it later;
+  // a week nobody opened Team Pulse during (including every week before
+  // this existed) has nothing cached and correctly shows nothing.
   useEffect(() => {
-    if (!isCurrentWeek) {
+    if (!isFullWeek) {
       setDigestSummary('')
       return
     }
     let active = true
     setIsDigestLoading(true)
-    getDigest('team')
+    getDigest('team', false, toInputDate(rangeStart))
       .then((digest) => {
         if (active) setDigestSummary(digest.summary)
       })
       .catch(() => {
-        // Fails quietly - the per-item breakdown below still loads
-        // independently and is the more load-bearing part of the page.
+        // Fails quietly (also the expected path for a past week with no
+        // cached digest, a plain 404) - the per-item breakdown below still
+        // loads independently and is the more load-bearing part of the page.
         if (active) setDigestSummary('')
       })
       .finally(() => {
@@ -280,7 +287,7 @@ export default function TeamPulse() {
     return () => {
       active = false
     }
-  }, [isCurrentWeek])
+  }, [isFullWeek, rangeStart])
 
   const moveRange = (amount: number) => {
     const dayOffset = amount * rangeDays
@@ -423,9 +430,11 @@ export default function TeamPulse() {
               </p>
             ) : pulse ? (
               <>
-                {isCurrentWeek ? (
+                {isFullWeek ? (
                   isDigestLoading ? (
-                    <p className="text-[13px] italic text-[#9CA3AF]">Synthesizing this week…</p>
+                    <p className="text-[13px] italic text-[#9CA3AF]">
+                      {isCurrentWeek ? 'Synthesizing this week…' : 'Loading…'}
+                    </p>
                   ) : digestSummary ? (
                     <p className="whitespace-pre-wrap rounded-[6px] bg-[#F7F7FB] p-4 text-[14px] leading-relaxed text-[#3F424C]">
                       {digestSummary}
