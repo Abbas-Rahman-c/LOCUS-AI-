@@ -103,7 +103,12 @@ export function looksLikeHtml(text: string): boolean {
 // essentially never happens to also be a valid UTF-8 byte sequence on its
 // own when reinterpreted).
 function repairMojibake(text: string): string {
-  if (/[^ -ÿ]/.test(text)) return text;
+  // \t\n\r explicitly allowed alongside the printable Latin-1 range -
+  // without them, this guard rejected on sight any text with more than one
+  // line (real newlines sit below U+0020, outside " "-"ÿ"), which is most
+  // stored bodies. Confirmed live: a real multi-line mojibake email was
+  // never even attempted because of this.
+  if (/[^\t\n\r -ÿ]/.test(text)) return text;
   try {
     const bytes = Uint8Array.from(text, (c) => c.charCodeAt(0));
     return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
@@ -119,16 +124,25 @@ function repairMojibake(text: string): string {
 // one such row rendered as a lone "96" (a fragment of
 // "<o:PixelsPerInch>96</o:PixelsPerInch>") with no HTML tags left to strip.
 //
-// Only collapses spaces/tabs, never newlines - an earlier version used
-// \s{2,} here, which also matched newlines and flattened every real
-// paragraph break htmlToPlainText had just inserted into one run-on wall of
-// text (confirmed live: a clean email read as a single unbroken paragraph
-// instead of the several the sender actually wrote).
+// Only collapses spaces/tabs directly, never bare newlines - an earlier
+// version used \s{2,} here, which also matched newlines and flattened every
+// real paragraph break htmlToPlainText had just inserted into one run-on
+// wall of text.
+//
+// Runs on plain, non-HTML bodies too (this function fires unconditionally,
+// not just after htmlToPlainText), and those can carry Windows line endings
+// with a stray space on otherwise-blank lines - "\r\n \r\n \r\n" - which
+// \n{3,} alone never matches (there's no run of 3 literal \n in a row, each
+// pair has a CR and a space between them). Confirmed live: a real email
+// with exactly this pattern kept a dozen-plus blank lines' worth of gap.
+// Trimming whitespace off both sides of every newline first turns that into
+// real "\n\n\n", which the collapse below can actually see.
 function stripCssRemnants(text: string): string {
   return text
     .replace(/[.#@]?[\w-]+\s*\{[^{}]*\}/g, " ") // rule blocks: .foo { ... }
     .replace(/[a-zA-Z-]+\s*:\s*[^;{}\n]+;/g, " ") // bare declarations: color: red;
     .replace(/[ \t]{2,}/g, " ")
+    .replace(/[ \t\r]*\n[ \t\r]*/g, "\n")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
 }
