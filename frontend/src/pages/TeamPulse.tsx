@@ -427,7 +427,7 @@ export default function TeamPulse() {
                   isDigestLoading ? (
                     <p className="text-[13px] italic text-[#9CA3AF]">Synthesizing this week…</p>
                   ) : digestSummary ? (
-                    <p className="rounded-[6px] bg-[#F7F7FB] p-4 text-[14px] leading-relaxed text-[#3F424C]">
+                    <p className="whitespace-pre-wrap rounded-[6px] bg-[#F7F7FB] p-4 text-[14px] leading-relaxed text-[#3F424C]">
                       {digestSummary}
                     </p>
                   ) : null

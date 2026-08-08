@@ -151,11 +151,12 @@ function stripCssRemnants(text: string): string {
 // full rule block or declaration - just a bare token like "96" (from
 // "<o:PixelsPerInch>96</o:PixelsPerInch>") sitting right before the real
 // message starts. Narrow on purpose: only strips 1-3 digits at the very
-// start of the text, immediately followed by a capitalized word - real
-// sentences that legitimately start with a number ("3 tests failing...")
-// are lowercase after the digit and won't match.
+// start of the text, immediately followed by a capitalized word (optionally
+// through a bullet marker first, when the real message happens to open with
+// a bulleted line) - real sentences that legitimately start with a number
+// ("3 tests failing...") are lowercase after the digit and won't match.
 function stripLeadingArtifactToken(text: string): string {
-  return text.replace(/^\d{1,3}\s+(?=[A-Z])/, "");
+  return text.replace(/^\d{1,3}\s+(?=(?:• )?[A-Z])/, "");
 }
 
 // A body counts as real prose only if it has several actual word-like

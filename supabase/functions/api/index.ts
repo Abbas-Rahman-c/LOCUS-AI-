@@ -1008,7 +1008,7 @@ const ANSWER_TOOL = {
 const FORMATTING_RULES = `- Plain prose only: never use markdown syntax (no **bold**, no # headings, no bullet or numbered list characters). The frontend displays this text as-is, so any markdown punctuation shows up literally to the reader instead of being rendered. Structure with plain sentences and paragraph breaks instead.
 - Never use an em dash (—) or double hyphen (--). Use a period, comma, colon, or "and"/"but" to join or separate clauses instead.`;
 
-const MULTI_DOCUMENT_INSTRUCTION = `This question likely spans multiple decisions. If more than one decision in the context is relevant, structure your answer as a short list in plain text - one sentence per relevant decision, each citing its decision number - followed by a one-sentence overall summary. Do not merge distinct decisions into one statement if they are actually separate.`;
+const MULTI_DOCUMENT_INSTRUCTION = `This question likely spans multiple decisions. If more than one decision in the context is relevant, structure your answer as a short list in plain text - one sentence per relevant decision, each citing its decision number, with a blank line (an actual newline in your answer text) between each one - followed by a one-sentence overall summary on its own line at the end. Do not merge distinct decisions into one statement if they are actually separate, and do not run every item together into a single unbroken paragraph.`;
 
 function buildSystemPrompt(analysis: QueryAnalysis | null): string {
   const instruction = analysis && analysis !== NULL_QUERY_ANALYSIS && analysis.is_multi_document ? MULTI_DOCUMENT_INSTRUCTION : "";
@@ -1243,7 +1243,17 @@ async function generateTeamPulse(tenantId: string, permissionScopes: string[], s
   const matches = await hybridRetrieve(tenantId, question, DIGEST_TOP_K, DIGEST_TOP_K, question, question);
   const authorized = filterAccessibleDecisions(permissionScopes, matches);
   const context = formatContext(authorized);
-  const answerResult = await generateAnswer(question, context, null);
+  // A weekly digest is multi-document by definition (it's summarizing every
+  // decision from the past week, not answering one specific question) -
+  // passing null here skipped MULTI_DOCUMENT_INSTRUCTION entirely, so the
+  // model wrote one run-on paragraph mixing every theme together instead of
+  // a per-item breakdown.
+  const digestAnalysis: QueryAnalysis = {
+    intent: "Weekly digest of the team's recorded decisions, action items, and blockers.",
+    question_type: "summary", entities: [], keywords: [],
+    department_guess: "", is_multi_document: true,
+  };
+  const answerResult = await generateAnswer(question, context, digestAnalysis);
 
   const items = authorized.map((m) => ({
     decision_statement: m.decision_statement, rationale: m.rationale,
