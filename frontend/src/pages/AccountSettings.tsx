@@ -163,7 +163,7 @@ function PlanPicker({ onClose, currentPlan }: { onClose: () => void; currentPlan
                   <button
                     type="button"
                     disabled
-                    className="h-12 w-full rounded-[8px] border border-[#DCE0E7] bg-white text-[16px] font-medium text-[#4B3BD4]"
+                    className="h-12 w-full rounded-[8px] border border-[#DEE1E8] bg-white text-[16px] font-medium text-[#4B3BD4]"
                   >
                     Current
                   </button>
@@ -224,7 +224,7 @@ function PlanPicker({ onClose, currentPlan }: { onClose: () => void; currentPlan
                   <button
                     type="button"
                     disabled
-                    className="h-12 w-full rounded-[8px] border border-[#DCE0E7] bg-white text-[16px] font-medium text-[#4B3BD4]"
+                    className="h-12 w-full rounded-[8px] border border-[#DEE1E8] bg-white text-[16px] font-medium text-[#4B3BD4]"
                   >
                     Current
                   </button>
@@ -654,7 +654,7 @@ export default function AccountSettings() {
           <button
             type="button"
             onClick={() => setIsPlanPickerOpen(true)}
-            className="h-10 shrink-0 rounded-[8px] border border-[#DEE1E8] bg-white px-6 text-[14px] font-semibold text-[#4A5568] hover:bg-[#F8F9FA]"
+            className="h-10 shrink-0 rounded-[8px] border border-[#DEE1E8] bg-white px-6 text-[14px] font-semibold text-[#4B3BD4] hover:bg-[#F8F7FF]"
           >
             Change Plan
           </button>
@@ -670,7 +670,7 @@ export default function AccountSettings() {
           <button
             type="button"
             onClick={() => setIsBillingOpen(true)}
-            className="h-10 shrink-0 rounded-[8px] border border-[#DEE1E8] bg-white px-6 text-[14px] font-semibold text-[#4A5568] hover:bg-[#F8F9FA]"
+            className="h-10 shrink-0 rounded-[8px] border border-[#DEE1E8] bg-white px-6 text-[14px] font-semibold text-[#4B3BD4] hover:bg-[#F8F7FF]"
           >
             Billing Information
           </button>
@@ -692,7 +692,7 @@ export default function AccountSettings() {
             type="button"
             disabled={isExporting}
             onClick={() => void exportData()}
-            className="h-10 shrink-0 rounded-[8px] border border-[#DEE1E8] bg-white px-6 text-[14px] font-semibold text-[#4A5568] hover:bg-[#F8F9FA] disabled:cursor-wait disabled:opacity-60"
+            className="h-10 shrink-0 rounded-[8px] border border-[#DEE1E8] bg-white px-6 text-[14px] font-semibold text-[#4B3BD4] hover:bg-[#F8F7FF] disabled:cursor-wait disabled:opacity-60"
           >
             {isExporting ? 'Exporting...' : 'Export'}
           </button>
@@ -711,7 +711,7 @@ export default function AccountSettings() {
               setAccountActionError('')
               setConfirmation('logout')
             }}
-            className="h-10 shrink-0 rounded-[8px] border border-[#DEE1E8] bg-white px-6 text-[14px] font-semibold text-[#4A5568] hover:bg-[#F8F9FA]"
+            className="h-10 shrink-0 rounded-[8px] border border-[#DEE1E8] bg-white px-6 text-[14px] font-semibold text-[#4B3BD4] hover:bg-[#F8F7FF]"
           >
             Log Out
           </button>

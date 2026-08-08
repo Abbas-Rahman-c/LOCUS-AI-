@@ -39,9 +39,9 @@ export const STATUS_STYLES: Record<MemoryStatus, string> = {
 const FLAG_REASONS = ['Inaccurate', 'Outdated', 'Other'] as const
 type FlagReason = (typeof FLAG_REASONS)[number]
 
-function FlagIcon() {
+function FlagIcon({ filled = false }: { filled?: boolean }) {
   return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill={filled ? "currentColor" : "none"} aria-hidden="true">
       <path
         d="M5 21V4h9l-.8 3.2L14 10.5H5"
         stroke="currentColor"
@@ -287,14 +287,15 @@ export function MemoryRecordDetail({
             setIsFlagging((open) => !open)
             setFlagSubmitted(false)
           }}
-          className="inline-flex items-center gap-2 rounded-lg bg-[#5A45FF] px-4 py-2 text-[13px] font-semibold text-white transition-opacity hover:opacity-90"
+          className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-[13px] font-semibold transition-colors ${
+            flagSubmitted
+              ? 'border border-[#FECACA] bg-white text-[#DC2626] hover:bg-[#FEF2F2]'
+              : 'bg-[#5A45FF] text-white hover:opacity-90'
+          }`}
         >
-          <FlagIcon />
-          Flag
+          <FlagIcon filled={flagSubmitted} />
+          {flagSubmitted ? 'Flagged' : 'Flag'}
         </button>
-        {flagSubmitted ? (
-          <span className="text-[13px] font-medium text-[#16A34A]">Flag submitted</span>
-        ) : null}
       </div>
 
       {isFlagging ? (
