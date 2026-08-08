@@ -381,7 +381,7 @@ function SearchSettings() {
               type="button"
               disabled={isLoading || isDownloading || total === 0}
               onClick={() => void downloadHistory()}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-[#C4B5FD] bg-white px-3 py-1.5 text-[13px] font-semibold text-[#5A45FF] transition-colors hover:bg-[#F8F7FF] disabled:cursor-not-allowed disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-[#DEE1E8] bg-white px-3 py-1.5 text-[13px] font-semibold text-[#4B3BD4] transition-colors hover:bg-[#F8F7FF] disabled:cursor-not-allowed disabled:opacity-50"
             >
               <DownloadIcon />
               {isDownloading ? 'Downloading...' : 'Download Log'}
@@ -619,7 +619,7 @@ function ConnectedSourcesSettings() {
                     type="button"
                     disabled={connectingId === source.id}
                     onClick={() => openConnect(source.id)}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-[#C4B5FD] bg-white px-3 py-1.5 text-[13px] font-semibold text-[#5A45FF] transition-colors hover:bg-[#F8F7FF] disabled:cursor-wait disabled:opacity-60"
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-[#DEE1E8] bg-white px-3 py-1.5 text-[13px] font-semibold text-[#4B3BD4] transition-colors hover:bg-[#F8F7FF] disabled:cursor-wait disabled:opacity-60"
                   >
                     {connectingId === source.id ? 'Connecting...' : isActive ? 'Reconnect' : 'Connect'}
                   </button>
@@ -627,7 +627,7 @@ function ConnectedSourcesSettings() {
                     <button
                       type="button"
                       onClick={() => openDisconnectConfirm(source.id)}
-                      className="inline-flex items-center gap-1.5 rounded-lg border border-[#FECACA] bg-white px-3 py-1.5 text-[13px] font-semibold text-[#DC2626] transition-colors hover:bg-[#FEF2F2]"
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-[#DEE1E8] bg-white px-3 py-1.5 text-[13px] font-semibold text-[#DC2626] transition-colors hover:bg-[#FEF2F2]"
                     >
                       Disconnect
                     </button>
@@ -668,7 +668,7 @@ function ConnectedSourcesSettings() {
             </p>
 
             <div className="mt-4 flex flex-col gap-2">
-              <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-[#E5E7EB] p-3 has-[:checked]:border-[#5A45FF] has-[:checked]:bg-[#F8F7FF]">
+              <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-[#DEE1E8] p-3 has-[:checked]:border-[#5A45FF] has-[:checked]:bg-[#F8F7FF]">
                 <input
                   type="radio"
                   name="disconnect-history-choice"
@@ -683,7 +683,7 @@ function ConnectedSourcesSettings() {
                   </span>
                 </span>
               </label>
-              <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-[#E5E7EB] p-3 has-[:checked]:border-[#B4232C] has-[:checked]:bg-[#FFF7F7]">
+              <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-[#DEE1E8] p-3 has-[:checked]:border-[#B4232C] has-[:checked]:bg-[#FFF7F7]">
                 <input
                   type="radio"
                   name="disconnect-history-choice"
@@ -712,7 +712,7 @@ function ConnectedSourcesSettings() {
                 type="button"
                 disabled={isDisconnecting}
                 onClick={() => setDisconnectTarget(null)}
-                className="h-10 rounded-lg border border-[#DEE1E8] bg-white text-[14px] font-semibold text-[#4B3BD4] hover:bg-[#F8F7FF] disabled:opacity-50"
+                className="h-10 rounded-lg border border-[#DEE1E8] bg-white px-6 text-[14px] font-semibold text-[#4B3BD4] hover:bg-[#F8F7FF] disabled:opacity-50"
               >
                 Cancel
               </button>
@@ -754,7 +754,7 @@ function ConnectedSourcesSettings() {
               <button
                 type="button"
                 onClick={() => syncModeTarget && void handleConnect(syncModeTarget, 'full')}
-                className="flex flex-col items-start gap-1 rounded-lg border border-[#E5E7EB] p-3 text-left hover:border-[#5A45FF] hover:bg-[#F8F7FF]"
+                className="flex flex-col items-start gap-1 rounded-lg border border-[#DEE1E8] p-3 text-left hover:border-[#5A45FF] hover:bg-[#F8F7FF]"
               >
                 <span className="text-[14px] font-semibold text-[#111827]">Full history</span>
                 <span className="text-[13px] text-[#6B7280]">
@@ -766,7 +766,7 @@ function ConnectedSourcesSettings() {
               <button
                 type="button"
                 onClick={() => syncModeTarget && void handleConnect(syncModeTarget, 'new')}
-                className="flex flex-col items-start gap-1 rounded-lg border border-[#E5E7EB] p-3 text-left hover:border-[#5A45FF] hover:bg-[#F8F7FF]"
+                className="flex flex-col items-start gap-1 rounded-lg border border-[#DEE1E8] p-3 text-left hover:border-[#5A45FF] hover:bg-[#F8F7FF]"
               >
                 <span className="text-[14px] font-semibold text-[#111827]">From now on</span>
                 <span className="text-[13px] text-[#6B7280]">
@@ -778,7 +778,7 @@ function ConnectedSourcesSettings() {
             <button
               type="button"
               onClick={() => setSyncModeTarget(null)}
-              className="mt-4 h-10 w-full rounded-lg border border-[#DEE1E8] bg-white text-[14px] font-semibold text-[#4B3BD4] hover:bg-[#F8F7FF]"
+              className="mt-4 h-10 w-full rounded-lg border border-[#DEE1E8] bg-white px-6 text-[14px] font-semibold text-[#4B3BD4] hover:bg-[#F8F7FF]"
             >
               Cancel
             </button>
@@ -910,7 +910,7 @@ function CaptureControlsSettings() {
             className={`rounded-2xl border bg-white p-4 text-left transition-colors ${
               captureMode === 'decisions-actions'
                 ? 'border-[#5A45FF]'
-                : 'border-[#E8E8ED] hover:border-[#C7C7D1]'
+                : 'border-[#DEE1E8] hover:border-[#C7C7D1]'
             }`}
           >
             <div className="mb-2 flex items-center gap-2">
@@ -941,7 +941,7 @@ function CaptureControlsSettings() {
             className={`rounded-2xl border bg-white p-4 text-left transition-colors ${
               captureMode === 'decisions-only'
                 ? 'border-[#5A45FF]'
-                : 'border-[#E8E8ED] hover:border-[#C7C7D1]'
+                : 'border-[#DEE1E8] hover:border-[#C7C7D1]'
             }`}
           >
             <div className="mb-2 flex items-center gap-2">
@@ -984,7 +984,7 @@ function CaptureControlsSettings() {
                 className={`rounded-full px-3.5 py-1.5 text-[13px] font-semibold transition-colors ${
                   isActive
                     ? 'bg-[#5A45FF] text-white'
-                    : 'border border-[#E5E7EB] bg-white text-[#5A45FF] hover:bg-[#F8F7FF]'
+                    : 'border border-[#DEE1E8] bg-white text-[#4B3BD4] hover:bg-[#F8F7FF]'
                 }`}
               >
                 {filter}
@@ -1243,7 +1243,7 @@ export default function SettingsPage() {
                   <button
                     type="button"
                     onClick={() => void clearCookies()}
-                    className="shrink-0 rounded-lg border border-[#E5E7EB] bg-white px-3.5 py-2 text-[13px] font-semibold text-[#5A45FF] transition-colors hover:bg-[#F8F7FF]"
+                    className="shrink-0 rounded-lg border border-[#DEE1E8] bg-white px-3.5 py-2 text-[13px] font-semibold text-[#4B3BD4] transition-colors hover:bg-[#F8F7FF]"
                   >
                     Clear Cookies
                   </button>
