@@ -19,6 +19,12 @@
 // no separation from the paragraph before them. Opening tags now add a
 // bullet marker / blank-line break of their own, so the plain-text result
 // still reads like the list/heading it was instead of flattened prose.
+// Marks a heading's own line so the frontend can render it distinctly (bold,
+// larger, its own visual rhythm) instead of just another paragraph - chosen
+// specifically because real prose never produces it, so stripping it back
+// out on the frontend can't ever eat real content by accident.
+export const HEADING_MARKER = "§§";
+
 export function htmlToPlainText(html: string): string {
   return html
     .replace(/<(script|style)[^>]*>[\s\S]*?<\/\1>/gi, " ")
@@ -27,7 +33,8 @@ export function htmlToPlainText(html: string): string {
     // line, not a full paragraph break, and gets no closing-tag newline of
     // its own - back-to-back bullets would otherwise end up with a blank
     // line between every single item instead of reading as one tight list.
-    .replace(/<(p|div|h[1-6])[^>]*>/gi, "\n\n")
+    .replace(/<(p|div)[^>]*>/gi, "\n\n")
+    .replace(/<h[1-6][^>]*>/gi, `\n\n${HEADING_MARKER}`)
     .replace(/<li[^>]*>/gi, "\n• ")
     .replace(/<\/(p|div|tr|h[1-6])>/gi, "\n")
     .replace(/<[^>]+>/g, " ")
@@ -46,6 +53,12 @@ export function htmlToPlainText(html: string): string {
     // before a bullet marker is what actually makes a list read as tight
     // instead of spaced out.
     .replace(/\n{2,}(?=• )/g, "\n")
+    // Same idea for a heading marker - keeps it on the same line as its own
+    // text even if the source had whitespace between the opening tag and
+    // the text (the frontend only looks for the marker at the start of a
+    // line, so a marker stranded alone on its own line would render as an
+    // empty heading with the real text left as a plain paragraph after it).
+    .replace(new RegExp(`(${HEADING_MARKER})\\n+`, "g"), "$1")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
 }

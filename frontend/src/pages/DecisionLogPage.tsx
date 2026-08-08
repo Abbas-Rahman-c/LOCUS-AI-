@@ -62,6 +62,11 @@ function SourceCell({ sourceLinks, sourcePlatforms }: { sourceLinks: string[]; s
   if (sourceLinks.length === 0) {
     return <span className="text-[14px] text-[#9CA3AF]">{platformLabel ?? '—'}</span>
   }
+  // The column header already says "Source" - repeating "View source
+  // (Gmail)" on every single row was redundant with itself, not just the
+  // header, since it read the same way whether the row was Gmail, Slack, or
+  // Notion the same way every time. The platform name alone, linked, says
+  // everything the longer phrasing did.
   return (
     <a
       href={sourceLinks[0]}
@@ -69,7 +74,7 @@ function SourceCell({ sourceLinks, sourcePlatforms }: { sourceLinks: string[]; s
       rel="noreferrer"
       className="text-[14px] font-medium text-[#5A45FF] hover:underline"
     >
-      {platformLabel ? `View source (${platformLabel})` : 'View source'}
+      {platformLabel ?? 'View source'}
     </a>
   )
 }
