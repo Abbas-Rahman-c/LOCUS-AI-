@@ -12,11 +12,24 @@
 // Lightweight tag-stripping, not a real HTML parser - good enough to turn a
 // newsletter's markup into readable text without pulling in a DOM dependency
 // inside a Deno edge function.
+//
+// <li>/<h1-6> get real structure, not just a line break: list items were
+// closing-tag-only (</li> -> \n), so a real bulleted list read as a run of
+// unmarked lines with nothing to show they were ever a list; headings had
+// no separation from the paragraph before them. Opening tags now add a
+// bullet marker / blank-line break of their own, so the plain-text result
+// still reads like the list/heading it was instead of flattened prose.
 export function htmlToPlainText(html: string): string {
   return html
     .replace(/<(script|style)[^>]*>[\s\S]*?<\/\1>/gi, " ")
     .replace(/<br\s*\/?>/gi, "\n")
-    .replace(/<\/(p|div|tr|li|h[1-6])>/gi, "\n")
+    // Block-starting tags open on a fresh paragraph; <li> only needs its own
+    // line, not a full paragraph break, and gets no closing-tag newline of
+    // its own - back-to-back bullets would otherwise end up with a blank
+    // line between every single item instead of reading as one tight list.
+    .replace(/<(p|div|h[1-6])[^>]*>/gi, "\n\n")
+    .replace(/<li[^>]*>/gi, "\n• ")
+    .replace(/<\/(p|div|tr|h[1-6])>/gi, "\n")
     .replace(/<[^>]+>/g, " ")
     .replace(/&nbsp;/gi, " ")
     .replace(/&amp;/gi, "&")
@@ -25,6 +38,14 @@ export function htmlToPlainText(html: string): string {
     .replace(/&quot;/gi, "\"")
     .replace(/&#39;/gi, "'")
     .replace(/[ \t]+/g, " ")
+    .replace(/[ \t]*\n[ \t]*/g, "\n")
+    // Real HTML source usually has its own newlines between tags for
+    // readability - those combine with the "\n• " a <li> just inserted into
+    // a blank line ahead of every single bullet, regardless of why the
+    // double newline happened. Collapsing straight to one line break right
+    // before a bullet marker is what actually makes a list read as tight
+    // instead of spaced out.
+    .replace(/\n{2,}(?=• )/g, "\n")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
 }
