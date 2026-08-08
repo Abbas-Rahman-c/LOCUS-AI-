@@ -11,8 +11,17 @@
 // issued access token, verified via supabase.auth.getUser(token).
 //
 // Actions (POST body: { action, ... }):
-//   list   -> { items: [{ source, item_id, item_name, included }] }
-//   toggle -> { source, item_id, item_name, included } -> { included }
+//   list       -> { items: [{ source, item_id, item_name, included }] }
+//   toggle     -> { source, item_id, item_name, included } -> { included }
+//   disconnect -> { connection_id, delete_history? } -> { success }
+//
+// The frontend's "Disconnect" button called this file's "disconnect" /
+// "disconnect_and_delete" actions since before this file existed in its
+// current form - neither one was ever implemented here, so every disconnect
+// attempt silently failed with "Unknown action". Scoped by connection_id,
+// not by source type: a tenant can have more than one active connection per
+// source (see the "list" handler's own comment on this same fact), and
+// disconnecting one specific Gmail account should never touch a second one.
 
 import { getServiceClient } from "../_shared/supabase.ts";
 import { decryptToken } from "../_shared/tokenCrypto.ts";
@@ -217,6 +226,72 @@ Deno.serve(async (req: Request) => {
       return jsonResponse({ error: "Unable to update capture rule" }, 500);
     }
     return jsonResponse({ included }, 200);
+  }
+
+  if (action === "disconnect") {
+    const connectionId = String(body.connection_id ?? "");
+    const deleteHistory = Boolean(body.delete_history);
+    if (!connectionId) {
+      return jsonResponse({ error: "connection_id is required" }, 400);
+    }
+
+    // Revoke first, unconditionally - stops new ingestion immediately
+    // regardless of whether the history deletion below succeeds.
+    const { data: revokedRows, error: revokeError } = await supabase
+      .from("source_connections")
+      .update({ status: "revoked" })
+      .eq("id", connectionId)
+      .eq("tenant_id", tenantId)
+      .select("id");
+
+    if (revokeError) {
+      console.error("Failed to revoke source_connections row:", revokeError);
+      return jsonResponse({ error: "Unable to disconnect" }, 500);
+    }
+    if (!revokedRows || revokedRows.length === 0) {
+      return jsonResponse({ error: "Connection not found" }, 404);
+    }
+
+    if (deleteHistory) {
+      const { data: rawEventRows, error: rawEventsError } = await supabase
+        .from("raw_events")
+        .select("id")
+        .eq("connection_id", connectionId)
+        .eq("tenant_id", tenantId);
+
+      if (rawEventsError) {
+        console.error("Failed to look up raw_events for deletion:", rawEventsError);
+        return jsonResponse({ error: "Disconnected, but could not delete history" }, 500);
+      }
+
+      const rawEventIds = (rawEventRows ?? []).map((row) => row.id as string);
+      if (rawEventIds.length > 0) {
+        // decision_actors/decision_sources/decision_embeddings/
+        // decision_conflicts all cascade off decisions(id) - only decisions
+        // and raw_events themselves need an explicit delete.
+        const { error: decisionsError } = await supabase
+          .from("decisions")
+          .delete()
+          .eq("tenant_id", tenantId)
+          .in("origin_raw_event_id", rawEventIds);
+        if (decisionsError) {
+          console.error("Failed to delete decisions for connection:", decisionsError);
+          return jsonResponse({ error: "Disconnected, but could not delete every captured decision" }, 500);
+        }
+
+        const { error: rawDeleteError } = await supabase
+          .from("raw_events")
+          .delete()
+          .eq("tenant_id", tenantId)
+          .in("id", rawEventIds);
+        if (rawDeleteError) {
+          console.error("Failed to delete raw_events for connection:", rawDeleteError);
+          return jsonResponse({ error: "Disconnected, but could not delete every raw message" }, 500);
+        }
+      }
+    }
+
+    return jsonResponse({ success: true }, 200);
   }
 
   return jsonResponse({ error: `Unknown action: ${action}` }, 400);

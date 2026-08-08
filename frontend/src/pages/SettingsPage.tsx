@@ -7,6 +7,7 @@ import {
   connectSource,
   disconnectSource,
   fetchSourceConnections,
+  type SourceConnectionRow,
   type SourceId,
   type SyncMode,
 } from '../lib/sourceConnections'
@@ -458,11 +459,11 @@ const CONNECTED_SOURCE_META: { id: SourceId; name: string; description: string; 
   },
 ]
 
-function formatConnectedSourceSync(info: { status: string; lastSyncedAt: string | null } | null) {
-  if (!info || info.status !== 'active') return 'Not connected'
-  if (!info.lastSyncedAt) return 'Connected, not yet synced'
+function formatConnectedSourceSync(info: { status: string; last_synced_at: string | null }) {
+  if (info.status !== 'active') return 'Not connected'
+  if (!info.last_synced_at) return 'Connected, not yet synced'
 
-  const elapsedMs = Math.max(0, Date.now() - new Date(info.lastSyncedAt).getTime())
+  const elapsedMs = Math.max(0, Date.now() - new Date(info.last_synced_at).getTime())
   const minutes = Math.floor(elapsedMs / 60_000)
   if (minutes < 1) return 'Synced just now'
   if (minutes < 60) return `Synced ${minutes}m ago`
@@ -471,15 +472,34 @@ function formatConnectedSourceSync(info: { status: string; lastSyncedAt: string 
   return `Synced ${Math.floor(hours / 24)}d ago`
 }
 
+// Gmail's external_workspace_id already IS the real email, so display_name
+// duplicates it - fine either way. Slack/Notion connected before display_name
+// existed have no label at all here, since the OAuth response's team/
+// workspace name was never captured or stored anywhere for those rows.
+function connectionLabel(row: SourceConnectionRow): string | null {
+  return row.display_name ?? row.external_workspace_id ?? null
+}
+
 function ConnectedSourcesSettings() {
-  const [connections, setConnections] = useState<
-    Record<SourceId, { status: string; lastSyncedAt: string | null } | null>
-  >({ slack: null, notion: null, gmail: null })
+  // Every real row for a source type, not just one - a tenant's own login
+  // account and a connector account are already two separate things at the
+  // data level (auth.users/memberships vs. source_connections), but the UI
+  // used to collapse multiple connections of the same provider into a
+  // single slot, silently keeping only whichever the last fetch happened to
+  // overwrite - so a second Gmail account was invisible, with no way to
+  // tell it apart from the first even though the backend already supported
+  // (and even relied on, elsewhere - see capture-source-rules) more than
+  // one per source.
+  const [connections, setConnections] = useState<Record<SourceId, SourceConnectionRow[]>>({
+    slack: [],
+    notion: [],
+    gmail: [],
+  })
   const [isLoading, setIsLoading] = useState(true)
   const [connectingId, setConnectingId] = useState<SourceId | null>(null)
   const [error, setError] = useState('')
 
-  const [disconnectTarget, setDisconnectTarget] = useState<SourceId | null>(null)
+  const [disconnectTarget, setDisconnectTarget] = useState<SourceConnectionRow | null>(null)
   const [deleteHistoryChoice, setDeleteHistoryChoice] = useState(false)
   const [isDisconnecting, setIsDisconnecting] = useState(false)
   const [disconnectError, setDisconnectError] = useState('')
@@ -489,21 +509,20 @@ function ConnectedSourcesSettings() {
   // skip straight to handleConnect with no choice prompt.
   const [syncModeTarget, setSyncModeTarget] = useState<SourceId | null>(null)
 
+  const loadConnections = () =>
+    fetchSourceConnections().then((rows) => {
+      const next: Record<SourceId, SourceConnectionRow[]> = { slack: [], notion: [], gmail: [] }
+      for (const row of rows) {
+        if (row.status === 'active') next[row.source].push(row)
+      }
+      setConnections(next)
+    })
+
   useEffect(() => {
     let active = true
-    fetchSourceConnections()
-      .then((rows) => {
-        if (!active) return
-        setConnections((current) => {
-          const next = { ...current }
-          for (const row of rows) {
-            next[row.source] = { status: row.status, lastSyncedAt: row.last_synced_at }
-          }
-          return next
-        })
-      })
+    loadConnections()
       .catch(() => {
-        setError('Unable to load connected sources.')
+        if (active) setError('Unable to load connected sources.')
       })
       .finally(() => {
         if (active) setIsLoading(false)
@@ -521,10 +540,10 @@ function ConnectedSourcesSettings() {
 
     const result = await connectSource(sourceId, syncMode)
     if (result.success) {
-      setConnections((current) => ({
-        ...current,
-        [sourceId]: { status: 'active', lastSyncedAt: null },
-      }))
+      // Re-fetch rather than optimistically patch local state - a new
+      // connection needs its real id/display_name from the database, which
+      // the popup flow's success signal doesn't carry.
+      await loadConnections().catch(() => setError('Connected, but could not refresh the list.'))
     } else {
       setError(result.error ?? 'Connection failed.')
     }
@@ -542,8 +561,8 @@ function ConnectedSourcesSettings() {
     setSyncModeTarget(sourceId)
   }
 
-  const openDisconnectConfirm = (sourceId: SourceId) => {
-    setDisconnectTarget(sourceId)
+  const openDisconnectConfirm = (row: SourceConnectionRow) => {
+    setDisconnectTarget(row)
     setDeleteHistoryChoice(false)
     setDisconnectError('')
   }
@@ -553,11 +572,11 @@ function ConnectedSourcesSettings() {
     setIsDisconnecting(true)
     setDisconnectError('')
 
-    const result = await disconnectSource(disconnectTarget, deleteHistoryChoice)
+    const result = await disconnectSource(disconnectTarget.id, deleteHistoryChoice)
     if (result.success) {
       setConnections((current) => ({
         ...current,
-        [disconnectTarget]: { status: 'revoked', lastSyncedAt: null },
+        [disconnectTarget.source]: current[disconnectTarget.source].filter((c) => c.id !== disconnectTarget.id),
       }))
       setDisconnectTarget(null)
     } else {
@@ -566,7 +585,10 @@ function ConnectedSourcesSettings() {
     setIsDisconnecting(false)
   }
 
-  const disconnectTargetMeta = CONNECTED_SOURCE_META.find((s) => s.id === disconnectTarget)
+  const disconnectTargetMeta = disconnectTarget
+    ? CONNECTED_SOURCE_META.find((s) => s.id === disconnectTarget.source)
+    : undefined
+  const disconnectTargetLabel = disconnectTarget ? connectionLabel(disconnectTarget) : null
 
   return (
     <>
@@ -584,54 +606,74 @@ function ConnectedSourcesSettings() {
           </p>
         ) : (
           CONNECTED_SOURCE_META.map((source, index) => {
-            const info = connections[source.id]
-            const isActive = info?.status === 'active'
+            const rows = connections[source.id]
             return (
               <div
                 key={source.id}
-                className={`flex flex-col gap-4 px-5 py-5 md:flex-row md:items-start md:justify-between ${
+                className={`flex flex-col gap-4 px-5 py-5 ${
                   index < CONNECTED_SOURCE_META.length - 1 ? 'border-b border-[#F0F0F4]' : ''
                 }`}
               >
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-start gap-3">
-                    <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-[#E5E7EB] bg-white">
-                      <img src={source.icon} alt="" className="h-7 w-7 object-contain" />
-                    </div>
-                    <div className="min-w-0">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <h3 className="text-[15px] font-semibold text-[#111827]">{source.name}</h3>
-                        <span
-                          className={`rounded-full px-2.5 py-1 text-[12px] font-medium ${
-                            isActive ? 'bg-[#DCFCE7] text-[#16A34A]' : 'bg-[#F3F4F6] text-[#6B7280]'
-                          }`}
-                        >
-                          {formatConnectedSourceSync(info)}
-                        </span>
-                      </div>
-                      <p className="mt-1 text-[13px] text-[#9CA3AF]">{source.description}</p>
-                    </div>
+                <div className="flex items-start gap-3">
+                  <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-[#E5E7EB] bg-white">
+                    <img src={source.icon} alt="" className="h-7 w-7 object-contain" />
+                  </div>
+                  <div className="min-w-0">
+                    <h3 className="text-[15px] font-semibold text-[#111827]">{source.name}</h3>
+                    <p className="mt-1 text-[13px] text-[#9CA3AF]">{source.description}</p>
                   </div>
                 </div>
 
-                <div className="flex shrink-0 items-center gap-2 md:pt-1">
+                {/* Every real connection as its own row, distinguished by
+                    its own account/workspace identity - a tenant with two
+                    Gmail accounts connected sees two rows here, each with
+                    its own status and its own Disconnect button, not one
+                    row silently standing in for both. */}
+                {rows.length > 0 ? (
+                  <div className="ml-14 flex flex-col gap-2">
+                    {rows.map((row) => {
+                      const label = connectionLabel(row)
+                      return (
+                        <div
+                          key={row.id}
+                          className="flex flex-col gap-2 rounded-xl border border-[#F0F0F4] bg-[#FAFAFB] px-3.5 py-2.5 sm:flex-row sm:items-center sm:justify-between"
+                        >
+                          <div className="flex min-w-0 flex-wrap items-center gap-2">
+                            <span className="min-w-0 truncate text-[13px] font-medium text-[#111827]">
+                              {label ?? 'Connected account'}
+                            </span>
+                            <span className="shrink-0 rounded-full bg-[#DCFCE7] px-2.5 py-1 text-[12px] font-medium text-[#16A34A]">
+                              {formatConnectedSourceSync(row)}
+                            </span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => openDisconnectConfirm(row)}
+                            className="shrink-0 self-start rounded-lg border border-[#DEE1E8] bg-white px-3 py-1.5 text-[13px] font-semibold text-[#DC2626] transition-colors hover:bg-[#FEF2F2] sm:self-auto"
+                          >
+                            Disconnect
+                          </button>
+                        </div>
+                      )
+                    })}
+                  </div>
+                ) : (
+                  <p className="ml-14 text-[13px] text-[#9CA3AF]">Not connected</p>
+                )}
+
+                <div className="ml-14">
                   <button
                     type="button"
                     disabled={connectingId === source.id}
                     onClick={() => openConnect(source.id)}
                     className="inline-flex items-center gap-1.5 rounded-lg border border-[#DEE1E8] bg-white px-3 py-1.5 text-[13px] font-semibold text-[#4B3BD4] transition-colors hover:bg-[#F8F7FF] disabled:cursor-wait disabled:opacity-60"
                   >
-                    {connectingId === source.id ? 'Connecting...' : isActive ? 'Reconnect' : 'Connect'}
+                    {connectingId === source.id
+                      ? 'Connecting...'
+                      : rows.length > 0
+                        ? 'Connect another account'
+                        : 'Connect'}
                   </button>
-                  {isActive ? (
-                    <button
-                      type="button"
-                      onClick={() => openDisconnectConfirm(source.id)}
-                      className="inline-flex items-center gap-1.5 rounded-lg border border-[#DEE1E8] bg-white px-3 py-1.5 text-[13px] font-semibold text-[#DC2626] transition-colors hover:bg-[#FEF2F2]"
-                    >
-                      Disconnect
-                    </button>
-                  ) : null}
                 </div>
               </div>
             )
@@ -660,11 +702,12 @@ function ConnectedSourcesSettings() {
             className="w-full max-w-[440px] rounded-[12px] bg-white p-6 shadow-[0_20px_55px_rgba(17,24,39,0.22)]"
           >
             <h2 id="disconnect-source-title" className="text-[18px] font-semibold text-[#111827]">
-              Disconnect {disconnectTargetMeta.name}?
+              Disconnect {disconnectTargetMeta.name}
+              {disconnectTargetLabel ? ` (${disconnectTargetLabel})` : ''}?
             </h2>
             <p className="mt-2 text-[14px] leading-5 text-[#6B7280]">
-              Locus AI will stop reading new content from {disconnectTargetMeta.name}. Choose what
-              happens to the decisions already captured from it.
+              Locus AI will stop reading new content from this {disconnectTargetMeta.name} account.
+              {' '}Choose what happens to the decisions already captured from it.
             </p>
 
             <div className="mt-4 flex flex-col gap-2">
@@ -679,7 +722,7 @@ function ConnectedSourcesSettings() {
                 <span>
                   <span className="block text-[14px] font-semibold text-[#111827]">Keep the history</span>
                   <span className="block text-[13px] text-[#6B7280]">
-                    Disconnect but keep everything already captured from {disconnectTargetMeta.name}.
+                    Disconnect but keep everything already captured from this account.
                   </span>
                 </span>
               </label>
@@ -694,8 +737,8 @@ function ConnectedSourcesSettings() {
                 <span>
                   <span className="block text-[14px] font-semibold text-[#B4232C]">Delete the history</span>
                   <span className="block text-[13px] text-[#6B7280]">
-                    Permanently delete every decision captured from {disconnectTargetMeta.name}. This
-                    cannot be undone.
+                    Permanently delete every decision captured from this account. This cannot be
+                    undone.
                   </span>
                 </span>
               </label>

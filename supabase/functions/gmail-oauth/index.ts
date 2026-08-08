@@ -1,4 +1,5 @@
 import { withTenant } from "../_shared/db.ts";
+import { ensureSourceConnectionDisplayNameColumn } from "../_shared/sourceConnectionSchema.ts";
 import {
   authorizeErrorResponse,
   encodeState,
@@ -119,14 +120,16 @@ Deno.serve(async (req: Request) => {
       // 3. Store the connection under tenant GUC (locus_app / APP_DATABASE_URL).
       const encryptedToken = await encryptToken(tokenData.access_token);
       try {
+        await ensureSourceConnectionDisplayNameColumn();
         await withTenant(tenantId, async (sql) => {
           await sql`
             insert into public.source_connections (
-              tenant_id, source, external_workspace_id, oauth_token_ref,
+              tenant_id, source, external_workspace_id, display_name, oauth_token_ref,
               ingestion_mode, status, cursor_state, last_synced_at
             ) values (
               ${tenantId}::uuid,
               'gmail',
+              ${email},
               ${email},
               ${encryptedToken},
               'polling',
@@ -140,6 +143,7 @@ Deno.serve(async (req: Request) => {
             on conflict (tenant_id, source, external_workspace_id)
             do update set
               oauth_token_ref = excluded.oauth_token_ref,
+              display_name = excluded.display_name,
               status = 'active',
               cursor_state = excluded.cursor_state,
               ingestion_mode = excluded.ingestion_mode,
