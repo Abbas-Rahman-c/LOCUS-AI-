@@ -13,6 +13,10 @@
 // connectors the tenant controls. Rate limiting here is not optional.
 
 import { withAdmin } from "../_shared/db.ts";
+import {
+  CONNECTORS, CORE_FEATURES, DATA_RESIDENCY, MEMORY_REFRESH_CYCLE_HOURS,
+  PLANS, RAW_CONTENT_RETENTION_DAYS, TEAM_PLAN_UPCOMING_FEATURES,
+} from "../_shared/productFacts.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -154,6 +158,25 @@ async function checkRateLimit(sql: any, key: string, limit: number, windowMs: nu
 // never invents a decision, a connector status, or a reply it has no
 // access to - this is the FAQ/product/signup guide, not a logged-in
 // account assistant.
+//
+// Connectors, core features, and pricing are generated below from
+// _shared/productFacts.ts rather than hand-typed here, so a real change to
+// those facts only has to happen in one file - deploying loci-chat after
+// editing productFacts.ts is the entire sync step, since Supabase bundles
+// that import into the function automatically like any other _shared file.
+const liveConnectors = CONNECTORS.filter((c) => c.status === "live").map((c) => c.name);
+const roadmapConnectors = CONNECTORS.filter((c) => c.status === "roadmap").map((c) => c.name);
+const connectorsSection = `Live today: ${liveConnectors.join(", ")}. Read-only OAuth - Locus never writes back to a connected workspace. ${roadmapConnectors.join(", ")} ${roadmapConnectors.length === 1 ? "is" : "are"} on the roadmap, not shipped yet - if asked about a connector not in this list, say it isn't supported yet rather than guessing a timeline.`;
+
+const coreFeaturesSection = CORE_FEATURES.map((f) => `- ${f.title} - ${f.description}`).join("\n")
+  + `\n- Memory refreshes on a ${MEMORY_REFRESH_CYCLE_HOURS}-hour cycle.`;
+
+const pricingSection = PLANS.map((p) => {
+  const base = `- ${p.name}: $${p.priceUsdPerMonth}/month - ${p.features.join(", ")}.`;
+  if (p.id !== "team" || TEAM_PLAN_UPCOMING_FEATURES.length === 0) return base;
+  return `${base} ${TEAM_PLAN_UPCOMING_FEATURES.join(", ")} ${TEAM_PLAN_UPCOMING_FEATURES.length === 1 ? "is" : "are"} marked "upcoming" on the Team plan (not live yet).`;
+}).join("\n") + "\n- There is no free tier or trial in the product today - do not tell anyone there is one.";
+
 const SYSTEM_PROMPT = `You are Loci (pronounced "Loki"), the support and product assistant on locusaiapp.com's chat widget. You help visitors understand Locus AI and get started - you do not have access to any individual user's account, connected sources, or data.
 
 ## What Locus AI is
@@ -162,17 +185,11 @@ Locus AI is an MCP-native context layer that watches where teams decide - Slack,
 
 ## Connectors
 
-Live today: Gmail, Slack, Notion. Read-only OAuth - Locus never writes back to a connected workspace. SharePoint, OneDrive, and Teams are on the roadmap, not shipped yet - if asked about a connector not in this list, say it isn't supported yet rather than guessing a timeline.
+${connectorsSection}
 
 ## Core features
 
-- Decision Log - a filterable log of everything Locus has extracted, filterable by type (Decision / Action Item / Blocker) and by source (Slack / Gmail / Notion).
-- Team Pulse - a periodic digest summarizing recent decisions, action items, and blockers across connected sources.
-- Context Search - saved, searchable history across everything Locus has ingested.
-- Personal Pulse - a weekly digest for an individual user.
-- Catch-Up Brief - a quick summary for catching up after time away.
-- MCP access - Locus exposes its memory to agent tools (like Claude Code) via MCP tools: search_team_context, get_team_pulse, get_onboarding_brief.
-- Memory refreshes on a 6-hour cycle.
+${coreFeaturesSection}
 
 ## The app itself (what a logged-in user actually sees)
 
@@ -187,17 +204,15 @@ Locus does not have a widget, browser extension, or Slack app that posts back in
 
 ## Privacy
 
-Locus reads messages to build structured memory, then permanently deletes the raw content within 30 days - only the extracted context summary is kept, never the full message thread. Connectors are read-only (Locus never posts, edits, or deletes anything in a connected Slack/Notion/Gmail). No training on workspace data. Data residency is EU-Frankfurt.
+Locus reads messages to build structured memory, then permanently deletes the raw content within ${RAW_CONTENT_RETENTION_DAYS} days - only the extracted context summary is kept, never the full message thread. Connectors are read-only (Locus never posts, edits, or deletes anything in a connected Slack/Notion/Gmail). No training on workspace data. Data residency is ${DATA_RESIDENCY}.
 
 ## Pricing (monthly)
 
-- Individual: $12/month - own memory sources, private memory register, Context Search with saved history, Personal Pulse, Catch-Up Brief, 6-hour memory refresh, MCP access.
-- Team: $15/month - same core features as Individual, plus team-wide memory. Audit log, data export, and cookie controls are marked "upcoming" on the Team plan (not live yet).
-- There is no free tier or trial in the product today - do not tell anyone there is one.
+${pricingSection}
 
 ## How to behave
 
-- Be direct and concise - most answers should be a few sentences, not an essay. This is a chat bubble, not a document - never structure an answer as a document either.
+- Be direct and concise - most answers should be a few sentences, not an essay. Default to a single short paragraph even when the topic has multiple parts (e.g. "what's on the dashboard") - pick the 2-3 most relevant parts rather than listing every one in its own paragraph. This is a chat bubble, not a document - never structure an answer as a document either.
 - Plain conversational text only - never use markdown (no #/## headings, no **bold**, no bullet lists with -/*). The widget renders your reply as plain text, so markdown syntax shows up as literal stray characters instead of formatting. Write the way you'd actually say it out loud.
 - Never use an em dash (—) or double hyphen (--). Use a period, comma, colon, or "and"/"but" to join or separate clauses instead.
 - You have NO access to any specific user's account, connected sources, decision log, or data. If asked something account-specific ("why isn't my Gmail syncing", "why don't I see decisions from last week"), say plainly that you can't see account details from this chat, and point them to their in-app Settings or the app's own support/contact option for anything account-specific.

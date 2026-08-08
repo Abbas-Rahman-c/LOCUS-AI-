@@ -4,11 +4,14 @@ import type { User } from '@supabase/supabase-js'
 import { getSupabaseClient, isSupabaseConfigured } from '../lib/supabase'
 import { DEMO_EMAIL_KEY, WORKSPACES_DONE_KEY } from '../lib/sessionKeys'
 import { clearBackendSession, createCheckoutSession, getTenantPlan } from '../lib/api'
+import { PLANS } from '../../../supabase/functions/_shared/productFacts'
 
-const PLAN_LABELS: Record<string, string> = {
-  self_serve: 'Individual',
-  team: 'Team',
-}
+// Same source loci-chat's system prompt builds its pricing section from -
+// a plan name/price change only needs to happen in that one file. The
+// actual price figures shown further down this page are baked into the
+// plan-header images and a mock invoice list, though, which can't pull
+// from shared data since they're not text - those stay manual.
+const PLAN_LABELS: Record<string, string> = Object.fromEntries(PLANS.map((p) => [p.id, p.name]))
 
 function TrashIcon() {
   return (
