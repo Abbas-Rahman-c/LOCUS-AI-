@@ -70,6 +70,36 @@ function DetailRow({
   )
 }
 
+// A long real email (a full GitHub 2FA policy notice, a job-tracker update
+// packed with tracking links) isn't corrupted the way stray HTML/CSS was -
+// it's genuinely long. Dumping it in full made every such message
+// dominate the thread and buried the shorter, more relevant ones around
+// it. Collapses by default rather than trimming - nothing is lost, it's
+// one click away.
+const TRUNCATE_AT = 420
+
+function TruncatedMessageText({ text }: { text: string }) {
+  const [expanded, setExpanded] = useState(false)
+  const isLong = text.length > TRUNCATE_AT
+
+  return (
+    <>
+      <p className="mt-0.5 whitespace-pre-wrap text-[13px] leading-relaxed text-[#111827]">
+        {isLong && !expanded ? `${text.slice(0, TRUNCATE_AT).trimEnd()}…` : text}
+      </p>
+      {isLong ? (
+        <button
+          type="button"
+          onClick={() => setExpanded((value) => !value)}
+          className="mt-1 text-[12px] font-semibold text-[#5A45FF] hover:underline"
+        >
+          {expanded ? 'Show less' : 'Show more'}
+        </button>
+      ) : null}
+    </>
+  )
+}
+
 export function FlagPanel({
   onCancel,
   onSubmit,
@@ -262,7 +292,7 @@ export function MemoryRecordDetail({
                       minute: '2-digit',
                     })}
                   </p>
-                  <p className="mt-0.5 whitespace-pre-wrap text-[13px] leading-relaxed text-[#111827]">{message.text}</p>
+                  <TruncatedMessageText text={message.text} />
                 </li>
               ))}
             </ol>

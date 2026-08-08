@@ -46,12 +46,30 @@ export function looksLikeHtml(text: string): boolean {
 // already gone, leaving bare rule blocks and declarations. Confirmed live:
 // one such row rendered as a lone "96" (a fragment of
 // "<o:PixelsPerInch>96</o:PixelsPerInch>") with no HTML tags left to strip.
+//
+// Only collapses spaces/tabs, never newlines - an earlier version used
+// \s{2,} here, which also matched newlines and flattened every real
+// paragraph break htmlToPlainText had just inserted into one run-on wall of
+// text (confirmed live: a clean email read as a single unbroken paragraph
+// instead of the several the sender actually wrote).
 function stripCssRemnants(text: string): string {
   return text
     .replace(/[.#@]?[\w-]+\s*\{[^{}]*\}/g, " ") // rule blocks: .foo { ... }
     .replace(/[a-zA-Z-]+\s*:\s*[^;{}\n]+;/g, " ") // bare declarations: color: red;
-    .replace(/\s{2,}/g, " ")
+    .replace(/[ \t]{2,}/g, " ")
+    .replace(/\n{3,}/g, "\n\n")
     .trim();
+}
+
+// A markup/CSS fragment can leave a short-lived remnant that isn't itself a
+// full rule block or declaration - just a bare token like "96" (from
+// "<o:PixelsPerInch>96</o:PixelsPerInch>") sitting right before the real
+// message starts. Narrow on purpose: only strips 1-3 digits at the very
+// start of the text, immediately followed by a capitalized word - real
+// sentences that legitimately start with a number ("3 tests failing...")
+// are lowercase after the digit and won't match.
+function stripLeadingArtifactToken(text: string): string {
+  return text.replace(/^\d{1,3}\s+(?=[A-Z])/, "");
 }
 
 // A body counts as real prose only if it has several actual word-like
@@ -69,6 +87,6 @@ function isReadableProse(text: string): boolean {
 // rendering a near-empty wall of whitespace or a stray markup fragment.
 export function cleanDisplayText(text: string): string {
   const htmlStripped = looksLikeHtml(text) ? htmlToPlainText(text) : text;
-  const cleaned = stripCssRemnants(htmlStripped);
+  const cleaned = stripLeadingArtifactToken(stripCssRemnants(htmlStripped));
   return isReadableProse(cleaned) ? cleaned : "(no readable message content captured)";
 }
