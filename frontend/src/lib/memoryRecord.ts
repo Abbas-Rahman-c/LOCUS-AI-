@@ -1,5 +1,6 @@
 import type { DecisionOut, DecisionRecordType } from './api'
 import type { MemoryRecord, MemoryRecordType } from '../components/MemoryRecordDetail'
+import { filterMachineFormattedContent } from './textUtils'
 
 const RECORD_TYPE_LABELS: Record<DecisionRecordType, MemoryRecordType> = {
   decision: 'Decision',
@@ -66,9 +67,9 @@ export function decisionToMemoryRecord(decision: DecisionOut): MemoryRecord {
   return {
     id: decision.id,
     type,
-    title: decision.decision_statement,
+    title: filterMachineFormattedContent(decision.decision_statement),
     meta: `${platformLabel} · ${timeAgo(decision.created_at)}`,
-    summary: decision.rationale || decision.decision_statement,
+    summary: filterMachineFormattedContent(decision.rationale || decision.decision_statement),
     participants: formatParticipants(decision.actors),
     source: platformLabel,
     status: decision.superseded_by ? 'Superseded' : 'Current',

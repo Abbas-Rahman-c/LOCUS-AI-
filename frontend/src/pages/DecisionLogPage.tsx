@@ -6,6 +6,7 @@ import {
   type DecisionRecordType,
 } from '../lib/api'
 import { decisionToMemoryRecord } from '../lib/memoryRecord'
+import { filterMachineFormattedContent } from '../lib/textUtils'
 import {
   MemoryRecordDetail,
   STATUS_STYLES,
@@ -278,7 +279,7 @@ export default function DecisionLogPage() {
                         </span>
                       </td>
                       <td className="max-w-[360px] truncate px-5 py-3.5 text-[14px] text-[#111827]">
-                        {entry.decision_statement}
+                        {filterMachineFormattedContent(entry.decision_statement)}
                       </td>
                       <td className="whitespace-nowrap px-5 py-3.5">
                         <SourceCell sourceLinks={entry.source_links} sourcePlatforms={entry.source_platforms} />

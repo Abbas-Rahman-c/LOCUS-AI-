@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { getDigest, listAllDecisions, type DecisionOut, type DecisionRecordType } from '../lib/api'
 import { decisionToMemoryRecord } from '../lib/memoryRecord'
+import { filterMachineFormattedContent } from '../lib/textUtils'
 import { MemoryRecordDetail } from '../components/MemoryRecordDetail'
 import { TEAM_PULSE_SEEN_EVENT, TEAM_PULSE_SEEN_KEY } from '../lib/sessionKeys'
 
@@ -138,7 +139,7 @@ function PulseGroup({
                   <span className="mr-2.5 text-[#9197A5]" aria-hidden="true">
                     •
                   </span>
-                  <span>{decision.decision_statement}</span>
+                  <span>{filterMachineFormattedContent(decision.decision_statement)}</span>
                 </button>
                 {isExpanded ? (
                   <div className="mt-2 rounded-xl border border-[#E8E8ED] bg-[#FAFAFB] p-4">

@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { getDecision, type DecisionConflict, type ThreadMessage } from '../lib/api'
+import { filterMachineFormattedContent } from '../lib/textUtils'
 
 export type MemoryRecordType = 'Decision' | 'Blocker' | 'Action Item'
 export type MemoryStatus = 'Current' | 'Superseded'
@@ -212,7 +213,7 @@ export function MemoryRecordDetail({
                   : 'May duplicate another decision'}
               </p>
               <p className="mt-1 text-[13px] leading-relaxed text-[#374151]">
-                <span className="font-medium">{conflict.decision_statement}</span>: {conflict.reason}
+                <span className="font-medium">{filterMachineFormattedContent(conflict.decision_statement)}</span>: {filterMachineFormattedContent(conflict.reason)}
               </p>
             </div>
           ))}
@@ -221,7 +222,7 @@ export function MemoryRecordDetail({
 
       <div className="border-t border-[#F0F0F4] pt-1">
         <DetailRow label="SUMMARY">
-          {record.summary}
+          {filterMachineFormattedContent(record.summary)}
           {record.hasContext === false ? (
             <span className="ml-2 inline-flex rounded-full bg-[#F3F4F6] px-2 py-0.5 text-[11px] font-semibold text-[#6B7280]">
               No context captured
@@ -262,7 +263,7 @@ export function MemoryRecordDetail({
                       minute: '2-digit',
                     })}
                   </p>
-                  <p className="mt-0.5 whitespace-pre-wrap text-[13px] leading-relaxed text-[#111827]">{message.text}</p>
+                  <p className="mt-0.5 whitespace-pre-wrap text-[13px] leading-relaxed text-[#111827]">{filterMachineFormattedContent(message.text)}</p>
                 </li>
               ))}
             </ol>
