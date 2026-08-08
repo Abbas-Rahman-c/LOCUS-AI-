@@ -192,8 +192,16 @@ function findGmailBodyPart(node: GmailMimePart | undefined): { mimeType: string;
   return null;
 }
 
+// atob() returns a "binary string" - one JS character per raw byte - not a
+// decoded Unicode string. Gmail bodies are UTF-8, so a multi-byte sequence
+// (a curly quote, a non-breaking space) was being read back as 2-3 separate
+// Latin-1 characters instead of the one real character it was (confirmed
+// live: a curly-quoted "LOCUS AI." stored as "â€œLOCUS AI.â€\x9d"). Decoding
+// the raw bytes as UTF-8 afterward reassembles them correctly.
 function decodeGmailBase64(data: string): string {
-  return atob(data.replace(/-/g, "+").replace(/_/g, "/"));
+  const binary = atob(data.replace(/-/g, "+").replace(/_/g, "/"));
+  const bytes = Uint8Array.from(binary, (c) => c.charCodeAt(0));
+  return new TextDecoder("utf-8").decode(bytes);
 }
 
 // Lowered alongside BACKFILL_MAX_MESSAGES for the same reason - fewer

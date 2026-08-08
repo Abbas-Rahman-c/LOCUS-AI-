@@ -240,7 +240,7 @@ const PAGE_TITLES: Record<string, string> = {
 function PageTitle() {
   const location = useLocation()
   useEffect(() => {
-    document.title = PAGE_TITLES[location.pathname] ?? 'Locus AI — Sign up'
+    document.title = PAGE_TITLES[location.pathname] ?? 'Locus AI - Sign up'
   }, [location.pathname])
   return null
 }
