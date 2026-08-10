@@ -20,6 +20,7 @@
 
 import { withAdmin, withTenant } from "../_shared/db.ts";
 import { decryptToken } from "../_shared/tokenCrypto.ts";
+import { redactFinancialInfo } from "../_shared/financialRedaction.ts";
 
 const corsHeaders = { "Access-Control-Allow-Origin": "*" };
 
@@ -832,6 +833,15 @@ async function handleIngestionMessageInner(msg: PgmqMsg): Promise<string> {
     alternatives_considered: string[]; actors: { source_actor_id: string; role: string }[]; confidence: number;
   };
   extraction.confidence = result.confidence;
+
+  // Second, independent redaction pass on the model's own output. The
+  // source text was already scrubbed in queue.ts before extraction ever
+  // ran, but this catches the case where the model reformats/paraphrases a
+  // number (e.g. re-typing digits from an image description or quoting a
+  // partially-redacted source) differently than it appeared in the input.
+  extraction.decision_statement = redactFinancialInfo(extraction.decision_statement);
+  extraction.rationale = extraction.rationale ? redactFinancialInfo(extraction.rationale) : extraction.rationale;
+  extraction.alternatives_considered = (extraction.alternatives_considered ?? []).map(redactFinancialInfo);
 
   // Persist (decision + source + actors), mark done, enqueue embedding
   const decisionId = await withTenant(tenantId, async (sql) => {

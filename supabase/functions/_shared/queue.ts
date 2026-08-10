@@ -5,6 +5,7 @@
 // table access on public.* tenant tables.
 
 import { withAdmin } from "./db.ts";
+import { redactFinancialInfoDeep } from "./financialRedaction.ts";
 
 export interface IngestionEnvelope {
   tenant_id: string;
@@ -46,12 +47,20 @@ export interface IngestionEnvelope {
 
 export async function enqueueEvent(envelope: IngestionEnvelope) {
   try {
+    // Scrub card/account/routing numbers etc. out of raw_content before it
+    // ever leaves this function - deterministically, not via AI triage
+    // judgment - so a financial identifier never transits the queue, lands
+    // in raw_events, or reaches the extraction model in the first place.
+    const safeEnvelope: IngestionEnvelope = {
+      ...envelope,
+      raw_content: redactFinancialInfoDeep(envelope.raw_content),
+    };
     await withAdmin(async (sql) => {
       // sql.json() wants postgres.js's own JSONValue type, which a plain
       // named interface never structurally satisfies (missing index
       // signature) regardless of field types — pre-existing gap, unrelated
       // to the envelope's actual field shapes. Cast, not a runtime change.
-      await sql`select pgmq.send('ingestion', ${sql.json(envelope as any)}::jsonb)`;
+      await sql`select pgmq.send('ingestion', ${sql.json(safeEnvelope as any)}::jsonb)`;
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
