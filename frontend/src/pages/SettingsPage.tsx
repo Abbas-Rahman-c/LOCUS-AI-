@@ -1341,12 +1341,12 @@ export default function SettingsPage() {
                 </p>
                 <span className="inline-flex items-center gap-1.5 text-[13px] font-medium text-[#16A34A]">
                   <span className="h-1.5 w-1.5 rounded-full bg-[#22C55E]" />
-                  EU · Frankfurt
+                  US · West
                 </span>
               </div>
               <p className="mt-1 text-[13px] text-[#6B7280]">
-                Your data is processed and stored in EU-West (Frankfurt,
-                Germany).
+                Your data is processed and stored in US-West (California,
+                USA).
               </p>
             </div>
 

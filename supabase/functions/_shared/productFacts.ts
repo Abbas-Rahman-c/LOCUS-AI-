@@ -99,4 +99,4 @@ export const CORE_FEATURES: { title: string; description: string }[] = [
 
 export const MEMORY_REFRESH_CYCLE_HOURS = 6;
 export const RAW_CONTENT_RETENTION_DAYS = 30;
-export const DATA_RESIDENCY = "EU-Frankfurt";
+export const DATA_RESIDENCY = "US-West";
