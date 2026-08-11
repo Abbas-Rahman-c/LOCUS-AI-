@@ -8,10 +8,10 @@ export default function GetStarted() {
 
   return (
     <div className="relative w-full bg-white">
-      <div className="mx-auto min-h-screen w-full max-w-[1100px]">
+      <div className="mx-auto w-full max-w-[1100px]">
         <Header />
 
-        <main className="flex min-h-[calc(100vh-72px)] flex-col gap-10 px-8 pb-10 pt-2 lg:flex-row lg:items-stretch lg:gap-8 lg:px-10">
+        <main className="flex flex-col gap-10 px-8 pb-10 pt-2 lg:flex-row lg:items-stretch lg:gap-8 lg:px-10">
           <section className="flex w-full shrink-0 flex-col pt-4 lg:w-[42%]">
             <h1 className="text-[40px] font-bold leading-[1.15] tracking-[-0.025em] text-[#111827]">
               Turn everyday work into{' '}
