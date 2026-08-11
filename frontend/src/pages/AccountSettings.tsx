@@ -653,8 +653,9 @@ export default function AccountSettings() {
           </div>
           <button
             type="button"
+            disabled
             onClick={() => setIsPlanPickerOpen(true)}
-            className="h-10 shrink-0 rounded-[8px] border border-[#DEE1E8] bg-white px-6 text-[14px] font-semibold text-[#4A5568] hover:bg-[#F8F9FA]"
+            className="h-10 shrink-0 rounded-[8px] border border-[#DEE1E8] bg-white px-6 text-[14px] font-semibold text-[#4A5568] hover:bg-[#F8F9FA] disabled:cursor-not-allowed disabled:opacity-50"
           >
             Change Plan
           </button>
