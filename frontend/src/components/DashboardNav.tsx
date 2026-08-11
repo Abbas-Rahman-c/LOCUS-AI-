@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
+import logoMark from '../assets/locuslogo.png'
 import { getSupabaseClient, isSupabaseConfigured } from '../lib/supabase'
 import { getAuthCallbackUrl } from '../lib/appUrl'
 import {
@@ -209,7 +210,7 @@ export function DashboardNav() {
           className="flex items-center gap-2.5"
           aria-label="Locus AI dashboard"
         >
-          <img src="/locus-mark.png" alt="" className="h-7 w-7 shrink-0 rounded-[5px]" />
+          <img src={logoMark} alt="" className="h-7 w-7 shrink-0 rounded-[5px]" />
           <span className="whitespace-nowrap text-[16px] font-bold text-[#111117]">
             LOCUS <span className="text-[#5b52e8]">AI</span>
           </span>
