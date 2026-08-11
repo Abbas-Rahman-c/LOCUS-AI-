@@ -1380,6 +1380,16 @@ export default function SettingsPage() {
                     ),
                     text: 'We never train AI models on your workspace data.',
                   },
+                  {
+                    id: 'sensitive-filtering',
+                    icon: (
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" stroke="#5A45FF" strokeWidth="1.8" strokeLinejoin="round" />
+                        <path d="M8 11l3 3 5-5" stroke="#5A45FF" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    ),
+                    text: 'Sensitive/private information will never be exposed. The app automatically filters financial identifiers before processing and again before saving decisions: Credit/debit cards (Luhn-valid), IBANs, Dashed SSNs, 9+ digit runs (routing/account numbers, etc.).',
+                  },
                 ].map((item) => (
                   <div
                     key={item.id}
