@@ -101,6 +101,8 @@ function PulseGroup({
   section: PulseSection
   number: number
 }) {
+  const [expandedId, setExpandedId] = useState<string | null>(null)
+
   return (
     <section className="flex gap-3">
       <span
@@ -115,20 +117,36 @@ function PulseGroup({
         <p className="mt-0.5 text-[12px] leading-5 text-[#858B9B]">
           {section.description}
         </p>
-        <ul className="mt-2 space-y-4">
+        <ul className="mt-2 space-y-1.5">
           {section.items.map((decision) => {
             const record = decisionToMemoryRecord(decision)
+            const isExpanded = expandedId === decision.id
             return (
               <li key={decision.id}>
-                <div className="flex w-full text-left text-[13px] leading-5 font-medium text-[#5143DB]">
+                <button
+                  type="button"
+                  onClick={() =>
+                    setExpandedId((current) =>
+                      current === decision.id ? null : decision.id,
+                    )
+                  }
+                  className={`flex w-full text-left text-[13px] leading-5 transition-colors ${
+                    isExpanded
+                      ? 'font-medium text-[#5143DB]'
+                      : 'text-[#30303E] hover:text-[#5143DB]'
+                  }`}
+                  aria-expanded={isExpanded}
+                >
                   <span className="mr-2.5 text-[#9197A5]" aria-hidden="true">
                     •
                   </span>
                   <span>{decision.decision_statement}</span>
-                </div>
-                <div className="mt-2 rounded-xl border border-[#E8E8ED] bg-[#FAFAFB] p-4">
-                  <MemoryRecordDetail record={record} />
-                </div>
+                </button>
+                {isExpanded ? (
+                  <div className="mt-2 rounded-xl border border-[#E8E8ED] bg-[#FAFAFB] p-4">
+                    <MemoryRecordDetail record={record} />
+                  </div>
+                ) : null}
               </li>
             )
           })}
