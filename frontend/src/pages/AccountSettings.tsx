@@ -175,7 +175,7 @@ function PlanPicker({ onClose, currentPlan }: { onClose: () => void; currentPlan
                     type="button"
                     disabled={switchingTo !== null}
                     onClick={() => void startCheckout('self_serve')}
-                    className="h-12 w-full rounded-[8px] border border-[#DCE0E7] bg-white text-[16px] font-medium text-[#4B3BD4] hover:bg-[#F8F7FF] disabled:cursor-wait disabled:opacity-70"
+                    className="h-12 w-full rounded-[8px] border border-[#DCE0E7] bg-white text-[16px] font-medium text-[#4B3BD4] disabled:cursor-not-allowed disabled:opacity-50 disabled:cursor-wait disabled:opacity-70"
                   >
                     {switchingTo === 'self_serve' ? 'Starting checkout...' : 'Switch to Individual'}
                   </button>
@@ -236,7 +236,7 @@ function PlanPicker({ onClose, currentPlan }: { onClose: () => void; currentPlan
                     type="button"
                     disabled={switchingTo !== null}
                     onClick={() => void startCheckout('team')}
-                    className="h-12 w-full rounded-[8px] bg-[#4B3BD4] text-[16px] font-semibold text-white hover:bg-[#3F30BC] disabled:cursor-wait disabled:opacity-70"
+                    className="h-12 w-full rounded-[8px] bg-[#4B3BD4] text-[16px] font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50 disabled:cursor-wait disabled:opacity-70"
                   >
                     {switchingTo === 'team' ? 'Starting checkout...' : 'Upgrade'}
                   </button>
@@ -305,7 +305,7 @@ function BillingInformation({
           <button
             type="button"
             onClick={onUpdate}
-            className="h-11 rounded-[8px] border border-[#DEE1E8] bg-white px-8 text-[16px] font-medium text-[#4B3BD4] hover:bg-[#F8F7FF]"
+            className="h-11 rounded-[8px] border border-[#DEE1E8] bg-white px-8 text-[16px] font-medium text-[#4B3BD4] disabled:cursor-not-allowed disabled:opacity-50"
           >
             Update
           </button>
@@ -636,7 +636,7 @@ export default function AccountSettings() {
             type="button"
             onClick={() => void (isEditing ? saveEditor() : openEditor())}
             disabled={isSavingName || (isEditing && !draftName.trim())}
-            className="h-11 w-full shrink-0 rounded-[8px] bg-[#4B3BD4] px-8 text-[15px] font-semibold text-white transition-colors hover:bg-[#3F30BC] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#4B3BD4] disabled:cursor-wait disabled:opacity-70 sm:w-auto"
+            className="h-11 w-full shrink-0 rounded-[8px] bg-[#4B3BD4] px-8 text-[15px] font-semibold text-white transition-colors disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#4B3BD4] disabled:cursor-wait disabled:opacity-70 sm:w-auto"
           >
             {isSavingName ? 'Saving...' : isEditing ? 'Save Edit' : 'Edit Info'}
           </button>
@@ -656,8 +656,8 @@ export default function AccountSettings() {
           </div>
           <button
             type="button"
-            onClick={() => setIsPlanPickerOpen(true)}
-            className="h-10 shrink-0 rounded-[8px] border border-[#DEE1E8] bg-white px-6 text-[14px] font-semibold text-[#4B3BD4] hover:bg-[#F8F7FF]"
+            disabled
+            className="h-10 shrink-0 rounded-[8px] border border-[#DEE1E8] bg-white px-6 text-[14px] font-semibold text-[#4B3BD4] disabled:cursor-not-allowed disabled:opacity-50"
           >
             Change Plan
           </button>
@@ -673,7 +673,7 @@ export default function AccountSettings() {
           <button
             type="button"
             onClick={() => setIsBillingOpen(true)}
-            className="h-10 shrink-0 rounded-[8px] border border-[#DEE1E8] bg-white px-6 text-[14px] font-semibold text-[#4B3BD4] hover:bg-[#F8F7FF]"
+            className="h-10 shrink-0 rounded-[8px] border border-[#DEE1E8] bg-white px-6 text-[14px] font-semibold text-[#4B3BD4] disabled:cursor-not-allowed disabled:opacity-50"
           >
             Billing Information
           </button>
@@ -695,7 +695,7 @@ export default function AccountSettings() {
             type="button"
             disabled={isExporting}
             onClick={() => void exportData()}
-            className="h-10 shrink-0 rounded-[8px] border border-[#DEE1E8] bg-white px-6 text-[14px] font-semibold text-[#4B3BD4] hover:bg-[#F8F7FF] disabled:cursor-wait disabled:opacity-60"
+            className="h-10 shrink-0 rounded-[8px] border border-[#DEE1E8] bg-white px-6 text-[14px] font-semibold text-[#4B3BD4] disabled:cursor-not-allowed disabled:opacity-50 disabled:cursor-wait disabled:opacity-60"
           >
             {isExporting ? 'Exporting...' : 'Export'}
           </button>
@@ -714,7 +714,7 @@ export default function AccountSettings() {
               setAccountActionError('')
               setConfirmation('logout')
             }}
-            className="h-10 shrink-0 rounded-[8px] border border-[#DEE1E8] bg-white px-6 text-[14px] font-semibold text-[#4B3BD4] hover:bg-[#F8F7FF]"
+            className="h-10 shrink-0 rounded-[8px] border border-[#DEE1E8] bg-white px-6 text-[14px] font-semibold text-[#4B3BD4] disabled:cursor-not-allowed disabled:opacity-50"
           >
             Log Out
           </button>
@@ -734,7 +734,7 @@ export default function AccountSettings() {
               setAccountActionError('')
               setConfirmation('delete')
             }}
-            className="flex h-10 shrink-0 items-center gap-2 rounded-[8px] border border-[#F5C2C0] bg-white px-6 text-[14px] font-semibold text-[#B4232C] hover:bg-[#FFF7F7]"
+            className="flex h-10 shrink-0 items-center gap-2 rounded-[8px] border border-[#F5C2C0] bg-white px-6 text-[14px] font-semibold text-[#B4232C] disabled:cursor-not-allowed disabled:opacity-50"
           >
             <TrashIcon />
             Delete
@@ -813,7 +813,7 @@ export default function AccountSettings() {
                 type="button"
                 disabled={isSigningOut || isDeletingAccount}
                 onClick={() => setConfirmation(null)}
-                className="h-11 rounded-[7px] border border-[#DEE1E8] bg-white px-4 text-[15px] font-semibold text-[#4B3BD4] hover:bg-[#F8F7FF] disabled:opacity-50"
+                className="h-11 rounded-[7px] border border-[#DEE1E8] bg-white px-4 text-[15px] font-semibold text-[#4B3BD4] disabled:cursor-not-allowed disabled:opacity-50 disabled:opacity-50"
               >
                 Cancel
               </button>
@@ -827,8 +827,8 @@ export default function AccountSettings() {
                 }
                 className={`h-11 rounded-[7px] px-5 text-[15px] font-semibold text-white disabled:cursor-wait disabled:opacity-60 ${
                   confirmation === 'delete'
-                    ? 'bg-[#9D2A26] hover:bg-[#84221F]'
-                    : 'bg-[#4B3BD4] hover:bg-[#3F30BC]'
+                    ? 'bg-[#9D2A26] disabled:cursor-not-allowed disabled:opacity-50'
+                    : 'bg-[#4B3BD4] disabled:cursor-not-allowed disabled:opacity-50'
                 }`}
               >
                 {confirmation === 'delete'
