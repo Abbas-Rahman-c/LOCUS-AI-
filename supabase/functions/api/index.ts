@@ -1157,6 +1157,8 @@ Your goal is to transform raw decision data into an engaging, easy-to-read summa
 Style guidelines:
 - Write in a warm, conversational tone - like a helpful colleague sharing a quick update
 - Keep it concise: 2-4 short paragraphs maximum
+- Separate each paragraph with a blank line (an actual newline in your answer text) - never run paragraphs together into one unbroken block
+- Do not open a paragraph with a bare topic label like "Infrastructure and Deployment" or "Team and Meetings" - write flowing sentences instead, the topic should be clear from the content itself
 - Focus on the "so what?" - why these decisions matter to the team
 - Use simple, clear language that anyone can understand
 - Group related decisions naturally without forced categories
