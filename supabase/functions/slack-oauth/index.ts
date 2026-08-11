@@ -13,6 +13,7 @@
 import { withTenant } from "../_shared/db.ts";
 import { enqueueEvent } from "../_shared/queue.ts";
 import { encryptToken } from "../_shared/tokenCrypto.ts";
+import { ensureSourceConnectionDisplayNameColumn } from "../_shared/sourceConnectionSchema.ts";
 import {
   authorizeErrorResponse,
   encodeState,
@@ -168,15 +169,21 @@ Deno.serve(async (req: Request) => {
 
     try {
       const encryptedToken = await encryptToken(tokenData.access_token);
+      // Slack's OAuth v2 token response includes team.name alongside
+      // team.id - previously only the opaque id was kept, so two Slack
+      // connections (or even one) had no human-readable way to tell which
+      // real workspace was actually connected.
+      await ensureSourceConnectionDisplayNameColumn();
       await withTenant(tenantId, async (sql) => {
         await sql`
           insert into public.source_connections (
-            tenant_id, source, external_workspace_id, oauth_token_ref,
+            tenant_id, source, external_workspace_id, display_name, oauth_token_ref,
             ingestion_mode, status, cursor_state
           ) values (
             ${tenantId}::uuid,
             'slack',
             ${tokenData.team?.id ?? null},
+            ${tokenData.team?.name ?? null},
             ${encryptedToken},
             'realtime',
             'active',
@@ -185,6 +192,7 @@ Deno.serve(async (req: Request) => {
           on conflict (tenant_id, source, external_workspace_id)
           do update set
             oauth_token_ref = excluded.oauth_token_ref,
+            display_name = excluded.display_name,
             status = 'active',
             cursor_state = excluded.cursor_state,
             ingestion_mode = excluded.ingestion_mode

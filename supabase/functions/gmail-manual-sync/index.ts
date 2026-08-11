@@ -192,8 +192,16 @@ function findGmailBodyPart(node: GmailMimePart | undefined): { mimeType: string;
   return null;
 }
 
+// atob() returns a "binary string" - one JS character per raw byte - not a
+// decoded Unicode string. Gmail bodies are UTF-8, so a multi-byte sequence
+// (a curly quote, a non-breaking space) was being read back as 2-3 separate
+// Latin-1 characters instead of the one real character it was (confirmed
+// live: a curly-quoted "LOCUS AI." stored as "â€œLOCUS AI.â€\x9d"). Decoding
+// the raw bytes as UTF-8 afterward reassembles them correctly.
 function decodeGmailBase64(data: string): string {
-  return atob(data.replace(/-/g, "+").replace(/_/g, "/"));
+  const binary = atob(data.replace(/-/g, "+").replace(/_/g, "/"));
+  const bytes = Uint8Array.from(binary, (c) => c.charCodeAt(0));
+  return new TextDecoder("utf-8").decode(bytes);
 }
 
 // Lowered alongside BACKFILL_MAX_MESSAGES for the same reason - fewer
@@ -369,9 +377,16 @@ Deno.serve(async (_req) => {
             date: getHeader("Date"),
             snippet: rawMsg.snippet,
           },
-          // #all/{id} works regardless of which label the message is
-          // filed under (inbox, archived, etc.), unlike #inbox/{id}.
-          source_permalink: `https://mail.google.com/mail/u/0/#all/${rawMsg.id}`,
+          // #all/{id} works regardless of which label the message is filed
+          // under (inbox, archived, etc.), unlike #inbox/{id}. authuser must
+          // be the real email, not a hardcoded /u/0/ index - /u/0/ is
+          // whichever Google account happens to be first in that browser's
+          // own session, which is almost never guaranteed to be the one
+          // Locus is actually connected to. Confirmed live: a PM with more
+          // than one Google account logged in clicked "View Original" and
+          // landed on their own default mailbox's inbox, not the specific
+          // message, because /u/0/ pointed at the wrong account entirely.
+          source_permalink: `https://mail.google.com/mail/?authuser=${encodeURIComponent(source.external_workspace_id ?? "")}#all/${rawMsg.id}`,
           received_at: messageReceivedAt,
         };
 

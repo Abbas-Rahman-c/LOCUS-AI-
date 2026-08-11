@@ -1,4 +1,5 @@
 import { withTenant } from "../_shared/db.ts";
+import { ensureSourceConnectionDisplayNameColumn } from "../_shared/sourceConnectionSchema.ts";
 import {
   authorizeErrorResponse,
   encodeState,
@@ -95,15 +96,20 @@ Deno.serve(async (req: Request) => {
 
       try {
         const encryptedToken = await encryptToken(tokenData.access_token);
+        // Notion's token response includes workspace_name alongside the
+        // opaque workspace_id - previously discarded, so a connected
+        // workspace had no human-readable identity anywhere in the product.
+        await ensureSourceConnectionDisplayNameColumn();
         await withTenant(tenantId, async (sql) => {
           await sql`
             insert into public.source_connections (
-              tenant_id, source, external_workspace_id, oauth_token_ref,
+              tenant_id, source, external_workspace_id, display_name, oauth_token_ref,
               ingestion_mode, status, cursor_state, last_synced_at
             ) values (
               ${tenantId}::uuid,
               'notion',
               ${tokenData.workspace_id},
+              ${tokenData.workspace_name ?? null},
               ${encryptedToken},
               'polling',
               'active',
@@ -113,6 +119,7 @@ Deno.serve(async (req: Request) => {
             on conflict (tenant_id, source, external_workspace_id)
             do update set
               oauth_token_ref = excluded.oauth_token_ref,
+              display_name = excluded.display_name,
               status = 'active',
               ingestion_mode = excluded.ingestion_mode,
               last_synced_at = excluded.last_synced_at

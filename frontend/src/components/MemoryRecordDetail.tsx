@@ -17,10 +17,6 @@ export type MemoryRecord = {
   listSource?: string
   /** Real source URL (Slack permalink, Gmail/Notion link) - "View Original" opens this when present. */
   sourceLink?: string
-  /** True when the extraction found no stated reason - shown as an explicit
-   * "No context captured" signal instead of silently leaving it blank, so
-   * the reader knows the gap is real, not a UI bug. */
-  hasContext?: boolean
   /** Exact source timestamp (not the relative "3h ago" already in `meta`). */
   exactTime?: string
 }
@@ -39,9 +35,9 @@ export const STATUS_STYLES: Record<MemoryStatus, string> = {
 const FLAG_REASONS = ['Inaccurate', 'Outdated', 'Other'] as const
 type FlagReason = (typeof FLAG_REASONS)[number]
 
-function FlagIcon() {
+function FlagIcon({ filled = false }: { filled?: boolean }) {
   return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill={filled ? "currentColor" : "none"} aria-hidden="true">
       <path
         d="M5 21V4h9l-.8 3.2L14 10.5H5"
         stroke="currentColor"
@@ -67,6 +63,86 @@ function DetailRow({
       </span>
       <div className="min-w-0 text-[14px] leading-relaxed text-[#111827]">{children}</div>
     </div>
+  )
+}
+
+// Every source (a Gmail HTML email, a Slack message, a Notion page) arrives
+// with its own idea of formatting, or none at all - the backend only cleans
+// it up and marks structure (§§heading, • bullet); this is what actually
+// turns that into one consistent, Locus-styled presentation instead of each
+// source's own layout bleeding through. Used for SUMMARY and every
+// CONVERSATION message alike, so a one-line Claude summary and a
+// reconstructed multi-paragraph email read as the same visual language.
+const HEADING_MARKER = '§§'
+
+function FormattedText({ text }: { text: string }) {
+  if (!text) return null
+  const blocks = text.split(/\n{2,}/).filter(Boolean)
+
+  return (
+    <div className="flex flex-col gap-2">
+      {blocks.map((block, i) => {
+        if (block.startsWith(HEADING_MARKER)) {
+          return (
+            <p key={i} className="text-[13px] font-semibold text-[#111827]">
+              {block.slice(HEADING_MARKER.length)}
+            </p>
+          )
+        }
+
+        const lines = block.split('\n').filter(Boolean)
+        const isList = lines.length > 0 && lines.every((line) => line.startsWith('• '))
+        if (isList) {
+          return (
+            <ul key={i} className="flex flex-col gap-1.5">
+              {lines.map((line, j) => (
+                <li key={j} className="flex items-start gap-2 text-[13px] leading-relaxed text-[#111827]">
+                  <span className="mt-[7px] h-1 w-1 shrink-0 rounded-full bg-[#5A45FF]" />
+                  <span>{line.slice(2)}</span>
+                </li>
+              ))}
+            </ul>
+          )
+        }
+
+        return (
+          <p key={i} className="whitespace-pre-wrap text-[13px] leading-relaxed text-[#111827]">
+            {block}
+          </p>
+        )
+      })}
+    </div>
+  )
+}
+
+// A long real email (a full GitHub 2FA policy notice, a job-tracker update
+// packed with tracking links) isn't corrupted the way stray HTML/CSS was -
+// it's genuinely long. Dumping it in full made every such message
+// dominate the thread and buried the shorter, more relevant ones around
+// it. Collapses by default rather than trimming - nothing is lost, it's
+// one click away.
+const TRUNCATE_AT = 420
+
+function TruncatedMessageText({ text }: { text: string }) {
+  const [expanded, setExpanded] = useState(false)
+  const isLong = text.length > TRUNCATE_AT
+  const shown = isLong && !expanded ? `${text.slice(0, TRUNCATE_AT).trimEnd()}…` : text
+
+  return (
+    <>
+      <div className="mt-0.5">
+        <FormattedText text={shown} />
+      </div>
+      {isLong ? (
+        <button
+          type="button"
+          onClick={() => setExpanded((value) => !value)}
+          className="mt-1 text-[12px] font-semibold text-[#5A45FF] hover:underline"
+        >
+          {expanded ? 'Show less' : 'Show more'}
+        </button>
+      ) : null}
+    </>
   )
 }
 
@@ -221,12 +297,7 @@ export function MemoryRecordDetail({
 
       <div className="border-t border-[#F0F0F4] pt-1">
         <DetailRow label="SUMMARY">
-          {record.summary}
-          {record.hasContext === false ? (
-            <span className="ml-2 inline-flex rounded-full bg-[#F3F4F6] px-2 py-0.5 text-[11px] font-semibold text-[#6B7280]">
-              No context captured
-            </span>
-          ) : null}
+          <FormattedText text={record.summary} />
         </DetailRow>
         <DetailRow label="PARTICIPANTS">
           <span className="text-[#5A45FF]">{record.participants}</span>
@@ -262,7 +333,7 @@ export function MemoryRecordDetail({
                       minute: '2-digit',
                     })}
                   </p>
-                  <p className="mt-0.5 whitespace-pre-wrap text-[13px] leading-relaxed text-[#111827]">{message.text}</p>
+                  <TruncatedMessageText text={message.text} />
                 </li>
               ))}
             </ol>
@@ -287,14 +358,15 @@ export function MemoryRecordDetail({
             setIsFlagging((open) => !open)
             setFlagSubmitted(false)
           }}
-          className="inline-flex items-center gap-2 rounded-lg bg-[#5A45FF] px-4 py-2 text-[13px] font-semibold text-white transition-opacity hover:opacity-90"
+          className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-[13px] font-semibold transition-colors ${
+            flagSubmitted
+              ? 'border border-[#FECACA] bg-white text-[#DC2626] hover:bg-[#FEF2F2]'
+              : 'bg-[#5A45FF] text-white hover:opacity-90'
+          }`}
         >
-          <FlagIcon />
-          Flag
+          <FlagIcon filled={flagSubmitted} />
+          {flagSubmitted ? 'Flagged' : 'Flag'}
         </button>
-        {flagSubmitted ? (
-          <span className="text-[13px] font-medium text-[#16A34A]">Flag submitted</span>
-        ) : null}
       </div>
 
       {isFlagging ? (

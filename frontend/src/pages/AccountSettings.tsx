@@ -4,11 +4,14 @@ import type { User } from '@supabase/supabase-js'
 import { getSupabaseClient, isSupabaseConfigured } from '../lib/supabase'
 import { DEMO_EMAIL_KEY, WORKSPACES_DONE_KEY } from '../lib/sessionKeys'
 import { clearBackendSession, createCheckoutSession, getTenantPlan } from '../lib/api'
+import { PLANS } from '../../../supabase/functions/_shared/productFacts'
 
-const PLAN_LABELS: Record<string, string> = {
-  self_serve: 'Individual',
-  team: 'Team',
-}
+// Same source loci-chat's system prompt builds its pricing section from -
+// a plan name/price change only needs to happen in that one file. The
+// actual price figures shown further down this page are baked into the
+// plan-header images and a mock invoice list, though, which can't pull
+// from shared data since they're not text - those stay manual.
+const PLAN_LABELS: Record<string, string> = Object.fromEntries(PLANS.map((p) => [p.id, p.name]))
 
 function TrashIcon() {
   return (
@@ -163,7 +166,7 @@ function PlanPicker({ onClose, currentPlan }: { onClose: () => void; currentPlan
                   <button
                     type="button"
                     disabled
-                    className="h-12 w-full rounded-[8px] border border-[#DCE0E7] bg-white text-[16px] font-medium text-[#4B3BD4]"
+                    className="h-12 w-full rounded-[8px] border border-[#DEE1E8] bg-white text-[16px] font-medium text-[#4B3BD4]"
                   >
                     Current
                   </button>
@@ -224,7 +227,7 @@ function PlanPicker({ onClose, currentPlan }: { onClose: () => void; currentPlan
                   <button
                     type="button"
                     disabled
-                    className="h-12 w-full rounded-[8px] border border-[#DCE0E7] bg-white text-[16px] font-medium text-[#4B3BD4]"
+                    className="h-12 w-full rounded-[8px] border border-[#DEE1E8] bg-white text-[16px] font-medium text-[#4B3BD4]"
                   >
                     Current
                   </button>
@@ -355,7 +358,7 @@ function clearLocalSession() {
 
 export default function AccountSettings() {
   const navigate = useNavigate()
-  const [name, setName] = useState('Locus User')
+  const [name, setName] = useState('Locus AI User')
   const [email, setEmail] = useState('No signed-in email')
   const [draftName, setDraftName] = useState(name)
   const [isEditing, setIsEditing] = useState(false)
@@ -379,7 +382,7 @@ export default function AccountSettings() {
   useEffect(() => {
     const demoEmail = sessionStorage.getItem(DEMO_EMAIL_KEY)
     if (demoEmail) {
-      setName('Locus User')
+      setName('Locus AI User')
       setEmail(demoEmail)
       return
     }
@@ -390,7 +393,7 @@ export default function AccountSettings() {
 
     const applyUser = (user: User | null) => {
       if (!user) {
-        setName('Locus User')
+        setName('Locus AI User')
         setEmail('No signed-in email')
         return
       }
@@ -402,7 +405,7 @@ export default function AccountSettings() {
           .split(/[._-]+/)
           .filter(Boolean)
           .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-          .join(' ') || 'Locus User'
+          .join(' ') || 'Locus AI User'
       // Google OAuth sometimes only populates given_name/family_name and
       // leaves full_name/name/display_name empty - falling straight through
       // to the email-derived name in that case showed a name with no
@@ -655,7 +658,7 @@ export default function AccountSettings() {
             type="button"
             disabled
             onClick={() => setIsPlanPickerOpen(true)}
-            className="h-10 shrink-0 rounded-[8px] border border-[#DEE1E8] bg-white px-6 text-[14px] font-semibold text-[#4A5568] hover:bg-[#F8F9FA] disabled:cursor-not-allowed disabled:opacity-50"
+            className="h-10 shrink-0 rounded-[8px] border border-[#DEE1E8] bg-white px-6 text-[14px] font-semibold text-[#4B3BD4] hover:bg-[#F8F7FF] disabled:cursor-not-allowed disabled:opacity-50"
           >
             Change Plan
           </button>
@@ -671,7 +674,7 @@ export default function AccountSettings() {
           <button
             type="button"
             onClick={() => setIsBillingOpen(true)}
-            className="h-10 shrink-0 rounded-[8px] border border-[#DEE1E8] bg-white px-6 text-[14px] font-semibold text-[#4A5568] hover:bg-[#F8F9FA]"
+            className="h-10 shrink-0 rounded-[8px] border border-[#DEE1E8] bg-white px-6 text-[14px] font-semibold text-[#4B3BD4] hover:bg-[#F8F7FF]"
           >
             Billing Information
           </button>
@@ -693,7 +696,7 @@ export default function AccountSettings() {
             type="button"
             disabled={isExporting}
             onClick={() => void exportData()}
-            className="h-10 shrink-0 rounded-[8px] border border-[#DEE1E8] bg-white px-6 text-[14px] font-semibold text-[#4A5568] hover:bg-[#F8F9FA] disabled:cursor-wait disabled:opacity-60"
+            className="h-10 shrink-0 rounded-[8px] border border-[#DEE1E8] bg-white px-6 text-[14px] font-semibold text-[#4B3BD4] hover:bg-[#F8F7FF] disabled:cursor-wait disabled:opacity-60"
           >
             {isExporting ? 'Exporting...' : 'Export'}
           </button>
@@ -712,7 +715,7 @@ export default function AccountSettings() {
               setAccountActionError('')
               setConfirmation('logout')
             }}
-            className="h-10 shrink-0 rounded-[8px] border border-[#DEE1E8] bg-white px-6 text-[14px] font-semibold text-[#4A5568] hover:bg-[#F8F9FA]"
+            className="h-10 shrink-0 rounded-[8px] border border-[#DEE1E8] bg-white px-6 text-[14px] font-semibold text-[#4B3BD4] hover:bg-[#F8F7FF]"
           >
             Log Out
           </button>
@@ -794,7 +797,7 @@ export default function AccountSettings() {
               id="account-confirmation-title"
               className="mt-5 text-[20px] font-semibold text-[#202027]"
             >
-              {confirmation === 'delete' ? 'Delete account?' : 'Log out of Locus?'}
+              {confirmation === 'delete' ? 'Delete account?' : 'Log out of Locus AI?'}
             </h2>
             <p className="mt-3 text-[15px] leading-6 text-[#7A8292]">
               {confirmation === 'delete'

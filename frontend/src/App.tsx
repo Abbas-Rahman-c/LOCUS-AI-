@@ -5,6 +5,7 @@ import {
   Outlet,
   Route,
   Routes,
+  useLocation,
   useNavigate,
   useSearchParams,
 } from 'react-router-dom'
@@ -144,7 +145,14 @@ function RequireAuth() {
   }
 
   if (!userEmail) {
-    return <Navigate to="/welcome" replace />
+    // "/" (not "/welcome") on purpose - logging out from a protected page
+    // (Settings, Dashboard, ...) fires this guard's own redirect the moment
+    // userEmail clears, racing the logout button's own explicit
+    // navigate('/', {replace:true}) call. Whichever one "wins" needs to
+    // land on the same real marketing page AuthRoutes already shows a
+    // logged-out visitor at "/" - not the bare "/welcome" sign-in screen,
+    // which is where this race was actually ending up.
+    return <Navigate to="/" replace />
   }
 
   return <Outlet />
@@ -164,7 +172,14 @@ function ConnectWorkspacesRoute() {
   }
 
   if (!userEmail) {
-    return <Navigate to="/welcome" replace />
+    // "/" (not "/welcome") on purpose - logging out from a protected page
+    // (Settings, Dashboard, ...) fires this guard's own redirect the moment
+    // userEmail clears, racing the logout button's own explicit
+    // navigate('/', {replace:true}) call. Whichever one "wins" needs to
+    // land on the same real marketing page AuthRoutes already shows a
+    // logged-out visitor at "/" - not the bare "/welcome" sign-in screen,
+    // which is where this race was actually ending up.
+    return <Navigate to="/" replace />
   }
 
   if (workspacesConnected) {
@@ -220,9 +235,34 @@ function AuthRoutes() {
   return <LandingPage />
 }
 
+// The tab title was hardcoded in index.html ("LOCUS AI — Sign up"), which
+// stuck around no matter which page you were actually on - a Memory
+// Explorer tab and a Settings tab looked identical to each other, and to a
+// user who hadn't even signed in yet. Labeled to match each page's own nav
+// entry so the label in a browser's tab strip actually tells them apart.
+const PAGE_TITLES: Record<string, string> = {
+  '/welcome': 'Welcome · Locus AI',
+  '/connect-workspaces': 'Connect Your Tools · Locus AI',
+  '/how-it-works': 'How It Works · Locus AI',
+  '/dashboard': 'Dashboard · Locus AI',
+  '/decision-log': 'Memory Explorer · Locus AI',
+  '/team-pulse': 'Team Pulse · Locus AI',
+  '/settings': 'Settings · Locus AI',
+  '/dashboard/how-it-works': 'How It Works · Locus AI',
+}
+
+function PageTitle() {
+  const location = useLocation()
+  useEffect(() => {
+    document.title = PAGE_TITLES[location.pathname] ?? 'Locus AI - Sign up'
+  }, [location.pathname])
+  return null
+}
+
 function App() {
   return (
     <BrowserRouter>
+      <PageTitle />
       <Routes>
         <Route path="/" element={<AuthRoutes />} />
         <Route path="/welcome" element={<WelcomePage />} />

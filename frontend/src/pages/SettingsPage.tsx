@@ -7,6 +7,7 @@ import {
   connectSource,
   disconnectSource,
   fetchSourceConnections,
+  type SourceConnectionRow,
   type SourceId,
   type SyncMode,
 } from '../lib/sourceConnections'
@@ -381,7 +382,7 @@ function SearchSettings() {
               type="button"
               disabled={isLoading || isDownloading || total === 0}
               onClick={() => void downloadHistory()}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-[#C4B5FD] bg-white px-3 py-1.5 text-[13px] font-semibold text-[#5A45FF] transition-colors hover:bg-[#F8F7FF] disabled:cursor-not-allowed disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-[#DEE1E8] bg-white px-3 py-1.5 text-[13px] font-semibold text-[#4B3BD4] transition-colors hover:bg-[#F8F7FF] disabled:cursor-not-allowed disabled:opacity-50"
             >
               <DownloadIcon />
               {isDownloading ? 'Downloading...' : 'Download Log'}
@@ -458,11 +459,11 @@ const CONNECTED_SOURCE_META: { id: SourceId; name: string; description: string; 
   },
 ]
 
-function formatConnectedSourceSync(info: { status: string; lastSyncedAt: string | null } | null) {
-  if (!info || info.status !== 'active') return 'Not connected'
-  if (!info.lastSyncedAt) return 'Connected, not yet synced'
+function formatConnectedSourceSync(info: { status: string; last_synced_at: string | null }) {
+  if (info.status !== 'active') return 'Not connected'
+  if (!info.last_synced_at) return 'Connected, not yet synced'
 
-  const elapsedMs = Math.max(0, Date.now() - new Date(info.lastSyncedAt).getTime())
+  const elapsedMs = Math.max(0, Date.now() - new Date(info.last_synced_at).getTime())
   const minutes = Math.floor(elapsedMs / 60_000)
   if (minutes < 1) return 'Synced just now'
   if (minutes < 60) return `Synced ${minutes}m ago`
@@ -471,15 +472,34 @@ function formatConnectedSourceSync(info: { status: string; lastSyncedAt: string 
   return `Synced ${Math.floor(hours / 24)}d ago`
 }
 
+// Gmail's external_workspace_id already IS the real email, so display_name
+// duplicates it - fine either way. Slack/Notion connected before display_name
+// existed have no label at all here, since the OAuth response's team/
+// workspace name was never captured or stored anywhere for those rows.
+function connectionLabel(row: SourceConnectionRow): string | null {
+  return row.display_name ?? row.external_workspace_id ?? null
+}
+
 function ConnectedSourcesSettings() {
-  const [connections, setConnections] = useState<
-    Record<SourceId, { status: string; lastSyncedAt: string | null } | null>
-  >({ slack: null, notion: null, gmail: null })
+  // Every real row for a source type, not just one - a tenant's own login
+  // account and a connector account are already two separate things at the
+  // data level (auth.users/memberships vs. source_connections), but the UI
+  // used to collapse multiple connections of the same provider into a
+  // single slot, silently keeping only whichever the last fetch happened to
+  // overwrite - so a second Gmail account was invisible, with no way to
+  // tell it apart from the first even though the backend already supported
+  // (and even relied on, elsewhere - see capture-source-rules) more than
+  // one per source.
+  const [connections, setConnections] = useState<Record<SourceId, SourceConnectionRow[]>>({
+    slack: [],
+    notion: [],
+    gmail: [],
+  })
   const [isLoading, setIsLoading] = useState(true)
   const [connectingId, setConnectingId] = useState<SourceId | null>(null)
   const [error, setError] = useState('')
 
-  const [disconnectTarget, setDisconnectTarget] = useState<SourceId | null>(null)
+  const [disconnectTarget, setDisconnectTarget] = useState<SourceConnectionRow | null>(null)
   const [deleteHistoryChoice, setDeleteHistoryChoice] = useState(false)
   const [isDisconnecting, setIsDisconnecting] = useState(false)
   const [disconnectError, setDisconnectError] = useState('')
@@ -489,21 +509,20 @@ function ConnectedSourcesSettings() {
   // skip straight to handleConnect with no choice prompt.
   const [syncModeTarget, setSyncModeTarget] = useState<SourceId | null>(null)
 
+  const loadConnections = () =>
+    fetchSourceConnections().then((rows) => {
+      const next: Record<SourceId, SourceConnectionRow[]> = { slack: [], notion: [], gmail: [] }
+      for (const row of rows) {
+        if (row.status === 'active') next[row.source].push(row)
+      }
+      setConnections(next)
+    })
+
   useEffect(() => {
     let active = true
-    fetchSourceConnections()
-      .then((rows) => {
-        if (!active) return
-        setConnections((current) => {
-          const next = { ...current }
-          for (const row of rows) {
-            next[row.source] = { status: row.status, lastSyncedAt: row.last_synced_at }
-          }
-          return next
-        })
-      })
+    loadConnections()
       .catch(() => {
-        setError('Unable to load connected sources.')
+        if (active) setError('Unable to load connected sources.')
       })
       .finally(() => {
         if (active) setIsLoading(false)
@@ -521,10 +540,10 @@ function ConnectedSourcesSettings() {
 
     const result = await connectSource(sourceId, syncMode)
     if (result.success) {
-      setConnections((current) => ({
-        ...current,
-        [sourceId]: { status: 'active', lastSyncedAt: null },
-      }))
+      // Re-fetch rather than optimistically patch local state - a new
+      // connection needs its real id/display_name from the database, which
+      // the popup flow's success signal doesn't carry.
+      await loadConnections().catch(() => setError('Connected, but could not refresh the list.'))
     } else {
       setError(result.error ?? 'Connection failed.')
     }
@@ -542,8 +561,8 @@ function ConnectedSourcesSettings() {
     setSyncModeTarget(sourceId)
   }
 
-  const openDisconnectConfirm = (sourceId: SourceId) => {
-    setDisconnectTarget(sourceId)
+  const openDisconnectConfirm = (row: SourceConnectionRow) => {
+    setDisconnectTarget(row)
     setDeleteHistoryChoice(false)
     setDisconnectError('')
   }
@@ -553,11 +572,11 @@ function ConnectedSourcesSettings() {
     setIsDisconnecting(true)
     setDisconnectError('')
 
-    const result = await disconnectSource(disconnectTarget, deleteHistoryChoice)
+    const result = await disconnectSource(disconnectTarget.id, deleteHistoryChoice)
     if (result.success) {
       setConnections((current) => ({
         ...current,
-        [disconnectTarget]: { status: 'revoked', lastSyncedAt: null },
+        [disconnectTarget.source]: current[disconnectTarget.source].filter((c) => c.id !== disconnectTarget.id),
       }))
       setDisconnectTarget(null)
     } else {
@@ -566,7 +585,10 @@ function ConnectedSourcesSettings() {
     setIsDisconnecting(false)
   }
 
-  const disconnectTargetMeta = CONNECTED_SOURCE_META.find((s) => s.id === disconnectTarget)
+  const disconnectTargetMeta = disconnectTarget
+    ? CONNECTED_SOURCE_META.find((s) => s.id === disconnectTarget.source)
+    : undefined
+  const disconnectTargetLabel = disconnectTarget ? connectionLabel(disconnectTarget) : null
 
   return (
     <>
@@ -574,7 +596,7 @@ function ConnectedSourcesSettings() {
         Connected Sources
       </h1>
       <p className="mt-1 text-[14px] text-[#6B7280]">
-        Manage the tools Locus reads to build organizational memory.
+        Manage the tools Locus AI reads to build organizational memory.
       </p>
 
       <div className="mt-8 overflow-hidden rounded-2xl border border-[#E8E8ED] bg-white shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
@@ -584,54 +606,74 @@ function ConnectedSourcesSettings() {
           </p>
         ) : (
           CONNECTED_SOURCE_META.map((source, index) => {
-            const info = connections[source.id]
-            const isActive = info?.status === 'active'
+            const rows = connections[source.id]
             return (
               <div
                 key={source.id}
-                className={`flex flex-col gap-4 px-5 py-5 md:flex-row md:items-start md:justify-between ${
+                className={`flex flex-col gap-4 px-5 py-5 ${
                   index < CONNECTED_SOURCE_META.length - 1 ? 'border-b border-[#F0F0F4]' : ''
                 }`}
               >
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-start gap-3">
-                    <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-[#E5E7EB] bg-white">
-                      <img src={source.icon} alt="" className="h-7 w-7 object-contain" />
-                    </div>
-                    <div className="min-w-0">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <h3 className="text-[15px] font-semibold text-[#111827]">{source.name}</h3>
-                        <span
-                          className={`rounded-full px-2.5 py-1 text-[12px] font-medium ${
-                            isActive ? 'bg-[#DCFCE7] text-[#16A34A]' : 'bg-[#F3F4F6] text-[#6B7280]'
-                          }`}
-                        >
-                          {formatConnectedSourceSync(info)}
-                        </span>
-                      </div>
-                      <p className="mt-1 text-[13px] text-[#9CA3AF]">{source.description}</p>
-                    </div>
+                <div className="flex items-start gap-3">
+                  <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-[#E5E7EB] bg-white">
+                    <img src={source.icon} alt="" className="h-7 w-7 object-contain" />
+                  </div>
+                  <div className="min-w-0">
+                    <h3 className="text-[15px] font-semibold text-[#111827]">{source.name}</h3>
+                    <p className="mt-1 text-[13px] text-[#9CA3AF]">{source.description}</p>
                   </div>
                 </div>
 
-                <div className="flex shrink-0 items-center gap-2 md:pt-1">
+                {/* Every real connection as its own row, distinguished by
+                    its own account/workspace identity - a tenant with two
+                    Gmail accounts connected sees two rows here, each with
+                    its own status and its own Disconnect button, not one
+                    row silently standing in for both. */}
+                {rows.length > 0 ? (
+                  <div className="ml-14 flex flex-col gap-2">
+                    {rows.map((row) => {
+                      const label = connectionLabel(row)
+                      return (
+                        <div
+                          key={row.id}
+                          className="flex flex-col gap-2 rounded-xl border border-[#F0F0F4] bg-[#FAFAFB] px-3.5 py-2.5 sm:flex-row sm:items-center sm:justify-between"
+                        >
+                          <div className="flex min-w-0 flex-wrap items-center gap-2">
+                            <span className="min-w-0 truncate text-[13px] font-medium text-[#111827]">
+                              {label ?? 'Connected account'}
+                            </span>
+                            <span className="shrink-0 rounded-full bg-[#DCFCE7] px-2.5 py-1 text-[12px] font-medium text-[#16A34A]">
+                              {formatConnectedSourceSync(row)}
+                            </span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => openDisconnectConfirm(row)}
+                            className="shrink-0 self-start rounded-lg border border-[#DEE1E8] bg-white px-3 py-1.5 text-[13px] font-semibold text-[#DC2626] transition-colors hover:bg-[#FEF2F2] sm:self-auto"
+                          >
+                            Disconnect
+                          </button>
+                        </div>
+                      )
+                    })}
+                  </div>
+                ) : (
+                  <p className="ml-14 text-[13px] text-[#9CA3AF]">Not connected</p>
+                )}
+
+                <div className="ml-14">
                   <button
                     type="button"
                     disabled={connectingId === source.id}
                     onClick={() => openConnect(source.id)}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-[#C4B5FD] bg-white px-3 py-1.5 text-[13px] font-semibold text-[#5A45FF] transition-colors hover:bg-[#F8F7FF] disabled:cursor-wait disabled:opacity-60"
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-[#DEE1E8] bg-white px-3 py-1.5 text-[13px] font-semibold text-[#4B3BD4] transition-colors hover:bg-[#F8F7FF] disabled:cursor-wait disabled:opacity-60"
                   >
-                    {connectingId === source.id ? 'Connecting...' : isActive ? 'Reconnect' : 'Connect'}
+                    {connectingId === source.id
+                      ? 'Connecting...'
+                      : rows.length > 0
+                        ? 'Connect another account'
+                        : 'Connect'}
                   </button>
-                  {isActive ? (
-                    <button
-                      type="button"
-                      onClick={() => openDisconnectConfirm(source.id)}
-                      className="inline-flex items-center gap-1.5 rounded-lg border border-[#FECACA] bg-white px-3 py-1.5 text-[13px] font-semibold text-[#DC2626] transition-colors hover:bg-[#FEF2F2]"
-                    >
-                      Disconnect
-                    </button>
-                  ) : null}
                 </div>
               </div>
             )
@@ -660,15 +702,16 @@ function ConnectedSourcesSettings() {
             className="w-full max-w-[440px] rounded-[12px] bg-white p-6 shadow-[0_20px_55px_rgba(17,24,39,0.22)]"
           >
             <h2 id="disconnect-source-title" className="text-[18px] font-semibold text-[#111827]">
-              Disconnect {disconnectTargetMeta.name}?
+              Disconnect {disconnectTargetMeta.name}
+              {disconnectTargetLabel ? ` (${disconnectTargetLabel})` : ''}?
             </h2>
             <p className="mt-2 text-[14px] leading-5 text-[#6B7280]">
-              Locus will stop reading new content from {disconnectTargetMeta.name}. Choose what
-              happens to the decisions already captured from it.
+              Locus AI will stop reading new content from this {disconnectTargetMeta.name} account.
+              {' '}Choose what happens to the decisions already captured from it.
             </p>
 
             <div className="mt-4 flex flex-col gap-2">
-              <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-[#E5E7EB] p-3 has-[:checked]:border-[#5A45FF] has-[:checked]:bg-[#F8F7FF]">
+              <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-[#DEE1E8] p-3 has-[:checked]:border-[#5A45FF] has-[:checked]:bg-[#F8F7FF]">
                 <input
                   type="radio"
                   name="disconnect-history-choice"
@@ -679,11 +722,11 @@ function ConnectedSourcesSettings() {
                 <span>
                   <span className="block text-[14px] font-semibold text-[#111827]">Keep the history</span>
                   <span className="block text-[13px] text-[#6B7280]">
-                    Disconnect but keep everything already captured from {disconnectTargetMeta.name}.
+                    Disconnect but keep everything already captured from this account.
                   </span>
                 </span>
               </label>
-              <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-[#E5E7EB] p-3 has-[:checked]:border-[#B4232C] has-[:checked]:bg-[#FFF7F7]">
+              <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-[#DEE1E8] p-3 has-[:checked]:border-[#B4232C] has-[:checked]:bg-[#FFF7F7]">
                 <input
                   type="radio"
                   name="disconnect-history-choice"
@@ -694,8 +737,8 @@ function ConnectedSourcesSettings() {
                 <span>
                   <span className="block text-[14px] font-semibold text-[#B4232C]">Delete the history</span>
                   <span className="block text-[13px] text-[#6B7280]">
-                    Permanently delete every decision captured from {disconnectTargetMeta.name}. This
-                    cannot be undone.
+                    Permanently delete every decision captured from this account. This cannot be
+                    undone.
                   </span>
                 </span>
               </label>
@@ -712,7 +755,7 @@ function ConnectedSourcesSettings() {
                 type="button"
                 disabled={isDisconnecting}
                 onClick={() => setDisconnectTarget(null)}
-                className="h-10 rounded-lg border border-[#DEE1E8] bg-white text-[14px] font-semibold text-[#4B3BD4] hover:bg-[#F8F7FF] disabled:opacity-50"
+                className="h-10 rounded-lg border border-[#DEE1E8] bg-white px-6 text-[14px] font-semibold text-[#4B3BD4] hover:bg-[#F8F7FF] disabled:opacity-50"
               >
                 Cancel
               </button>
@@ -747,26 +790,26 @@ function ConnectedSourcesSettings() {
               Connecting {CONNECTED_SOURCE_META.find((s) => s.id === syncModeTarget)?.name}
             </h2>
             <p className="mt-2 text-[14px] leading-5 text-[#6B7280]">
-              What should Locus read on this connection?
+              What should Locus AI read on this connection?
             </p>
 
             <div className="mt-4 flex flex-col gap-2">
               <button
                 type="button"
                 onClick={() => syncModeTarget && void handleConnect(syncModeTarget, 'full')}
-                className="flex flex-col items-start gap-1 rounded-lg border border-[#E5E7EB] p-3 text-left hover:border-[#5A45FF] hover:bg-[#F8F7FF]"
+                className="flex flex-col items-start gap-1 rounded-lg border border-[#DEE1E8] p-3 text-left hover:border-[#5A45FF] hover:bg-[#F8F7FF]"
               >
                 <span className="text-[14px] font-semibold text-[#111827]">Full history</span>
                 <span className="text-[13px] text-[#6B7280]">
                   {syncModeTarget === 'slack'
-                    ? 'Read recent history from every channel Locus can see, not just new messages.'
-                    : 'Read everything Locus can see again, from the beginning.'}
+                    ? 'Read recent history from every channel Locus AI can see, not just new messages.'
+                    : 'Read everything Locus AI can see again, from the beginning.'}
                 </span>
               </button>
               <button
                 type="button"
                 onClick={() => syncModeTarget && void handleConnect(syncModeTarget, 'new')}
-                className="flex flex-col items-start gap-1 rounded-lg border border-[#E5E7EB] p-3 text-left hover:border-[#5A45FF] hover:bg-[#F8F7FF]"
+                className="flex flex-col items-start gap-1 rounded-lg border border-[#DEE1E8] p-3 text-left hover:border-[#5A45FF] hover:bg-[#F8F7FF]"
               >
                 <span className="text-[14px] font-semibold text-[#111827]">From now on</span>
                 <span className="text-[13px] text-[#6B7280]">
@@ -778,7 +821,7 @@ function ConnectedSourcesSettings() {
             <button
               type="button"
               onClick={() => setSyncModeTarget(null)}
-              className="mt-4 h-10 w-full rounded-lg border border-[#DEE1E8] bg-white text-[14px] font-semibold text-[#4B3BD4] hover:bg-[#F8F7FF]"
+              className="mt-4 h-10 w-full rounded-lg border border-[#DEE1E8] bg-white px-6 text-[14px] font-semibold text-[#4B3BD4] hover:bg-[#F8F7FF]"
             >
               Cancel
             </button>
@@ -875,7 +918,7 @@ function CaptureControlsSettings() {
         Build Memory
       </h1>
       <p className="mt-1 text-[14px] text-[#6B7280]">
-        Control what Locus learns from, from where, and when.
+        Control what Locus AI learns from, from where, and when.
       </p>
 
       <section className="mt-8">
@@ -890,7 +933,7 @@ function CaptureControlsSettings() {
                 Pause all learning
               </p>
               <p className="mt-1 max-w-[520px] text-[13px] leading-relaxed text-[#6B7280]">
-                Temporarily stop Locus from reading new messages. All
+                Temporarily stop Locus AI from reading new messages. All
                 existing memory is preserved and search remains
                 available.
               </p>
@@ -910,7 +953,7 @@ function CaptureControlsSettings() {
             className={`rounded-2xl border bg-white p-4 text-left transition-colors ${
               captureMode === 'decisions-actions'
                 ? 'border-[#5A45FF]'
-                : 'border-[#E8E8ED] hover:border-[#C7C7D1]'
+                : 'border-[#DEE1E8] hover:border-[#C7C7D1]'
             }`}
           >
             <div className="mb-2 flex items-center gap-2">
@@ -941,7 +984,7 @@ function CaptureControlsSettings() {
             className={`rounded-2xl border bg-white p-4 text-left transition-colors ${
               captureMode === 'decisions-only'
                 ? 'border-[#5A45FF]'
-                : 'border-[#E8E8ED] hover:border-[#C7C7D1]'
+                : 'border-[#DEE1E8] hover:border-[#C7C7D1]'
             }`}
           >
             <div className="mb-2 flex items-center gap-2">
@@ -984,7 +1027,7 @@ function CaptureControlsSettings() {
                 className={`rounded-full px-3.5 py-1.5 text-[13px] font-semibold transition-colors ${
                   isActive
                     ? 'bg-[#5A45FF] text-white'
-                    : 'border border-[#E5E7EB] bg-white text-[#5A45FF] hover:bg-[#F8F7FF]'
+                    : 'border border-[#DEE1E8] bg-white text-[#4B3BD4] hover:bg-[#F8F7FF]'
                 }`}
               >
                 {filter}
@@ -1174,7 +1217,7 @@ export default function SettingsPage() {
               Privacy
             </h1>
             <p className="mt-1 text-[14px] text-[#6B7280]">
-              Control what Locus can read and how long data is kept.
+              Control what Locus AI can read and how long data is kept.
             </p>
 
             <div className="mt-8 rounded-2xl border border-[#E8E8ED] bg-white p-5 shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
@@ -1185,7 +1228,7 @@ export default function SettingsPage() {
                     Raw message retention: 30 days
                   </p>
                   <p className="mt-1 text-[13px] leading-relaxed text-[#6B7280]">
-                    Locus reads messages to build structured memory, then
+                    Locus AI reads messages to build structured memory, then
                     permanently deletes the raw content within 30 days. Only the
                     extracted context summary is stored, never
                     the full message thread.
@@ -1217,7 +1260,7 @@ export default function SettingsPage() {
                       Block non-essential cookies
                     </p>
                     <p className="mt-1 max-w-[560px] text-[13px] leading-relaxed text-[#6B7280]">
-                      Only keeps the cookies strictly required for Locus to
+                      Only keeps the cookies strictly required for Locus AI to
                       function, such as your login session and security tokens.
                       Turning this on may mean your preferences and filter
                       settings won&apos;t be remembered between visits.
@@ -1243,7 +1286,7 @@ export default function SettingsPage() {
                   <button
                     type="button"
                     onClick={() => void clearCookies()}
-                    className="shrink-0 rounded-lg border border-[#E5E7EB] bg-white px-3.5 py-2 text-[13px] font-semibold text-[#5A45FF] transition-colors hover:bg-[#F8F7FF]"
+                    className="shrink-0 rounded-lg border border-[#DEE1E8] bg-white px-3.5 py-2 text-[13px] font-semibold text-[#4B3BD4] transition-colors hover:bg-[#F8F7FF]"
                   >
                     Clear Cookies
                   </button>
@@ -1262,7 +1305,7 @@ export default function SettingsPage() {
                       Exclude private channels
                     </p>
                     <p className="mt-1 max-w-[560px] text-[13px] leading-relaxed text-[#6B7280]">
-                      Locus will skip private Slack channels entirely, even if
+                      Locus AI will skip private Slack channels entirely, even if
                       you&apos;re a member and have granted access.
                     </p>
                   </div>
@@ -1298,12 +1341,12 @@ export default function SettingsPage() {
                 </p>
                 <span className="inline-flex items-center gap-1.5 text-[13px] font-medium text-[#16A34A]">
                   <span className="h-1.5 w-1.5 rounded-full bg-[#22C55E]" />
-                  EU · Frankfurt
+                  US · West
                 </span>
               </div>
               <p className="mt-1 text-[13px] text-[#6B7280]">
-                Your data is processed and stored in EU-West (Frankfurt,
-                Germany).
+                Your data is processed and stored in US-West (California,
+                USA).
               </p>
             </div>
 
@@ -1316,7 +1359,7 @@ export default function SettingsPage() {
                   {
                     id: 'readonly-oauth',
                     icon: <ShieldIcon />,
-                    text: 'Read-only OAuth. Locus never writes to Slack, Notion, or Gmail.',
+                    text: 'Read-only OAuth. Locus AI never writes to Slack, Notion, or Gmail.',
                   },
                   {
                     id: 'raw-deleted',
@@ -1359,7 +1402,7 @@ export default function SettingsPage() {
               Notifications
             </h1>
             <p className="mt-1 text-[14px] text-[#6B7280]">
-              Control how and when Locus reaches you.
+              Control how and when Locus AI reaches you.
             </p>
 
             <div className="mt-8 rounded-2xl border border-[#E8E8ED] bg-white p-5 shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
@@ -1403,7 +1446,7 @@ export default function SettingsPage() {
                   <div className="min-w-0">
                     <p className="text-[15px] font-semibold text-[#111827]">In App</p>
                     <p className="mt-1 max-w-[560px] text-[13px] leading-relaxed text-[#6B7280]">
-                      Show a notification badge in the Locus dashboard when new
+                      Show a notification badge in the Locus AI dashboard when new
                       captures arrive.
                     </p>
                   </div>

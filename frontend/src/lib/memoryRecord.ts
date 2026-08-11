@@ -75,7 +75,6 @@ export function decisionToMemoryRecord(decision: DecisionOut): MemoryRecord {
     listSource: platformLabel,
     date: formatDate(decision.created_at),
     sourceLink: decision.source_links[0],
-    hasContext: Boolean(decision.rationale),
     exactTime: formatExactTime(decision.created_at),
   }
 }

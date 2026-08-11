@@ -19,6 +19,8 @@
 // No infinite loop - the cron interval is the poll loop.
 
 import { withAdmin, withTenant } from "../_shared/db.ts";
+import { decryptToken } from "../_shared/tokenCrypto.ts";
+import { redactFinancialInfo } from "../_shared/financialRedaction.ts";
 
 const corsHeaders = { "Access-Control-Allow-Origin": "*" };
 
@@ -575,6 +577,40 @@ async function resolveActorId(
   return created[0].id;
 }
 
+// slack-webhook only had enough data to build a slack:// deep link (opens
+// the desktop app, not something a browser's "View Original" button can do
+// anything useful with - most browsers either no-op or prompt to open an
+// app that may not be installed). Real https:// permalinks need
+// chat.getPermalink, which needs a bot token - not worth calling for every
+// raw event (most get discarded), so it only runs here, once per message
+// that actually becomes a decision. Falls back to the slack:// link (still
+// better than nothing) if the API call fails for any reason.
+// deno-lint-ignore no-explicit-any
+async function resolveSlackPermalink(
+  sql: any, tenantId: string, channel: string, messageTs: string, fallback: string | null | undefined,
+): Promise<string | null | undefined> {
+  try {
+    const connRows = await sql`
+      SELECT oauth_token_ref FROM public.source_connections
+      WHERE tenant_id = ${tenantId} AND source = 'slack' AND status = 'active'
+      ORDER BY created_at ASC LIMIT 1
+    `;
+    const accessToken = await decryptToken(connRows[0]?.oauth_token_ref);
+    if (!accessToken) return fallback;
+
+    const resp = await fetchWithTimeout(
+      `https://slack.com/api/chat.getPermalink?channel=${encodeURIComponent(channel)}&message_ts=${encodeURIComponent(messageTs)}`,
+      { headers: { Authorization: `Bearer ${accessToken}` } },
+      8_000,
+    );
+    const data = await resp.json();
+    return data.ok && typeof data.permalink === "string" ? data.permalink : fallback;
+  } catch (err) {
+    console.error(`resolveSlackPermalink failed for channel=${channel} ts=${messageTs}:`, err);
+    return fallback;
+  }
+}
+
 // ── pgmq helpers (raw SQL, mirrors queues.pgmq.client) ────────────────────
 
 type PgmqMsg = { msg_id: number; message: Record<string, unknown>; read_ct: number };
@@ -616,11 +652,16 @@ async function handleIngestionMessage(msg: PgmqMsg): Promise<string> {
   try {
     return await handleIngestionMessageInner(msg);
   } catch (err) {
+    // Delete message on ANY error to prevent retry loops that cause repeated Claude calls
+    await pgmqDelete("ingestion", msg.msg_id);
+    
     if (err instanceof NonRetryableIngestionError) {
-      await pgmqDelete("ingestion", msg.msg_id);
       return "abandoned_no_active_connection";
     }
-    throw err;
+    
+    // Log the error for monitoring while preventing expensive retry loops
+    console.error("Ingestion error, message deleted to prevent retry loop:", err);
+    return "error_deleted";
   }
 }
 
@@ -793,6 +834,15 @@ async function handleIngestionMessageInner(msg: PgmqMsg): Promise<string> {
   };
   extraction.confidence = result.confidence;
 
+  // Second, independent redaction pass on the model's own output. The
+  // source text was already scrubbed in queue.ts before extraction ever
+  // ran, but this catches the case where the model reformats/paraphrases a
+  // number (e.g. re-typing digits from an image description or quoting a
+  // partially-redacted source) differently than it appeared in the input.
+  extraction.decision_statement = redactFinancialInfo(extraction.decision_statement);
+  extraction.rationale = extraction.rationale ? redactFinancialInfo(extraction.rationale) : extraction.rationale;
+  extraction.alternatives_considered = (extraction.alternatives_considered ?? []).map(redactFinancialInfo);
+
   // Persist (decision + source + actors), mark done, enqueue embedding
   const decisionId = await withTenant(tenantId, async (sql) => {
     const existingDecision = await sql`
@@ -812,10 +862,14 @@ async function handleIngestionMessageInner(msg: PgmqMsg): Promise<string> {
     `;
     const newDecisionId = decisionRows[0].id as string;
 
-    if (payload.source_permalink) {
+    const permalink = payload.source === "slack" && payload.permission_scope?.[0]
+      ? await resolveSlackPermalink(sql, tenantId, payload.permission_scope[0], payload.source_id, payload.source_permalink)
+      : payload.source_permalink;
+
+    if (permalink) {
       await sql`
         INSERT INTO public.decision_sources (tenant_id, decision_id, raw_event_id, permalink)
-        VALUES (${tenantId}, ${newDecisionId}, ${rawEventId}, ${payload.source_permalink})
+        VALUES (${tenantId}, ${newDecisionId}, ${rawEventId}, ${permalink})
         ON CONFLICT (decision_id, permalink) DO NOTHING
       `;
     }
@@ -1049,41 +1103,48 @@ async function detectConflicts(
 }
 
 async function handleEmbeddingMessage(msg: PgmqMsg): Promise<string> {
-  const job = msg.message as { tenant_id: string; decision_id: string };
+  try {
+    const job = msg.message as { tenant_id: string; decision_id: string };
 
-  const row = await withTenant(job.tenant_id, async (sql) => {
-    const rows = await sql`
-      SELECT decision_statement, rationale, alternatives_considered
-      FROM public.decisions WHERE id = ${job.decision_id} AND tenant_id = ${job.tenant_id}
-    `;
-    return rows[0] ?? null;
-  });
+    const row = await withTenant(job.tenant_id, async (sql) => {
+      const rows = await sql`
+        SELECT decision_statement, rationale, alternatives_considered
+        FROM public.decisions WHERE id = ${job.decision_id} AND tenant_id = ${job.tenant_id}
+      `;
+      return rows[0] ?? null;
+    });
 
-  if (row === null) {
-    // Non-retryable (decision was deleted after the job was enqueued) -
-    // matches the Python worker leaving it for now rather than inventing
-    // archive/DLQ infrastructure; delete here since there is nothing to retry.
+    if (row === null) {
+      // Non-retryable (decision was deleted after the job was enqueued) -
+      // matches the Python worker leaving it for now rather than inventing
+      // archive/DLQ infrastructure; delete here since there is nothing to retry.
+      await pgmqDelete("embedding_queue", msg.msg_id);
+      return "decision_not_found";
+    }
+
+    const text = buildSearchableText(row.decision_statement, row.rationale, row.alternatives_considered ?? []);
+    const embedding = await embedDocument(text);
+    const vectorLiteral = "[" + embedding.join(",") + "]";
+
+    await withTenant(job.tenant_id, async (sql) => {
+      await sql`
+        INSERT INTO public.decision_embeddings (decision_id, tenant_id, embedding, embedding_model, embedded_at)
+        VALUES (${job.decision_id}, ${job.tenant_id}, ${vectorLiteral}::vector, ${VOYAGE_MODEL}, now())
+        ON CONFLICT (decision_id) DO UPDATE SET
+          embedding = EXCLUDED.embedding, embedding_model = EXCLUDED.embedding_model, embedded_at = EXCLUDED.embedded_at
+      `;
+    });
+
+    await detectConflicts(job.tenant_id, job.decision_id, row.decision_statement, row.rationale, embedding);
+
     await pgmqDelete("embedding_queue", msg.msg_id);
-    return "decision_not_found";
+    return "embedded";
+  } catch (err) {
+    // Delete message on ANY error to prevent retry loops
+    await pgmqDelete("embedding_queue", msg.msg_id);
+    console.error("Embedding error, message deleted to prevent retry loop:", err);
+    return "error_deleted";
   }
-
-  const text = buildSearchableText(row.decision_statement, row.rationale, row.alternatives_considered ?? []);
-  const embedding = await embedDocument(text);
-  const vectorLiteral = "[" + embedding.join(",") + "]";
-
-  await withTenant(job.tenant_id, async (sql) => {
-    await sql`
-      INSERT INTO public.decision_embeddings (decision_id, tenant_id, embedding, embedding_model, embedded_at)
-      VALUES (${job.decision_id}, ${job.tenant_id}, ${vectorLiteral}::vector, ${VOYAGE_MODEL}, now())
-      ON CONFLICT (decision_id) DO UPDATE SET
-        embedding = EXCLUDED.embedding, embedding_model = EXCLUDED.embedding_model, embedded_at = EXCLUDED.embedded_at
-    `;
-  });
-
-  await detectConflicts(job.tenant_id, job.decision_id, row.decision_statement, row.rationale, embedding);
-
-  await pgmqDelete("embedding_queue", msg.msg_id);
-  return "embedded";
 }
 
 // ── Bounded concurrency runner ─────────────────────────────────────────

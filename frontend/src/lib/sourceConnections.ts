@@ -12,9 +12,15 @@ import { getTenantId } from './api'
 export type SourceId = 'slack' | 'notion' | 'gmail'
 
 export interface SourceConnectionRow {
+  id: string
   source: SourceId
   status: string
   last_synced_at: string | null
+  /** OAuth-stable identity key: Gmail's real email, Slack's team id, Notion's workspace id. */
+  external_workspace_id: string | null
+  /** Human-readable label - Gmail's email again, Slack's team name, Notion's workspace name.
+   * Null for rows connected before this column existed. */
+  display_name: string | null
 }
 
 const SUPABASE_URL = (import.meta.env.VITE_SUPABASE_URL as string | undefined) ?? ''
@@ -40,7 +46,7 @@ export async function fetchSourceConnections(): Promise<SourceConnectionRow[]> {
   const tenantId = await getTenantId()
   const { data, error } = await getSupabaseClient()
     .from('source_connections')
-    .select('source, status, last_synced_at')
+    .select('id, source, status, last_synced_at, external_workspace_id, display_name')
     .eq('tenant_id', tenantId)
 
   if (error) throw error
@@ -188,12 +194,15 @@ export async function connectSource(
 }
 
 /**
- * Disconnects a source. When deleteHistory is true, also permanently
- * deletes every decision and raw event captured from that source for this
- * tenant - irreversible, callers must confirm with the user first.
+ * Disconnects one specific connection (by its own row id, not just its
+ * source type - a tenant can have more than one Gmail/Slack/Notion
+ * connection, and disconnecting one must never touch another). When
+ * deleteHistory is true, also permanently deletes every decision and raw
+ * event captured from that connection - irreversible, callers must confirm
+ * with the user first.
  */
 export async function disconnectSource(
-  sourceId: SourceId,
+  connectionId: string,
   deleteHistory: boolean,
 ): Promise<{ success: boolean; error?: string }> {
   const { data: sessionData } = await getSupabaseClient().auth.getSession()
@@ -203,7 +212,7 @@ export async function disconnectSource(
   }
 
   const { data, error } = await getSupabaseClient().functions.invoke('capture-source-rules', {
-    body: { action: deleteHistory ? 'disconnect_and_delete' : 'disconnect', source: sourceId },
+    body: { action: 'disconnect', connection_id: connectionId, delete_history: deleteHistory },
   })
 
   if (error) {

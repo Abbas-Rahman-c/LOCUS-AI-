@@ -321,8 +321,15 @@ export function getDecision(id: string): Promise<DecisionDetail> {
   return apiFetch<DecisionDetail>(`/api/v1/decisions/${id}`)
 }
 
-export function getDigest(scope: 'team' | 'personal', refresh = false): Promise<DigestResponse> {
-  return apiFetch<DigestResponse>(`/digest?scope=${scope}${refresh ? '&refresh=true' : ''}`)
+export function getDigest(
+  scope: 'team' | 'personal',
+  refresh = false,
+  weekOf?: string,
+): Promise<DigestResponse> {
+  const params = new URLSearchParams({ scope })
+  if (refresh) params.set('refresh', 'true')
+  if (weekOf) params.set('week_of', weekOf)
+  return apiFetch<DigestResponse>(`/digest?${params.toString()}`)
 }
 
 export interface CheckoutResponse {
