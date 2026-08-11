@@ -8,11 +8,11 @@ export default function GetStarted() {
 
   return (
     <div className="relative w-full bg-white">
-      <div className="mx-auto w-full max-w-[1100px]">
+      <div className="mx-auto flex min-h-screen w-full max-w-[1100px] flex-col">
         <Header />
 
-        <main className="flex flex-col gap-10 px-8 pb-10 pt-2 lg:flex-row lg:items-stretch lg:gap-8 lg:px-10">
-          <section className="flex w-full shrink-0 flex-col pt-4 lg:w-[42%]">
+        <main className="flex flex-1 flex-col justify-center gap-10 px-8 py-10 lg:flex-row lg:items-center lg:justify-start lg:gap-8 lg:px-10">
+          <section className="flex w-full shrink-0 flex-col lg:w-[42%]">
             <h1 className="text-[40px] font-bold leading-[1.15] tracking-[-0.025em] text-[#111827]">
               Turn everyday work into{' '}
               <span className="bg-gradient-to-r from-[#5b52e8] to-[#6366f1] bg-clip-text text-transparent">
