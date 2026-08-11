@@ -9,7 +9,12 @@ export default function LandingPage({
   initialSection?: 'get-started' | 'how-it-works' | 'why-locus'
 } = {}) {
   useEffect(() => {
-    if (!initialSection) return
+    if (!initialSection) {
+      // No specific section requested (plain load or refresh) - start at
+      // the top rather than wherever the browser last left off.
+      window.scrollTo(0, 0)
+      return
+    }
     const section = document.getElementById(initialSection)
     section?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }, [initialSection])
