@@ -11,6 +11,13 @@
     <link rel="icon" type="image/png" href="/src/assets/locuslogo.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>LOCUS AI - Sign up</title>
+    <!-- locusaiapp.com and www.locusaiapp.com both serve identical content
+         with no redirect between them, which Google Search Console flagged
+         as "Duplicate without user-selected canonical" - it won't index
+         either copy until one is declared authoritative. This doesn't fix
+         the underlying duplicate (that needs a www->apex redirect at the
+         DNS/Vercel domain level), just tells Google which one to trust. -->
+    <link rel="canonical" href="https://locusaiapp.com/" />
   </head>
   <body>
     <div id="root"></div>
