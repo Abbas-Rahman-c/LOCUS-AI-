@@ -159,7 +159,7 @@ export default function WhyLocus() {
 
   return (
     <div className="bg-[#f7f7f9]">
-      <div className="mx-auto flex min-h-screen max-w-[1040px] flex-col justify-center px-6 pb-4 pt-16 sm:px-10 lg:px-12 lg:pt-20">
+      <div className="mx-auto flex min-h-screen max-w-[1400px] flex-col justify-center px-6 pb-4 pt-16 sm:px-10 lg:px-12 lg:pt-20">
         <p className="text-[12px] font-semibold tracking-[0.08em] text-[#5b52e8]">
           WHY LOCUS AI
         </p>
@@ -215,7 +215,7 @@ export default function WhyLocus() {
       </div>
 
       <footer className="bg-[#111827] px-6 py-12 sm:px-10 lg:px-12">
-        <div className="mx-auto max-w-[1040px]">
+        <div className="mx-auto max-w-[1400px]">
           <div className="flex flex-col gap-8 sm:flex-row sm:items-start sm:justify-between">
             <div className="max-w-[380px]">
               <FooterLogo />

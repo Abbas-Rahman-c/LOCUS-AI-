@@ -402,7 +402,7 @@ export default function HowItWorks() {
 
   return (
     <div className="bg-white px-6 pb-16 pt-0 sm:px-10 sm:pt-1 lg:px-16 lg:pb-20 lg:pt-2">
-      <div className="mx-auto max-w-[980px]">
+      <div className="mx-auto max-w-[1400px]">
         <p className="text-[12px] font-semibold tracking-[0.08em] text-[#5b52e8]">
           HOW IT WORKS
         </p>

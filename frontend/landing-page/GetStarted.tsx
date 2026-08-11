@@ -8,7 +8,7 @@ export default function GetStarted() {
 
   return (
     <div className="relative w-full bg-white">
-      <div className="mx-auto flex min-h-screen w-full max-w-[1100px] flex-col">
+      <div className="mx-auto flex min-h-screen w-full max-w-[1400px] flex-col">
         <Header />
 
         <main className="flex flex-1 flex-col justify-center gap-10 px-8 py-10 lg:flex-row lg:items-center lg:justify-start lg:gap-8 lg:px-10">
