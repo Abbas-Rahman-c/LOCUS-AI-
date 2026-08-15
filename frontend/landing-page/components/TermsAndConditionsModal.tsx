@@ -1,5 +1,3 @@
-import { useState } from 'react'
-
 interface TermsAndConditionsModalProps {
   isOpen: boolean
   onClose: () => void
@@ -11,8 +9,6 @@ export function TermsAndConditionsModal({
   onClose,
   onAgree,
 }: TermsAndConditionsModalProps) {
-  const [isScrolling, setIsScrolling] = useState(false)
-
   if (!isOpen) return null
 
   return (
