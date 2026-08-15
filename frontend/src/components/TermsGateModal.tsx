@@ -1,14 +1,18 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { getSupabaseClient, isSupabaseConfigured } from '../lib/supabase'
 import { DEMO_EMAIL_KEY, WORKSPACES_DONE_KEY } from '../lib/sessionKeys'
-import { TermsBody, TERMS_VERSION } from '../lib/termsContent'
+import { TermsSections, TERMS_VERSION } from '../lib/termsContent'
 
 /**
- * Blocking modal shown once, right after a real user's first sign-in -
+ * Blocking dialog shown once, right after a real user's first sign-in -
  * before they reach /connect-workspaces or the dashboard, since that's the
  * point where we start reading their Slack/Gmail/Notion data. Gated on
  * user_metadata.terms_version (see useAuthEmail() in App.tsx) so it never
- * shows again for that account unless TERMS_VERSION changes.
+ * shows again for that account unless TERMS_VERSION changes. Styled to
+ * match the confirmation dialogs already used in AccountSettings.tsx
+ * (rounded-[8px] white card, icon badge, #4B3BD4 primary button) rather
+ * than as a one-off design.
  */
 export function TermsGateModal({ onAccepted }: { onAccepted: () => void }) {
   const [submitting, setSubmitting] = useState(false)
@@ -42,28 +46,67 @@ export function TermsGateModal({ onAccepted }: { onAccepted: () => void }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 py-8">
-      <div className="flex max-h-[85vh] w-full max-w-[560px] flex-col rounded-[12px] bg-white shadow-xl">
-        <div className="border-b border-[#E5E7EB] px-6 py-5">
-          <h1 className="text-[18px] font-bold text-[#111827]">Terms and Conditions</h1>
-          <p className="mt-1 text-[13px] text-[#6B7280]">
-            Since Locus AI reads data from the tools you connect, we need you to review and
-            accept these terms before continuing.
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/35 px-4 py-8"
+      role="presentation"
+    >
+      <section
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="terms-gate-title"
+        className="flex max-h-[88vh] w-full max-w-[520px] flex-col rounded-[8px] bg-white shadow-[0_20px_55px_rgba(17,24,39,0.22)]"
+      >
+        <div className="shrink-0 px-8 pt-8">
+          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[#F0F8FF] text-[#4B3BD4]">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path
+                d="M12 3l7 3.2v5c0 4.6-3 8.9-7 10-4-1.1-7-5.4-7-10v-5L12 3z"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                strokeLinejoin="round"
+              />
+              <path
+                d="M9.3 12.2l1.8 1.8 3.6-3.8"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          </div>
+          <h1 id="terms-gate-title" className="mt-5 text-[20px] font-semibold text-[#202027]">
+            Before you continue
+          </h1>
+          <p className="mt-2 text-[14px] leading-6 text-[#7A8292]">
+            Locus AI reads data from the tools you connect, so we need you to agree to our terms
+            first. Here's the short version:
           </p>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-6 py-5">
-          <TermsBody />
+        <div className="mt-5 flex-1 overflow-y-auto px-8">
+          <TermsSections compact />
+          <Link
+            to="/terms"
+            target="_blank"
+            rel="noreferrer"
+            className="mt-4 inline-block text-[13px] font-medium text-[#4B3BD4] hover:underline"
+          >
+            Read the full Terms and Conditions ↗
+          </Link>
         </div>
 
-        <div className="border-t border-[#E5E7EB] px-6 py-4">
-          {error && <p className="mb-3 text-[13px] text-[#DC2626]">{error}</p>}
-          <div className="flex justify-end gap-3">
+        <div className="mt-6 shrink-0 px-8 pb-8">
+          {error && (
+            <p role="alert" className="mb-3 text-[14px] text-[#B4232C]">
+              {error}
+            </p>
+          )}
+          <div className="grid grid-cols-2 gap-3">
             <button
               type="button"
               onClick={handleDecline}
               disabled={submitting}
-              className="h-10 rounded-[8px] border border-[#DEE1E8] bg-white px-5 text-[14px] font-medium text-[#374151] hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+              className="h-11 rounded-[7px] border border-[#DEE1E8] bg-white px-4 text-[15px] font-semibold text-[#4B3BD4] hover:bg-[#F8F7FF] disabled:opacity-50"
             >
               Decline &amp; log out
             </button>
@@ -71,13 +114,13 @@ export function TermsGateModal({ onAccepted }: { onAccepted: () => void }) {
               type="button"
               onClick={handleAccept}
               disabled={submitting}
-              className="h-10 rounded-[8px] bg-[#4B3BD4] px-5 text-[14px] font-semibold text-white hover:bg-[#3F30BC] disabled:cursor-wait disabled:opacity-70"
+              className="h-11 rounded-[7px] bg-[#4B3BD4] px-4 text-[15px] font-semibold text-white hover:bg-[#3F30BC] disabled:cursor-wait disabled:opacity-60"
             >
               {submitting ? 'Saving…' : 'I Agree, Continue'}
             </button>
           </div>
         </div>
-      </div>
+      </section>
     </div>
   )
 }
