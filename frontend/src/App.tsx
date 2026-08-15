@@ -22,10 +22,13 @@ import { DEMO_EMAIL_KEY, WORKSPACES_DONE_KEY } from './lib/sessionKeys'
 import { fetchSourceConnections } from './lib/sourceConnections'
 import DecisionReady from './DecisionReady'
 import { DashboardShell } from './components/DashboardShell'
+import { TermsGateModal } from './components/TermsGateModal'
 import MainDashboardEntry from './pages/MainDashboardEntry'
 import DecisionLogPage from './pages/DecisionLogPage'
 import TeamPulse from './pages/TeamPulse'
 import SettingsPage from './pages/SettingsPage'
+import TermsPage from './pages/TermsPage'
+import { TERMS_VERSION } from './lib/termsContent'
 
 /** Full marketing page: Get Started → How it works → Why Locus (scrollable). */
 function HowItWorksMarketing() {
@@ -41,18 +44,26 @@ function useAuthEmail() {
   // so a signed-in user with zero memberships rows means "authenticated but
   // not yet granted access", not a broken account.
   const [hasTenant, setHasTenant] = useState<boolean | null>(null)
+  // null = not yet checked. Backed by the signed-in user's own
+  // user_metadata.terms_version (set by TermsGateModal on accept), so it
+  // travels with the account across devices/sessions rather than living in
+  // this tab's sessionStorage - re-prompts automatically if TERMS_VERSION
+  // is ever bumped for a material terms change.
+  const [hasAcceptedTerms, setHasAcceptedTerms] = useState<boolean | null>(null)
 
   useEffect(() => {
     const demoEmail = sessionStorage.getItem(DEMO_EMAIL_KEY)
     if (demoEmail) {
       setUserEmail(demoEmail)
       setHasTenant(true)
+      setHasAcceptedTerms(true)
       setAuthReady(true)
       return
     }
 
     if (!isSupabaseConfigured()) {
       setHasTenant(true)
+      setHasAcceptedTerms(true)
       setAuthReady(true)
       return
     }
@@ -63,10 +74,12 @@ function useAuthEmail() {
       setUserEmail(session?.user.email ?? null)
       if (!session) {
         setHasTenant(null)
+        setHasAcceptedTerms(null)
         setAuthReady(true)
         return
       }
       rememberAccountFromSession(session)
+      setHasAcceptedTerms(session.user.user_metadata?.terms_version === TERMS_VERSION)
       const { data, error } = await supabase.from('memberships').select('tenant_id').limit(1)
       setHasTenant(!error && (data?.length ?? 0) > 0)
       setAuthReady(true)
@@ -81,7 +94,7 @@ function useAuthEmail() {
     return () => data.subscription.unsubscribe()
   }, [])
 
-  return { userEmail, authReady, hasTenant }
+  return { userEmail, authReady, hasTenant, hasAcceptedTerms, markTermsAccepted: () => setHasAcceptedTerms(true) }
 }
 
 /** Shown to a real (non-demo) account that authenticated successfully but
@@ -182,7 +195,7 @@ function useWorkspacesConnected(userEmail: string | null, authReady: boolean) {
  * demo-or-Supabase-session check every other protected route already uses.
  */
 function RequireAuth() {
-  const { userEmail, authReady, hasTenant } = useAuthEmail()
+  const { userEmail, authReady, hasTenant, hasAcceptedTerms, markTermsAccepted } = useAuthEmail()
 
   if (!authReady) {
     return (
@@ -207,12 +220,16 @@ function RequireAuth() {
     return <WaitlistScreen email={userEmail} />
   }
 
+  if (hasAcceptedTerms === false) {
+    return <TermsGateModal onAccepted={markTermsAccepted} />
+  }
+
   return <Outlet />
 }
 
 function ConnectWorkspacesRoute() {
   const navigate = useNavigate()
-  const { userEmail, authReady, hasTenant } = useAuthEmail()
+  const { userEmail, authReady, hasTenant, hasAcceptedTerms, markTermsAccepted } = useAuthEmail()
   const { workspacesConnected, markConnected, checked } = useWorkspacesConnected(userEmail, authReady)
 
   if (!authReady || (userEmail && !checked)) {
@@ -238,6 +255,10 @@ function ConnectWorkspacesRoute() {
     return <WaitlistScreen email={userEmail} />
   }
 
+  if (hasAcceptedTerms === false) {
+    return <TermsGateModal onAccepted={markTermsAccepted} />
+  }
+
   if (workspacesConnected) {
     return (
       <DecisionReady
@@ -254,7 +275,7 @@ function ConnectWorkspacesRoute() {
 function AuthRoutes() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
-  const { userEmail, authReady, hasTenant } = useAuthEmail()
+  const { userEmail, authReady, hasTenant, hasAcceptedTerms, markTermsAccepted } = useAuthEmail()
   const { workspacesConnected, checked } = useWorkspacesConnected(userEmail, authReady)
 
   const isOAuthCallback =
@@ -276,6 +297,10 @@ function AuthRoutes() {
 
   if (userEmail && hasTenant === false) {
     return <WaitlistScreen email={userEmail} />
+  }
+
+  if (userEmail && hasAcceptedTerms === false) {
+    return <TermsGateModal onAccepted={markTermsAccepted} />
   }
 
   if (userEmail && !workspacesConnected) {
@@ -309,6 +334,7 @@ const PAGE_TITLES: Record<string, string> = {
   '/team-pulse': 'Team Pulse · Locus AI',
   '/settings': 'Settings · Locus AI',
   '/dashboard/how-it-works': 'How It Works · Locus AI',
+  '/terms': 'Terms and Conditions · Locus AI',
 }
 
 function PageTitle() {
@@ -330,6 +356,7 @@ function App() {
 
         {/* Full 3-section landing (Get Started + How it works + Why Locus) */}
         <Route path="/how-it-works" element={<HowItWorksMarketing />} />
+        <Route path="/terms" element={<TermsPage />} />
 
         {/* Slack/Notion/Gmail OAuth popup lands here after the provider redirects back */}
         <Route path="/oauth/source-callback" element={<SourceOAuthCallback />} />
