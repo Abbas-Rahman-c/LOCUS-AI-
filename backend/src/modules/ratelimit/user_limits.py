@@ -9,13 +9,14 @@ depending on the desired rate limiting scope.
 from __future__ import annotations
 
 import logging
+import uuid
 from datetime import datetime, timedelta, timezone
 
 import asyncpg
 from fastapi import Depends, HTTPException, status
 
 from app.dependencies import TenantContext, get_current_tenant
-from database.pool import get_db_pool
+from database.pool import get_admin_db_pool, get_db_pool
 
 log = logging.getLogger(__name__)
 
@@ -30,32 +31,37 @@ class UserLimitError(Exception):
     pass
 
 
-async def get_user_limit_key_from_id(pool: asyncpg.Pool, user_id: str) -> str:
+async def get_user_limit_key_from_id(user_id: str) -> str:
     """
     Get user limit key from auth.users table using user_id.
-    
+
     Currently uses email as the limit key, but this can be extended to use
     user_id, organization_id, or other identifiers based on rate limiting requirements.
-    
+
+    Uses the admin pool, not the regular RLS-bound one: locus_app (the
+    regular pool's role) only has grants on the public schema
+    (008_create_locus_app_role.sql), not auth, so this lookup would fail
+    with a permission error on every call otherwise - same reason
+    scope_resolver.py's auth.users lookup runs on the admin pool.
+
     Args:
-        pool: Database connection pool
         user_id: The user's UUID from JWT token
-        
+
     Returns:
         The limit key (currently user's email address)
-        
+
     Raises:
         UserLimitError: If user lookup fails
     """
     try:
-        async with pool.acquire() as conn:
+        async with get_admin_db_pool().acquire() as conn:
             row = await conn.fetchrow(
                 """
                 SELECT email
                 FROM auth.users
                 WHERE id = $1
                 """,
-                user_id
+                uuid.UUID(user_id)
             )
             if row is None:
                 raise UserLimitError(f"User not found: {user_id}")
@@ -259,7 +265,7 @@ async def enforce_user_prompt_limit(
     """
     try:
         # Get user limit key (currently email, but can be extended)
-        limit_key = await get_user_limit_key_from_id(pool, user_id)
+        limit_key = await get_user_limit_key_from_id(user_id)
         
         # Check and increment limit
         allowed = await check_and_increment_prompt_limit(pool, limit_key)
