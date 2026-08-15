@@ -3,10 +3,21 @@
   <head>
     <meta charset="UTF-8" />
     <!-- favicon.svg is a different, unused mark - the real Locus AI logo
-         (the one in the nav header on every page) is locus-mark.png. -->
-    <link rel="icon" type="image/png" href="/locus-mark.png" />
+         (the one in the nav header on every page) is locuslogo.png. Referenced
+         from src/assets (not public/) so Vite fingerprints the filename - a
+         public/ path never changes URL when the image content changes,
+         which left browsers serving a stale cached logo after the real-logo
+         swap even though the server had the new file. -->
+    <link rel="icon" type="image/png" href="/src/assets/locuslogo.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>LOCUS AI - Sign up</title>
+    <!-- locusaiapp.com and www.locusaiapp.com both serve identical content
+         with no redirect between them, which Google Search Console flagged
+         as "Duplicate without user-selected canonical" - it won't index
+         either copy until one is declared authoritative. This doesn't fix
+         the underlying duplicate (that needs a www->apex redirect at the
+         DNS/Vercel domain level), just tells Google which one to trust. -->
+    <link rel="canonical" href="https://locusaiapp.com/" />
   </head>
   <body>
     <div id="root"></div>

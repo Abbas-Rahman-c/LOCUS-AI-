@@ -94,10 +94,12 @@ function PulseGroup({
   title,
   color,
   section,
+  number
 }: {
   title: string
   color: string
   section: PulseSection
+  number: number
 }) {
   const [expandedId, setExpandedId] = useState<string | null>(null)
 
@@ -109,8 +111,8 @@ function PulseGroup({
         aria-hidden="true"
       />
       <div className="min-w-0 flex-1">
-        <h2 className="text-[14px] font-medium text-[#242334]">
-          {title} <span className="font-normal text-[#8B91A1]">{section.count}</span>
+        <h2 className="text-[14px] font-bold text-[#242334]">
+          {number}. {title} <span className="font-normal text-[#8B91A1]">{section.count}</span>
         </h2>
         <p className="mt-0.5 text-[12px] leading-5 text-[#858B9B]">
           {section.description}
@@ -436,14 +438,57 @@ export default function TeamPulse() {
                       {isCurrentWeek ? 'Synthesizing this week…' : 'Loading…'}
                     </p>
                   ) : digestSummary ? (
-                    <p className="whitespace-pre-wrap rounded-[6px] bg-[#F7F7FB] p-4 text-[14px] leading-relaxed text-[#3F424C]">
-                      {digestSummary}
-                    </p>
+                    <div className="mb-4">
+                      <h3 className="text-[16px] font-bold text-[#242334] mb-2">Summary</h3>
+                      <p className="whitespace-pre-line rounded-[6px] bg-[#F7F7FB] p-4 text-[14px] leading-relaxed text-[#3F424C]">
+                        {digestSummary}
+                      </p>
+                    </div>
                   ) : null
                 ) : null}
-                <PulseGroup title="Decisions" color="#5644DF" section={pulse.decisions} />
-                <PulseGroup title="Action items" color="#9CDD24" section={pulse.actionItems} />
-                <PulseGroup title="Blockers" color="#F3464B" section={pulse.blockers} />
+
+                {pulse && (
+                  <>
+                    <div className="mb-4">
+                      <h3 className="text-[16px] font-bold text-[#242334] mb-2">Key takeaways</h3>
+                      <div className="rounded-[6px] bg-[#F7F7FB] p-4 text-[14px] leading-relaxed text-[#3F424C]">
+                        <ul className="space-y-2">
+                          <li className="flex items-start">
+                            <span className="mr-2 text-[#5644DF]">•</span>
+                            <span>{pulse.decisions.count} key decision{pulse.decisions.count !== 1 ? 's' : ''} made this period</span>
+                          </li>
+                          <li className="flex items-start">
+                            <span className="mr-2 text-[#9CDD24]">•</span>
+                            <span>{pulse.actionItems.count} action item{pulse.actionItems.count !== 1 ? 's' : ''} to track</span>
+                          </li>
+                          <li className="flex items-start">
+                            <span className="mr-2 text-[#F3464B]">•</span>
+                            <span>{pulse.blockers.count} blocker{pulse.blockers.count !== 1 ? 's' : ''} need{pulse.blockers.count === 1 ? 's' : ''} attention</span>
+                          </li>
+                        </ul>
+                      </div>
+                    </div>
+
+                    {pulse.blockers.count > 0 && (
+                      <div className="mb-4">
+                        <h3 className="text-[16px] font-bold text-[#242334] mb-2">Next steps based on blockers</h3>
+                        <div className="rounded-[6px] bg-[#F7F7FB] p-4 text-[14px] leading-relaxed text-[#3F424C]">
+                          <ul className="space-y-2">
+                            {pulse.blockers.items.map((blocker) => (
+                              <li key={blocker.id} className="flex items-start">
+                                <span className="mr-2 text-[#F3464B]">•</span>
+                                <span>Address: {blocker.decision_statement}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
+                <PulseGroup title="Decisions" color="#5644DF" section={pulse.decisions} number={1} />
+                <PulseGroup title="Actions" color="#9CDD24" section={pulse.actionItems} number={2} />
+                <PulseGroup title="Blockers" color="#F3464B" section={pulse.blockers} number={3} />
               </>
             ) : null}
           </div>

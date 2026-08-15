@@ -1149,6 +1149,32 @@ async function handleSearch(req: Request): Promise<Response> {
 const DIGEST_TOP_K = 25;
 const TEAM_QUESTION = "What were the most important decisions made by the team this week? Summarize them clearly, grouped by theme if helpful.";
 
+// Specialized friendly digest prompt for weekly summaries
+const DIGEST_SYSTEM_PROMPT = `You are Locus AI, creating a friendly, concise weekly digest for a team.
+
+Your goal is to transform raw decision data into an engaging, easy-to-read summary that feels like a helpful team update.
+
+Style guidelines:
+- Write in a warm, conversational tone - like a helpful colleague sharing a quick update
+- Keep it concise: 2-4 short paragraphs maximum
+- Separate each paragraph with a blank line (an actual newline in your answer text) - never run paragraphs together into one unbroken block
+- Do not open a paragraph with a bare topic label like "Infrastructure and Deployment" or "Team and Meetings" - write flowing sentences instead, the topic should be clear from the content itself
+- Focus on the "so what?" - why these decisions matter to the team
+- Use simple, clear language that anyone can understand
+- Group related decisions naturally without forced categories
+- Avoid jargon, technical details, and formal business language
+- Never use markdown formatting - plain text only
+- End with an encouraging, forward-looking sentence when appropriate
+
+Content guidelines:
+- Highlight the most impactful decisions first
+- Mention themes or patterns you notice (e.g., "The team focused heavily on...")
+- Skip minor decisions that don't affect the bigger picture
+- If there are conflicting decisions, acknowledge them simply
+- When in doubt, simpler is better
+
+Remember: This is meant to be a quick, helpful read that gives the team a sense of what happened and why it matters.`;
+
 function personalQuestion(actorName: string): string {
   return `Summarize the key decisions ${actorName} was involved in or that affected their work over the past 7 days. Group by theme if helpful.`;
 }
@@ -1172,6 +1198,18 @@ function digestWeekOf(): string {
     monday.setUTCDate(monday.getUTCDate() - 7);
   }
   return monday.toISOString().slice(0, 10);
+}
+
+// Specialized digest summary generation using friendly prompt
+async function generateDigestSummary(question: string, context: string): Promise<string> {
+  const userMessage = `${question}\n\nContext:\n${context}`;
+  const result = await callClaude(DIGEST_SYSTEM_PROMPT, userMessage, ANSWER_TOOL, "submit_answer", 512, 30_000) as {
+    sufficient_evidence: boolean; answer: string; reasoning: string; citations: number[]; confidence: number;
+  };
+  
+  // For digests, we always return the answer regardless of sufficient_evidence
+  // since we want to provide the best summary possible even if not all context is available
+  return result.answer;
 }
 
 // Snaps an arbitrary requested date to its own ISO week's Monday - used for
@@ -1255,17 +1293,9 @@ async function generateTeamPulse(tenantId: string, permissionScopes: string[], s
   const matches = await hybridRetrieve(tenantId, question, DIGEST_TOP_K, DIGEST_TOP_K, question, question);
   const authorized = filterAccessibleDecisions(permissionScopes, matches);
   const context = formatContext(authorized);
-  // A weekly digest is multi-document by definition (it's summarizing every
-  // decision from the past week, not answering one specific question) -
-  // passing null here skipped MULTI_DOCUMENT_INSTRUCTION entirely, so the
-  // model wrote one run-on paragraph mixing every theme together instead of
-  // a per-item breakdown.
-  const digestAnalysis: QueryAnalysis = {
-    intent: "Weekly digest of the team's recorded decisions, action items, and blockers.",
-    question_type: "summary", entities: [], keywords: [],
-    department_guess: "", is_multi_document: true,
-  };
-  const answerResult = await generateAnswer(question, context, digestAnalysis);
+  
+  // Use specialized friendly digest summary generation
+  const summary = await generateDigestSummary(question, context);
 
   const items = authorized.map((m) => ({
     decision_statement: m.decision_statement, rationale: m.rationale,
@@ -1281,9 +1311,9 @@ async function generateTeamPulse(tenantId: string, permissionScopes: string[], s
   const period = `${weekAgo.toISOString().slice(0, 10)}/${now.toISOString().slice(0, 10)}`;
 
   return {
-    scope, period, summary: answerResult.answer, items,
+    scope, period, summary, items,
     metadata: {
-      model: answerResult.model, latency_ms: 0, decision_count: authorized.length,
+      model: SYNTHESIS_MODEL, latency_ms: 0, decision_count: authorized.length,
       token_estimate: estimateTokens(context), personalized,
     },
   };

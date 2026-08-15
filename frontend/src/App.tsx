@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import type { Session } from '@supabase/supabase-js'
 import {
   BrowserRouter,
   Navigate,
@@ -34,38 +35,85 @@ function HowItWorksMarketing() {
 function useAuthEmail() {
   const [userEmail, setUserEmail] = useState<string | null>(null)
   const [authReady, setAuthReady] = useState(false)
+  // null = not yet checked. Early access is gated server-side (the
+  // on_auth_user_created trigger only provisions a tenant for allowlisted
+  // emails - see supabase/migrations/20260812000000_early_access_allowlist.sql),
+  // so a signed-in user with zero memberships rows means "authenticated but
+  // not yet granted access", not a broken account.
+  const [hasTenant, setHasTenant] = useState<boolean | null>(null)
 
   useEffect(() => {
     const demoEmail = sessionStorage.getItem(DEMO_EMAIL_KEY)
     if (demoEmail) {
       setUserEmail(demoEmail)
+      setHasTenant(true)
       setAuthReady(true)
       return
     }
 
     if (!isSupabaseConfigured()) {
+      setHasTenant(true)
       setAuthReady(true)
       return
     }
 
     const supabase = getSupabaseClient()
 
-    void supabase.auth.getSession().then(({ data }) => {
-      setUserEmail(data.session?.user.email ?? null)
+    const applySession = async (session: Session | null) => {
+      setUserEmail(session?.user.email ?? null)
+      if (!session) {
+        setHasTenant(null)
+        setAuthReady(true)
+        return
+      }
+      rememberAccountFromSession(session)
+      const { data, error } = await supabase.from('memberships').select('tenant_id').limit(1)
+      setHasTenant(!error && (data?.length ?? 0) > 0)
       setAuthReady(true)
-      if (data.session) rememberAccountFromSession(data.session)
-    })
+    }
+
+    void supabase.auth.getSession().then(({ data }) => void applySession(data.session))
 
     const { data } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUserEmail(session?.user.email ?? null)
-      setAuthReady(true)
-      if (session) rememberAccountFromSession(session)
+      void applySession(session)
     })
 
     return () => data.subscription.unsubscribe()
   }, [])
 
-  return { userEmail, authReady }
+  return { userEmail, authReady, hasTenant }
+}
+
+/** Shown to a real (non-demo) account that authenticated successfully but
+ * has no tenant membership - i.e. their email isn't on the early access
+ * allowlist yet. Distinct from "not signed in" (redirects to "/") and from
+ * a real error - this is an expected, informative dead end. */
+function WaitlistScreen({ email }: { email: string }) {
+  const handleLogOut = () => {
+    sessionStorage.removeItem(DEMO_EMAIL_KEY)
+    sessionStorage.removeItem(WORKSPACES_DONE_KEY)
+    if (isSupabaseConfigured()) {
+      void getSupabaseClient().auth.signOut()
+    }
+    window.location.href = '/'
+  }
+
+  return (
+    <main className="flex min-h-screen flex-col items-center justify-center gap-3 bg-white px-6 text-center">
+      <h1 className="text-[20px] font-bold text-[#111827]">You're on the early access list</h1>
+      <p className="max-w-[420px] text-[14px] text-[#6B7280]">
+        Locus AI is currently invite-only. {email} isn't on the early access list yet -
+        we'll let you know as soon as it opens up.
+      </p>
+      <button
+        type="button"
+        onClick={handleLogOut}
+        className="mt-3 rounded-full border border-[#d1d5db] bg-white px-5 py-1.5 text-[14px] font-medium text-[#374151] transition-colors hover:bg-gray-50"
+      >
+        Log out
+      </button>
+    </main>
+  )
 }
 
 /**
@@ -134,7 +182,7 @@ function useWorkspacesConnected(userEmail: string | null, authReady: boolean) {
  * demo-or-Supabase-session check every other protected route already uses.
  */
 function RequireAuth() {
-  const { userEmail, authReady } = useAuthEmail()
+  const { userEmail, authReady, hasTenant } = useAuthEmail()
 
   if (!authReady) {
     return (
@@ -155,12 +203,16 @@ function RequireAuth() {
     return <Navigate to="/" replace />
   }
 
+  if (hasTenant === false) {
+    return <WaitlistScreen email={userEmail} />
+  }
+
   return <Outlet />
 }
 
 function ConnectWorkspacesRoute() {
   const navigate = useNavigate()
-  const { userEmail, authReady } = useAuthEmail()
+  const { userEmail, authReady, hasTenant } = useAuthEmail()
   const { workspacesConnected, markConnected, checked } = useWorkspacesConnected(userEmail, authReady)
 
   if (!authReady || (userEmail && !checked)) {
@@ -182,6 +234,10 @@ function ConnectWorkspacesRoute() {
     return <Navigate to="/" replace />
   }
 
+  if (hasTenant === false) {
+    return <WaitlistScreen email={userEmail} />
+  }
+
   if (workspacesConnected) {
     return (
       <DecisionReady
@@ -198,7 +254,7 @@ function ConnectWorkspacesRoute() {
 function AuthRoutes() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
-  const { userEmail, authReady } = useAuthEmail()
+  const { userEmail, authReady, hasTenant } = useAuthEmail()
   const { workspacesConnected, checked } = useWorkspacesConnected(userEmail, authReady)
 
   const isOAuthCallback =
@@ -216,6 +272,10 @@ function AuthRoutes() {
         Loading…
       </main>
     )
+  }
+
+  if (userEmail && hasTenant === false) {
+    return <WaitlistScreen email={userEmail} />
   }
 
   if (userEmail && !workspacesConnected) {

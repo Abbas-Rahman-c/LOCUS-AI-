@@ -22,6 +22,10 @@ naturally controls what decisions each caller can see.
 
 tenant_id must already be authenticated before this function is called —
 it is never validated here. That is the router's responsibility.
+
+Note: This service is used for backend batch processing. The actual digest
+generation for the frontend Edge Function API is implemented in
+supabase/functions/api/index.ts.
 """
 from __future__ import annotations
 
