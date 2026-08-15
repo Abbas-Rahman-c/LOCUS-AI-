@@ -1,10 +1,26 @@
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Header } from './components/Header'
 import { ProcessStepper } from './components/ProcessStepper'
 import { DashboardPreview } from './components/DashboardPreview'
+import { TermsAndConditionsModal } from './components/TermsAndConditionsModal'
 
 export default function GetStarted() {
   const navigate = useNavigate()
+  const [showTermsModal, setShowTermsModal] = useState(false)
+
+  const handleGetStartedClick = () => {
+    setShowTermsModal(true)
+  }
+
+  const handleTermsClose = () => {
+    setShowTermsModal(false)
+  }
+
+  const handleTermsAgree = () => {
+    setShowTermsModal(false)
+    navigate('/welcome')
+  }
 
   return (
     <div className="relative w-full bg-white">
@@ -28,7 +44,7 @@ export default function GetStarted() {
 
             <button
               type="button"
-              onClick={() => navigate('/welcome')}
+              onClick={handleGetStartedClick}
               className="mt-6 w-fit rounded-full bg-[#C8E619] px-7 py-3 text-[15px] font-semibold text-[#111827] transition-opacity hover:opacity-90"
             >
               Get started now
@@ -45,6 +61,12 @@ export default function GetStarted() {
           <DashboardPreview />
         </main>
       </div>
+
+      <TermsAndConditionsModal
+        isOpen={showTermsModal}
+        onClose={handleTermsClose}
+        onAgree={handleTermsAgree}
+      />
     </div>
   )
 }
