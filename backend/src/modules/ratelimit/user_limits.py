@@ -1,8 +1,10 @@
 """
-User prompt limit service for tracking and enforcing per-user Claude API limits.
+User prompt limit service for tracking and enforcing per-entity Claude API limits.
 
-Implements a weekly rolling window limit of 250 prompts per user for Claude API calls.
+Implements a weekly rolling window limit of 250 prompts per entity for Claude API calls.
 Uses the user_limits table to track usage across the 7-day window.
+The limit_key can represent email, user_id, organization_id, or other identifier
+depending on the desired rate limiting scope.
 """
 from __future__ import annotations
 
@@ -28,16 +30,19 @@ class UserLimitError(Exception):
     pass
 
 
-async def get_user_email_from_id(pool: asyncpg.Pool, user_id: str) -> str:
+async def get_user_limit_key_from_id(pool: asyncpg.Pool, user_id: str) -> str:
     """
-    Get user email from auth.users table using user_id.
+    Get user limit key from auth.users table using user_id.
+    
+    Currently uses email as the limit key, but this can be extended to use
+    user_id, organization_id, or other identifiers based on rate limiting requirements.
     
     Args:
         pool: Database connection pool
         user_id: The user's UUID from JWT token
         
     Returns:
-        The user's email address
+        The limit key (currently user's email address)
         
     Raises:
         UserLimitError: If user lookup fails
@@ -56,25 +61,25 @@ async def get_user_email_from_id(pool: asyncpg.Pool, user_id: str) -> str:
                 raise UserLimitError(f"User not found: {user_id}")
             return row["email"]
     except asyncpg.PostgresError as exc:
-        log.error("Database error fetching user email: %s", exc)
-        raise UserLimitError(f"Failed to fetch user email: {exc}") from exc
+        log.error("Database error fetching user limit key: %s", exc)
+        raise UserLimitError(f"Failed to fetch user limit key: {exc}") from exc
 
 
 async def check_and_increment_prompt_limit(
     pool: asyncpg.Pool,
-    user_email: str,
+    limit_key: str,
 ) -> bool:
     """
-    Check if user is within their weekly prompt limit and increment if allowed.
+    Check if entity is within their weekly prompt limit and increment if allowed.
     
     This implements a rolling 7-day window:
     - If the current window has expired (> 7 days since window_start), reset the counter
-    - If the user has exceeded 250 prompts in the current window, return False
+    - If the entity has exceeded 250 prompts in the current window, return False
     - Otherwise, increment the counter and return True
     
     Args:
         pool: Database connection pool
-        user_email: The user's email address (used as identifier)
+        limit_key: The entity identifier (email, user_id, organization_id, etc.)
         
     Returns:
         True if the request is allowed (limit not exceeded), False otherwise
@@ -91,10 +96,10 @@ async def check_and_increment_prompt_limit(
                     """
                     SELECT window_start, prompt_count
                     FROM public.user_limits
-                    WHERE email = $1 AND limit_type = $2
+                    WHERE limit_key = $1 AND limit_type = $2
                     FOR UPDATE
                     """,
-                    user_email,
+                    limit_key,
                     LIMIT_TYPE
                 )
                 
@@ -104,14 +109,14 @@ async def check_and_increment_prompt_limit(
                     # No existing record - create one with count = 1
                     await conn.execute(
                         """
-                        INSERT INTO public.user_limits (email, limit_type, window_start, prompt_count)
+                        INSERT INTO public.user_limits (limit_key, limit_type, window_start, prompt_count)
                         VALUES ($1, $2, $3, 1)
                         """,
-                        user_email,
+                        limit_key,
                         LIMIT_TYPE,
                         now
                     )
-                    log.info("Created new limit record for user %s", user_email)
+                    log.info("Created new limit record for entity %s", limit_key)
                     return True
                 
                 window_start = row["window_start"]
@@ -125,20 +130,20 @@ async def check_and_increment_prompt_limit(
                         """
                         UPDATE public.user_limits
                         SET window_start = $1, prompt_count = 1
-                        WHERE email = $2 AND limit_type = $3
+                        WHERE limit_key = $2 AND limit_type = $3
                         """,
                         now,
-                        user_email,
+                        limit_key,
                         LIMIT_TYPE
                     )
-                    log.info("Reset limit window for user %s", user_email)
+                    log.info("Reset limit window for entity %s", limit_key)
                     return True
                 
                 # Check if limit exceeded
                 if prompt_count >= WEEKLY_PROMPT_LIMIT:
                     log.warning(
-                        "User %s exceeded weekly prompt limit: %d/%d",
-                        user_email,
+                        "Entity %s exceeded weekly prompt limit: %d/%d",
+                        limit_key,
                         prompt_count,
                         WEEKLY_PROMPT_LIMIT
                     )
@@ -149,14 +154,14 @@ async def check_and_increment_prompt_limit(
                     """
                     UPDATE public.user_limits
                     SET prompt_count = prompt_count + 1
-                    WHERE email = $1 AND limit_type = $2
+                    WHERE limit_key = $1 AND limit_type = $2
                     """,
-                    user_email,
+                    limit_key,
                     LIMIT_TYPE
                 )
                 log.debug(
-                    "Incremented prompt count for user %s: %d/%d",
-                    user_email,
+                    "Incremented prompt count for entity %s: %d/%d",
+                    limit_key,
                     prompt_count + 1,
                     WEEKLY_PROMPT_LIMIT
                 )
@@ -169,14 +174,14 @@ async def check_and_increment_prompt_limit(
 
 async def get_user_prompt_usage(
     pool: asyncpg.Pool,
-    user_email: str,
+    limit_key: str,
 ) -> dict:
     """
-    Get current prompt usage statistics for a user.
+    Get current prompt usage statistics for an entity.
     
     Args:
         pool: Database connection pool
-        user_email: The user's email address
+        limit_key: The entity identifier (email, user_id, organization_id, etc.)
         
     Returns:
         Dictionary with current usage information:
@@ -197,9 +202,9 @@ async def get_user_prompt_usage(
                 """
                 SELECT window_start, prompt_count
                 FROM public.user_limits
-                WHERE email = $1 AND limit_type = $2
+                WHERE limit_key = $1 AND limit_type = $2
                 """,
-                user_email,
+                limit_key,
                 LIMIT_TYPE
             )
             
@@ -239,7 +244,7 @@ async def enforce_user_prompt_limit(
     FastAPI dependency function to enforce user prompt limits.
     
     This function:
-    1. Gets the user's email from their user_id
+    1. Gets the user's limit key from their user_id (currently email)
     2. Checks if they're within their weekly prompt limit
     3. Increments their usage if allowed
     4. Raises HTTP 429 if limit exceeded
@@ -253,15 +258,15 @@ async def enforce_user_prompt_limit(
         UserLimitError: If database operations fail
     """
     try:
-        # Get user email
-        user_email = await get_user_email_from_id(pool, user_id)
+        # Get user limit key (currently email, but can be extended)
+        limit_key = await get_user_limit_key_from_id(pool, user_id)
         
         # Check and increment limit
-        allowed = await check_and_increment_prompt_limit(pool, user_email)
+        allowed = await check_and_increment_prompt_limit(pool, limit_key)
         
         if not allowed:
             # Get usage info for the error message
-            usage = await get_user_prompt_usage(pool, user_email)
+            usage = await get_user_prompt_usage(pool, limit_key)
             raise HTTPException(
                 status_code=status.HTTP_429_TOO_MANY_REQUESTS,
                 detail=(
