@@ -1,4 +1,4 @@
-import { getSupabaseClient } from './supabase'
+import { getSupabaseClient, isSupabaseConfigured } from './supabase'
 import { DEMO_EMAIL_KEY } from './sessionKeys'
 
 /**
@@ -31,13 +31,20 @@ let pendingExchange: Promise<BackendSession> | null = null
 // new user's access token, which the backend correctly rejects as a
 // tenant-membership mismatch.
 let cachedUserId: string | null = null
-getSupabaseClient().auth.onAuthStateChange((_event, session) => {
-  const userId = session?.user.id ?? null
-  if (userId !== cachedUserId) {
-    cachedUserId = userId
-    cachedSession = null
-  }
-})
+let authListenerSetup = false
+
+function setupAuthListener() {
+  if (authListenerSetup || !isSupabaseConfigured()) return
+  authListenerSetup = true
+
+  getSupabaseClient().auth.onAuthStateChange((_event, session) => {
+    const userId = session?.user.id ?? null
+    if (userId !== cachedUserId) {
+      cachedUserId = userId
+      cachedSession = null
+    }
+  })
+}
 
 export class ApiError extends Error {
   status: number
@@ -67,6 +74,7 @@ function assertNotDemoMode(): void {
 
 async function exchangeForBackendSession(): Promise<BackendSession> {
   assertNotDemoMode()
+  setupAuthListener()
   const supabase = getSupabaseClient()
   const { data } = await supabase.auth.getSession()
   const supabaseToken = data.session?.access_token

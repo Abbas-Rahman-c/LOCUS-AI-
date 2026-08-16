@@ -1,0 +1,523 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>User Guide · Locus AI</title>
+    <link rel="icon" type="image/png" href="/locus-mark.png" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --purple: #5b52e8;
+        --lime: #c8e619;
+        --text: #111827;
+        --muted: #6b7280;
+        --border: #e5e7eb;
+        --bg: #f7f7f9;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+      }
+
+      body {
+        font-family: Inter, system-ui, sans-serif;
+        color: var(--text);
+        background: #fff;
+        line-height: 1.65;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      a {
+        color: var(--purple);
+      }
+
+      header.top {
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 16px 32px;
+        border-bottom: 1px solid var(--border);
+        background: #fff;
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        text-decoration: none;
+        color: #374151;
+        font-size: 14px;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+      }
+
+      .brand span {
+        color: var(--purple);
+      }
+
+      .home-link {
+        font-size: 14px;
+        font-weight: 500;
+        color: var(--muted);
+        text-decoration: none;
+      }
+
+      .home-link:hover {
+        color: var(--text);
+      }
+
+      main {
+        max-width: 800px;
+        margin: 0 auto;
+        padding: 48px 24px 80px;
+      }
+
+      h1 {
+        font-size: 36px;
+        line-height: 1.15;
+        letter-spacing: -0.03em;
+        margin: 0 0 16px;
+      }
+
+      .lede {
+        font-size: 16px;
+        color: var(--muted);
+        background: #f5f3ff;
+        border-left: 4px solid var(--purple);
+        padding: 14px 16px;
+        border-radius: 0 10px 10px 0;
+      }
+
+      h2 {
+        font-size: 22px;
+        letter-spacing: -0.02em;
+        margin: 48px 0 16px;
+        padding-top: 8px;
+        border-top: 1px solid var(--border);
+      }
+
+      h3 {
+        font-size: 17px;
+        margin: 28px 0 10px;
+      }
+
+      p {
+        margin: 0 0 14px;
+        color: #374151;
+      }
+
+      ul,
+      ol {
+        margin: 0 0 16px;
+        padding-left: 22px;
+        color: #374151;
+      }
+
+      li {
+        margin: 6px 0;
+      }
+
+      li ul,
+      li ol {
+        margin: 6px 0 8px;
+      }
+
+      .toc {
+        background: var(--bg);
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        padding: 20px 24px;
+        margin: 32px 0 8px;
+      }
+
+      .toc p {
+        margin: 0 0 10px;
+        font-size: 12px;
+        font-weight: 600;
+        letter-spacing: 0.08em;
+        color: var(--purple);
+      }
+
+      .toc ol {
+        margin: 0;
+        padding-left: 18px;
+      }
+
+      footer.page-foot {
+        max-width: 800px;
+        margin: 0 auto;
+        padding: 0 24px 48px;
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      @media (max-width: 640px) {
+        header.top {
+          padding: 14px 16px;
+        }
+
+        h1 {
+          font-size: 28px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="top">
+      <a class="brand" href="/">LOCUS <span>AI</span></a>
+      <a class="home-link" href="/">← Back to home</a>
+    </header>
+
+    <main>
+      <h1>Locus AI — Comprehensive User Guide</h1>
+      <p class="lede">
+        <strong>MCP-Native Context Layer:</strong> Locus AI is an intelligent app
+        that transforms fragmented workspace content into a persistent,
+        source-grounded organizational memory layer for individuals, teams, and
+        AI agents.
+      </p>
+
+      <nav class="toc" aria-label="Contents">
+        <p>CONTENTS</p>
+        <ol>
+          <li><a href="#overview">Executive Summary &amp; Overview</a></li>
+          <li><a href="#features">Key Features &amp; Capabilities</a></li>
+          <li><a href="#walkthrough">Step-by-Step User Walkthrough</a></li>
+          <li><a href="#faq">Frequently Asked Questions</a></li>
+        </ol>
+      </nav>
+
+      <h2 id="overview">1. Executive Summary &amp; Overview</h2>
+
+      <h3>What is Locus AI?</h3>
+      <p>
+        Locus AI is an intelligent app that transforms fragmented workspace
+        content into a persistent, source-grounded organizational memory layer
+        for individuals, teams, and AI agents. Modern teams and agents suffer
+        from “context fragmentation”—crucial decisions, rationale, and alignment
+        are scattered across thousands of fleeting Slack threads, endless email
+        chains, and buried Notion documents.
+      </p>
+      <p>
+        Locus AI continuously listens to your connected workspace tools,
+        automatically extracts decisions and action items, structures them into
+        an immutable <strong>Decision Register</strong>, and exposes high-speed
+        hybrid search (vector embedding + full-text search) so your team never
+        loses institutional memory again.
+      </p>
+
+      <h3>Core Value Proposition</h3>
+      <ul>
+        <li>
+          <strong>Zero-Effort Capture:</strong> No more manually logging meeting
+          minutes or copying ticket summaries into documentation wikis. Locus AI
+          automatically distills noise into crystal-clear decisions.
+        </li>
+        <li>
+          <strong>Unified Institutional Memory:</strong> Connect Slack, Gmail,
+          and Notion in under 2 minutes.
+        </li>
+        <li>
+          <strong>Decision-Ready Intelligence:</strong> Query past decisions
+          instantly using natural language, or embed Locus AI widgets directly
+          into your web applications and developer tools.
+        </li>
+      </ul>
+
+      <h2 id="features">2. Key Features &amp; Capabilities</h2>
+
+      <h3>A. Workspace Connectors</h3>
+      <ul>
+        <li>
+          <strong>Slack Integration:</strong> Automatically watches selected
+          channels or direct messages for decision consensus, voting, and formal
+          agreements.
+        </li>
+        <li>
+          <strong>Gmail Integration:</strong> Scans incoming and outgoing
+          threads for project approvals, architectural decisions, and
+          stakeholder sign-offs.
+        </li>
+        <li>
+          <strong>Notion Integration:</strong> Indexes workspaces, project spec
+          docs, PRDs, and meeting notes to link finalized decisions back to
+          primary documentation.
+        </li>
+      </ul>
+
+      <h3>B. The Decision Register &amp; Search</h3>
+      <ul>
+        <li>
+          <strong>Hybrid Search Engine:</strong> Combines state-of-the-art
+          vector embeddings (Voyage/OpenAI models) with PostgreSQL full-text
+          search (<code>tsvector</code>) to retrieve precise decision context
+          instantly.
+        </li>
+        <li>
+          <strong>Structured Captures:</strong> Categorizes captured items by
+          project, confidence score, stakeholders involved, and date.
+        </li>
+        <li>
+          <strong>Decision Log:</strong> An immutable audit trail of what was
+          decided, why it was decided, who agreed, and the original source
+          link.
+        </li>
+      </ul>
+
+      <h3>C. Team Pulse &amp; Analytics</h3>
+      <ul>
+        <li>Track decision velocity across departments.</li>
+        <li>Monitor active consensus threads and pending approvals.</li>
+      </ul>
+
+      <h2 id="walkthrough">3. Step-by-Step User Walkthrough &amp; Operational Guide</h2>
+
+      <h3>Step 1: Account Registration &amp; Initial Onboarding</h3>
+      <ol>
+        <li>
+          <strong>Navigate to the App:</strong> Open your browser and go to
+          <code>https://app.locusai.com</code> (or your local deployment URL).
+        </li>
+        <li>
+          <strong>Access Sign-Up:</strong> Click the <strong>Get Started</strong>
+          or <strong>Sign Up</strong> button on the landing page header.
+        </li>
+        <li>
+          <strong>Authentication:</strong> Choose
+          <strong>Continue with Google</strong> or enter your corporate work
+          email to receive a secure magic link / OAuth challenge.
+        </li>
+        <li>
+          <strong>Accept Terms:</strong> Review the Terms &amp; Conditions and
+          Privacy Policy modal, then check the agreement box to proceed.
+        </li>
+        <li>
+          <strong>Plan Selection:</strong> Choose between the
+          <strong>Individual Plan</strong> (for solo developers or founders) or
+          the <strong>Team Plan</strong> (for collaborative workspaces with
+          shared ingestion pipelines).
+        </li>
+      </ol>
+
+      <h3>Step 2: Connecting Your Workspaces (Ingestion Setup)</h3>
+      <p>
+        After successful authentication, you will be redirected to the
+        <strong>Connect Workspaces</strong> dashboard page:
+      </p>
+      <ol>
+        <li>
+          <strong>Connecting Slack:</strong>
+          <ul>
+            <li>Click the <strong>Connect Slack</strong> card.</li>
+            <li>You will be redirected to Slack’s OAuth permission request screen.</li>
+            <li>
+              Select your organization’s workspace from the top-right dropdown
+              in Slack.
+            </li>
+            <li>
+              Choose specific channels you wish Locus AI to monitor (e.g.,
+              <code>#engineering-decisions</code>,
+              <code>#product-planning</code>, <code>#architecture</code>) or
+              grant access to all public channels.
+            </li>
+            <li>
+              Click <strong>Allow</strong>. You will be automatically redirected
+              back to Locus AI with Slack marked as <em>Connected</em>.
+            </li>
+          </ul>
+        </li>
+        <li>
+          <strong>Connecting Notion:</strong>
+          <ul>
+            <li>Click the <strong>Connect Notion</strong> card.</li>
+            <li>Authenticate with your Notion admin account.</li>
+            <li>
+              Select the specific pages, databases, or workspaces Locus AI is
+              permitted to index.
+            </li>
+            <li>
+              Click <strong>Select Pages</strong> and
+              <strong>Allow Access</strong>.
+            </li>
+          </ul>
+        </li>
+        <li>
+          <strong>Connecting Gmail:</strong>
+          <ul>
+            <li>Click the <strong>Connect Gmail</strong> card.</li>
+            <li>Select your Google Workspace account.</li>
+            <li>
+              Grant read-only permissions for email threads and labels
+              designated for project communication.
+            </li>
+            <li>Confirm connection status on the dashboard.</li>
+          </ul>
+        </li>
+      </ol>
+
+      <h3>Step 3: Navigating and Querying the Dashboard</h3>
+      <p>
+        Once connected, Locus AI begins ingesting and processing background
+        activity. To find and review decisions:
+      </p>
+      <ol>
+        <li>
+          <strong>Accessing the Dashboard Shell:</strong> Log in and view the
+          main <strong>Dashboard Home</strong>.
+        </li>
+        <li>
+          <strong>Viewing Recent Captures:</strong>
+          <ul>
+            <li>
+              Scroll down to the <strong>DashboardCaptures</strong> section to
+              inspect real-time AI-extracted decisions.
+            </li>
+            <li>
+              Each capture displays a confidence score, source badge
+              (Slack/Notion/Gmail), and summary snippet.
+            </li>
+          </ul>
+        </li>
+        <li>
+          <strong>Executing Hybrid Search:</strong>
+          <ul>
+            <li>
+              Click on the <strong>DashboardSearch</strong> input bar at the top
+              of the screen.
+            </li>
+            <li>
+              Type a natural language query (e.g.,
+              <em>“Why did we deprecate Redis in favor of PostgreSQL?”</em> or
+              <em>“What was our Q3 delivery deadline agreed upon in Slack?”</em>).
+            </li>
+            <li>
+              Review search results, which display matching snippets alongside
+              similarity percentage indicators.
+            </li>
+          </ul>
+        </li>
+        <li>
+          <strong>Inspecting Decision Details:</strong>
+          <ul>
+            <li>
+              Click on any decision record to open the
+              <strong>MemoryRecordDetail</strong> modal.
+            </li>
+            <li>
+              Review the full contextual breakdown:
+              <strong>Decision Statement</strong>, <strong>Rationale</strong>,
+              <strong>Stakeholders Involved</strong>, and a direct hyperlink
+              back to the original source message or email thread.
+            </li>
+          </ul>
+        </li>
+      </ol>
+
+      <h3>Step 4: Tracking Team Velocity with Team Pulse</h3>
+      <ol>
+        <li>Click <strong>Team Pulse</strong> in the left-hand navigation bar.</li>
+        <li>Analyze decision frequency charts over weekly and monthly intervals.</li>
+        <li>
+          Review pending approvals or unverified consensus items that require
+          human sign-off.
+        </li>
+      </ol>
+
+      <h3>Step 5: Configuring Settings &amp; Managing Integrations</h3>
+      <ol>
+        <li>Click <strong>Settings</strong> in the sidebar navigation.</li>
+        <li>
+          Under <strong>Account Settings</strong>, update your user profile,
+          notification preferences, and password/security settings.
+        </li>
+        <li>
+          Under <strong>Workspace Integrations</strong>, disconnect or
+          re-authenticate workspace tokens as needed.
+        </li>
+      </ol>
+
+      <h2 id="faq">4. Frequently Asked Questions (FAQ)</h2>
+
+      <h3>Q: How does Locus AI protect sensitive data?</h3>
+      <p>
+        <strong>A:</strong> Locus AI enforces rigorous tenant isolation at the
+        database layer using PostgreSQL Row-Level Security (RLS). Data is
+        encrypted in transit and at rest, and ingestion filters can be
+        customized to exclude private channels or sensitive domains.
+      </p>
+
+      <h3>Q: Can I manually log a decision if it wasn’t captured automatically?</h3>
+      <p>
+        <strong>A:</strong> Yes. Navigate to the <strong>Decision Log</strong>
+        page and click <strong>+ New Decision</strong> to manually record title,
+        context, rationale, and stakeholders.
+      </p>
+
+      <h3>Q: How does Locus AI integrate with AI agents?</h3>
+      <p>
+        <strong>A:</strong> Locus AI exposes an MCP (Model Context
+        Protocol)-native context layer. AI agents can query the organizational
+        memory layer programmatically to retrieve verified historical decisions,
+        technical specs, and team alignment context directly within their tool
+        execution loops.
+      </p>
+
+      <h3>Q: What data sources are supported out of the box?</h3>
+      <p>
+        <strong>A:</strong> Currently, Locus AI supports native ingestion and
+        continuous syncing for Slack (channels and direct threads), Gmail
+        (project correspondence and approval threads), and Notion (product
+        specs, PRDs, and documentation wikis). Custom webhooks and API ingestion
+        contracts are also available for enterprise deployments.
+      </p>
+
+      <h3>Q: How accurate is the automated decision extraction?</h3>
+      <p>
+        <strong>A:</strong> Locus AI utilizes advanced LLM-driven filtering and
+        hybrid search (vector embeddings + full-text search) to parse
+        conversations. Every captured decision includes a confidence score and a
+        direct source link so team members can verify context provenance
+        instantly.
+      </p>
+
+      <h3>Q: Can I filter out specific channels or emails from being ingested?</h3>
+      <p>
+        <strong>A:</strong> Yes. During workspace connector setup or via the
+        <strong>Settings -&gt; Workspace Integrations</strong> page, you can
+        configure inclusion/exclusion rules, private channel filters, and domain
+        blacklists to ensure sensitive or confidential discussions remain
+        unindexed.
+      </p>
+
+      <h3>Q: What is the difference between the Individual and Team plans?</h3>
+      <p>
+        <strong>A:</strong> The <strong>Individual Plan</strong> is tailored for
+        solo developers, researchers, or founders managing personal knowledge
+        stores. The <strong>Team Plan</strong> enables shared workspace
+        connectors, multi-user role-based access control (RBAC), team pulse
+        analytics, and centralized billing.
+      </p>
+    </main>
+
+    <footer class="page-foot">
+      Generated for Locus AI v1.0 · For support, contact
+      <a href="mailto:support@locusai.com">support@locusai.com</a>
+    </footer>
+  </body>
+</html>
