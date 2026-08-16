@@ -131,21 +131,6 @@ function InstagramIcon() {
   )
 }
 
-function MailIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <rect x="3.5" y="5.5" width="17" height="13" rx="2" stroke="currentColor" strokeWidth="1.8" />
-      <path
-        d="M4.5 7.5 12 13l7.5-5.5"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  )
-}
-
 const FEATURES = [
   {
     title: 'Zero manual entry',
@@ -284,7 +269,7 @@ export default function WhyLocus() {
 
               <nav aria-label="Social profiles">
                 <p className="text-[12px] font-semibold tracking-[0.08em] text-[#9ca3af]">
-                  Social profiles
+                  SOCIAL PROFILES
                 </p>
                 <ul className="mt-3 space-y-2.5 text-[14px] text-white">
                   <li>
@@ -307,15 +292,6 @@ export default function WhyLocus() {
                     >
                       <InstagramIcon />
                       Instagram
-                    </a>
-                  </li>
-                  <li>
-                    <a
-                      href="mailto:shrivastavashubham213@gmail.com"
-                      className="inline-flex items-center gap-2 whitespace-nowrap transition-colors hover:text-[#c8e619]"
-                    >
-                      <MailIcon />
-                      Email: shrivastavashubham213@gmail.com
                     </a>
                   </li>
                 </ul>
