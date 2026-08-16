@@ -131,24 +131,17 @@ function InstagramIcon() {
   )
 }
 
-function BookIcon() {
+function MailIcon() {
   return (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <rect x="3.5" y="5.5" width="17" height="13" rx="2" stroke="currentColor" strokeWidth="1.8" />
       <path
-        d="M12 6.5c-1.4-1.4-3.4-2.2-5.5-2.2H3.5v14.2h3.2c2.1 0 4 0.8 5.3 2.2"
+        d="M4.5 7.5 12 13l7.5-5.5"
         stroke="currentColor"
         strokeWidth="1.8"
         strokeLinecap="round"
         strokeLinejoin="round"
       />
-      <path
-        d="M12 6.5c1.4-1.4 3.4-2.2 5.5-2.2h3v14.2h-3.2c-2.1 0-4 0.8-5.3 2.2"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <path d="M12 6.5v14.2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
     </svg>
   )
 }
@@ -270,7 +263,7 @@ export default function WhyLocus() {
               </p>
             </div>
 
-            <div className="grid grid-cols-2 gap-10 sm:grid-cols-3 sm:gap-14">
+            <div className="flex flex-wrap gap-10 sm:gap-14">
               <nav aria-label="Product">
                 <p className="text-[12px] font-semibold tracking-[0.08em] text-[#9ca3af]">
                   PRODUCT
@@ -316,17 +309,16 @@ export default function WhyLocus() {
                       Instagram
                     </a>
                   </li>
+                  <li>
+                    <a
+                      href="mailto:shrivastavashubham213@gmail.com"
+                      className="inline-flex items-center gap-2 whitespace-nowrap transition-colors hover:text-[#c8e619]"
+                    >
+                      <MailIcon />
+                      Email: shrivastavashubham213@gmail.com
+                    </a>
+                  </li>
                 </ul>
-              </nav>
-
-              <nav aria-label="User Guide">
-                <a
-                  href="/userguide.html"
-                  className="inline-flex items-center gap-1.5 text-[14px] font-medium text-white transition-colors hover:text-[#c8e619]"
-                >
-                  <BookIcon />
-                  User Guide
-                </a>
               </nav>
             </div>
           </div>
