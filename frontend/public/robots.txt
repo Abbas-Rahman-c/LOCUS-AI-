@@ -1,0 +1,11 @@
+User-agent: *
+Allow: /
+Disallow: /dashboard
+Disallow: /decision-log
+Disallow: /team-pulse
+Disallow: /settings
+Disallow: /welcome
+Disallow: /connect-workspaces
+Disallow: /oauth/
+
+Sitemap: https://locusaiapp.com/sitemap.xml

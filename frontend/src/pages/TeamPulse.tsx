@@ -440,7 +440,7 @@ export default function TeamPulse() {
                   ) : digestSummary ? (
                     <div className="mb-4">
                       <h3 className="text-[16px] font-bold text-[#242334] mb-2">Summary</h3>
-                      <p className="rounded-[6px] bg-[#F7F7FB] p-4 text-[14px] leading-relaxed text-[#3F424C]">
+                      <p className="whitespace-pre-line rounded-[6px] bg-[#F7F7FB] p-4 text-[14px] leading-relaxed text-[#3F424C]">
                         {digestSummary}
                       </p>
                     </div>

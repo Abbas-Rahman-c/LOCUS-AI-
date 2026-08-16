@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { getAuthCallbackUrl } from '../src/lib/appUrl'
 import { DEMO_EMAIL_KEY } from '../src/lib/sessionKeys'
 import { getSupabaseClient, isSupabaseConfigured } from '../src/lib/supabase'
@@ -119,7 +119,11 @@ export default function WelcomePage() {
           )}
 
           <p className="mt-5 text-[14px] leading-relaxed text-[#6b7280]">
-            By clicking continue, you agree to our terms of service and private policy.
+            By clicking continue, you agree to our{' '}
+            <Link to="/terms" className="text-[#4B3BD4] underline">
+              terms of service
+            </Link>{' '}
+            and privacy policy.
           </p>
         </div>
       </section>

@@ -28,6 +28,7 @@ from pydantic import BaseModel, Field
 from app.dependencies import TenantContext, get_current_tenant
 from database.pool import get_db_pool
 from modules.permissions.scope_resolver import resolve_permission_scopes
+from modules.ratelimit.user_limits import enforce_user_prompt_limit_dependency
 from modules.search.service import search as run_search_pipeline
 
 log = logging.getLogger(__name__)
@@ -87,6 +88,7 @@ async def _stream_search_result(question: str, ctx: TenantContext, pool, top_k: 
 async def ask_question(
     body: AskRequest,
     ctx: TenantContext = Depends(get_current_tenant),
+    _: None = Depends(enforce_user_prompt_limit_dependency()),
 ) -> StreamingResponse:
     """
     Takes a question and returns a streamed, cited, permission-filtered

@@ -29,6 +29,7 @@ from modules.answering.provider import (
 )
 from modules.permissions.scope_resolver import resolve_permission_scopes
 from modules.ratelimit.limiter import enforce_rate_limit
+from modules.ratelimit.user_limits import enforce_user_prompt_limit_dependency
 from modules.search.schemas import SearchRequest, SearchResponse
 from modules.search.service import search
 
@@ -42,6 +43,7 @@ async def search_endpoint(
     request: SearchRequest,
     ctx: TenantContext = Depends(get_current_tenant),
     _: None = Depends(enforce_rate_limit("search")),
+    __: None = Depends(enforce_user_prompt_limit_dependency()),
 ) -> SearchResponse:
     """Production question -> grounded answer + citations endpoint."""
     pool = get_db_pool()
