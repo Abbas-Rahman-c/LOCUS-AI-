@@ -334,7 +334,7 @@ const PAGE_TITLES: Record<string, string> = {
   '/team-pulse': 'Team Pulse · Locus AI',
   '/settings': 'Settings · Locus AI',
   '/dashboard/how-it-works': 'How It Works · Locus AI',
-  '/terms': 'Terms and Conditions · Locus AI',
+  '/terms': 'Terms of Service · Locus AI',
 }
 
 function PageTitle() {

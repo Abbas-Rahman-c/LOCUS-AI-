@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { getSupabaseClient, isSupabaseConfigured } from '../lib/supabase'
 import { DEMO_EMAIL_KEY, WORKSPACES_DONE_KEY } from '../lib/sessionKeys'
-import { TermsSections, TERMS_VERSION } from '../lib/termsContent'
+import { TermsDocument, TERMS_VERSION } from '../lib/termsContent'
 
 /**
  * Blocking dialog shown once, right after a real user's first sign-in -
@@ -54,8 +54,24 @@ export function TermsGateModal({ onAccepted }: { onAccepted: () => void }) {
         role="dialog"
         aria-modal="true"
         aria-labelledby="terms-gate-title"
-        className="flex max-h-[88vh] w-full max-w-[520px] flex-col rounded-[8px] bg-white shadow-[0_20px_55px_rgba(17,24,39,0.22)]"
+        className="relative flex max-h-[88vh] w-full max-w-[640px] flex-col rounded-[8px] bg-white shadow-[0_20px_55px_rgba(17,24,39,0.22)]"
       >
+        <button
+          type="button"
+          onClick={handleDecline}
+          disabled={submitting}
+          aria-label="Close"
+          className="absolute right-3 top-3 z-10 flex h-9 w-9 items-center justify-center rounded-full text-[#7A8292] transition-colors hover:bg-[#F5F6F8] hover:text-[#202027] disabled:opacity-50"
+        >
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+            <path
+              d="M4 4l8 8M12 4l-8 8"
+              stroke="currentColor"
+              strokeWidth="1.8"
+              strokeLinecap="round"
+            />
+          </svg>
+        </button>
         <div className="shrink-0 px-8 pt-8">
           <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[#F0F8FF] text-[#4B3BD4]">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -78,20 +94,20 @@ export function TermsGateModal({ onAccepted }: { onAccepted: () => void }) {
             Before you continue
           </h1>
           <p className="mt-2 text-[14px] leading-6 text-[#7A8292]">
-            Locus AI reads data from the tools you connect, so we need you to agree to our terms
-            first. Here's the short version:
+            Locus AI reads data from the tools you connect, so we need you to agree to our Terms of
+            Service first.
           </p>
         </div>
 
         <div className="mt-5 flex-1 overflow-y-auto px-8">
-          <TermsSections compact />
+          <TermsDocument compact />
           <Link
             to="/terms"
             target="_blank"
             rel="noreferrer"
             className="mt-4 inline-block text-[13px] font-medium text-[#4B3BD4] hover:underline"
           >
-            Read the full Terms and Conditions ↗
+            Open Terms of Service in a new tab ↗
           </Link>
         </div>
 
