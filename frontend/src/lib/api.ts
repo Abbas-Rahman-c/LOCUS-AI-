@@ -36,7 +36,7 @@ let authListenerSetup = false
 function setupAuthListener() {
   if (authListenerSetup || !isSupabaseConfigured()) return
   authListenerSetup = true
-  
+
   getSupabaseClient().auth.onAuthStateChange((_event, session) => {
     const userId = session?.user.id ?? null
     if (userId !== cachedUserId) {
