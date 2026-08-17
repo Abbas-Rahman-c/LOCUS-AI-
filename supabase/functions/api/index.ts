@@ -27,6 +27,7 @@
 import { withAdmin, withTenant } from "../_shared/db.ts";
 import { cleanDisplayText } from "../_shared/htmlText.ts";
 import { decryptToken } from "../_shared/tokenCrypto.ts";
+import { enforceUserPromptLimit, PromptLimitExceededError } from "../_shared/userLimits.ts";
 import * as jose from "npm:jose@5";
 
 const corsHeaders = {
@@ -44,6 +45,32 @@ function jsonResponse(body: unknown, status = 200): Response {
 
 function errorResponse(status: number, detail: string): Response {
   return jsonResponse({ detail }, status);
+}
+
+// Mirrors the Python 429's shape (backend/src/modules/ratelimit/user_limits.py) -
+// same headers, same detail message format - so any client-side handling
+// written against that response shape still works against this one.
+function promptLimitResponse(err: PromptLimitExceededError): Response {
+  const { promptCount, limit, windowEnd } = err.usage;
+  const retryAfterSeconds = Math.max(0, Math.round((windowEnd.getTime() - Date.now()) / 1000));
+  return new Response(
+    JSON.stringify({
+      detail: `Weekly prompt limit exceeded (${promptCount}/${limit}). ` +
+        `Window resets on ${windowEnd.toISOString().replace("T", " ").slice(0, 19)} UTC.`,
+    }),
+    {
+      status: 429,
+      headers: {
+        ...corsHeaders,
+        "Content-Type": "application/json",
+        "Retry-After": String(retryAfterSeconds),
+        "X-PromptLimit": String(limit),
+        "X-PromptUsed": String(promptCount),
+        "X-PromptRemaining": String(Math.max(0, limit - promptCount)),
+        "X-WindowReset": windowEnd.toISOString(),
+      },
+    },
+  );
 }
 
 function requireEnv(name: string): string {
@@ -1084,6 +1111,14 @@ async function handleSearch(req: Request): Promise<Response> {
     return errorResponse(401, err instanceof Error ? err.message : "Unauthorized");
   }
 
+  try {
+    await enforceUserPromptLimit(ctx.userId);
+  } catch (err) {
+    if (err instanceof PromptLimitExceededError) return promptLimitResponse(err);
+    console.error("prompt limit check failed:", err);
+    return errorResponse(500, "Failed to enforce prompt limit");
+  }
+
   let body: { question?: string; top_k?: number };
   try {
     body = await req.json();
@@ -1362,6 +1397,9 @@ async function handleDigest(req: Request, url: URL): Promise<Response> {
       if (stored) return jsonResponse(stored);
     }
 
+    // Only gated here, not at the top of the handler like /search - a
+    // cache hit above never calls Claude, so it shouldn't cost a prompt.
+    await enforceUserPromptLimit(ctx.userId);
     const digest = await generateTeamPulse(ctx.tenantId, permissionScopes, scope, userId);
     try {
       await saveWeeklyDigest(ctx.tenantId, digest, requestedWeekOf, userId);
@@ -1370,6 +1408,7 @@ async function handleDigest(req: Request, url: URL): Promise<Response> {
     }
     return jsonResponse(digest);
   } catch (err) {
+    if (err instanceof PromptLimitExceededError) return promptLimitResponse(err);
     console.error("digest failed:", err);
     return errorResponse(502, err instanceof Error ? err.message : "Digest generation failed");
   }
