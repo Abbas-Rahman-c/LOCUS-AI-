@@ -33,6 +33,30 @@ async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: numbe
  * (stored in cursor_state by gmail-oauth's callback), and persists the new
  * access token so later syncs don't need to refresh again until it expires.
  */
+// A connection whose refresh token is permanently dead (never had one, or
+// Google says invalid_grant - revoked, or expired: the common case for an
+// OAuth client still in Google's "Testing" publishing status, where every
+// refresh token is capped at 7 days regardless of prompt=consent) will
+// never sync again without the user reconnecting. Previously this was
+// silent: status stayed 'active' forever and last_synced_at just froze,
+// so the dashboard kept showing a green "Active" badge for a connection
+// that was actually dead. Flips status to 'error', which the frontend
+// already renders as "Disconnected" (DashboardSources.tsx / SettingsPage.tsx
+// both already treat anything other than 'active' that way - no frontend
+// change needed) and which also excludes it from this function's own
+// `where status = 'active'` source list, so a permanently broken
+// connection stops being retried every 5 minutes for nothing.
+// deno-lint-ignore no-explicit-any
+async function markSourceError(source: any): Promise<void> {
+  await withTenant(String(source.tenant_id), async (sql) => {
+    await sql`
+      update public.source_connections
+      set status = 'error'
+      where id = ${source.id}
+    `;
+  });
+}
+
 // deno-lint-ignore no-explicit-any
 async function refreshAccessToken(source: any): Promise<string | null> {
   const refreshToken = (source.cursor_state as Record<string, unknown> | null)?.refresh_token as
@@ -40,6 +64,7 @@ async function refreshAccessToken(source: any): Promise<string | null> {
     | undefined;
   if (!refreshToken) {
     console.error(`No refresh_token stored for source ${source.id}; cannot refresh.`);
+    await markSourceError(source);
     return null;
   }
 
@@ -55,7 +80,20 @@ async function refreshAccessToken(source: any): Promise<string | null> {
   }, 15_000);
 
   if (!resp.ok) {
-    console.error(`Gmail token refresh failed for source ${source.id}:`, await resp.text());
+    const bodyText = await resp.text();
+    console.error(`Gmail token refresh failed for source ${source.id}:`, bodyText);
+    // invalid_grant = Google's standard code for "this refresh token is
+    // dead" - permanent, no future run will succeed without a reconnect.
+    // Anything else (5xx, malformed body) is left alone so a transient
+    // failure just retries next cycle instead of getting permanently
+    // locked out on a guess.
+    let permanent = false;
+    try {
+      permanent = JSON.parse(bodyText)?.error === "invalid_grant";
+    } catch {
+      // Non-JSON error body - treat as transient.
+    }
+    if (permanent) await markSourceError(source);
     return null;
   }
 
