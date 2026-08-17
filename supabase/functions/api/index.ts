@@ -28,6 +28,7 @@ import { withAdmin, withTenant } from "../_shared/db.ts";
 import { cleanDisplayText } from "../_shared/htmlText.ts";
 import { decryptToken } from "../_shared/tokenCrypto.ts";
 import { enforceUserPromptLimit, PromptLimitExceededError } from "../_shared/userLimits.ts";
+import { enforceRouteRateLimit, RouteRateLimitExceededError } from "../_shared/routeRateLimit.ts";
 import * as jose from "npm:jose@5";
 
 const corsHeaders = {
@@ -45,6 +46,15 @@ function jsonResponse(body: unknown, status = 200): Response {
 
 function errorResponse(status: number, detail: string): Response {
   return jsonResponse({ detail }, status);
+}
+
+// Mirrors the Python 429's shape (backend/src/modules/ratelimit/limiter.py) -
+// same Retry-After header, same detail message.
+function routeRateLimitResponse(err: RouteRateLimitExceededError): Response {
+  return new Response(JSON.stringify({ detail: err.message }), {
+    status: 429,
+    headers: { ...corsHeaders, "Content-Type": "application/json", "Retry-After": String(err.retryAfterSeconds) },
+  });
 }
 
 // Mirrors the Python 429's shape (backend/src/modules/ratelimit/user_limits.py) -
@@ -1112,8 +1122,10 @@ async function handleSearch(req: Request): Promise<Response> {
   }
 
   try {
+    await enforceRouteRateLimit(ctx.tenantId, "search");
     await enforceUserPromptLimit(ctx.userId);
   } catch (err) {
+    if (err instanceof RouteRateLimitExceededError) return routeRateLimitResponse(err);
     if (err instanceof PromptLimitExceededError) return promptLimitResponse(err);
     console.error("prompt limit check failed:", err);
     return errorResponse(500, "Failed to enforce prompt limit");
@@ -1398,7 +1410,9 @@ async function handleDigest(req: Request, url: URL): Promise<Response> {
     }
 
     // Only gated here, not at the top of the handler like /search - a
-    // cache hit above never calls Claude, so it shouldn't cost a prompt.
+    // cache hit above never calls Claude, so it shouldn't cost a prompt
+    // or count against either limiter.
+    await enforceRouteRateLimit(ctx.tenantId, "digest");
     await enforceUserPromptLimit(ctx.userId);
     const digest = await generateTeamPulse(ctx.tenantId, permissionScopes, scope, userId);
     try {
@@ -1408,6 +1422,7 @@ async function handleDigest(req: Request, url: URL): Promise<Response> {
     }
     return jsonResponse(digest);
   } catch (err) {
+    if (err instanceof RouteRateLimitExceededError) return routeRateLimitResponse(err);
     if (err instanceof PromptLimitExceededError) return promptLimitResponse(err);
     console.error("digest failed:", err);
     return errorResponse(502, err instanceof Error ? err.message : "Digest generation failed");
