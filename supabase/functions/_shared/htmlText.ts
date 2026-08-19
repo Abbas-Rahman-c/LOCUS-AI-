@@ -167,6 +167,25 @@ function isReadableProse(text: string): boolean {
   return words.length >= 4;
 }
 
+// Plain-text mail/chat carries its own markup that's never HTML, so
+// looksLikeHtml()/htmlToPlainText() correctly leave it alone - but it's
+// still not meant to render as literal characters on a surface with no
+// markdown renderer: a `>` reply-quote prefix (one per nesting level -
+// ">>" is a quote of a quote) at the start of a line, and single-asterisk
+// *emphasis* (real in both plain-text signatures and Slack's own mrkdwn),
+// both show up as stray punctuation instead of the quoting/emphasis they
+// were meant to convey. Confirmed live: a Gmail reply's quoted history
+// rendered as "> Hi Shubham," and a signature as "*Thanks,*" verbatim.
+function stripPlainTextArtifacts(text: string): string {
+  return text
+    .replace(/^[ \t]*>+[ \t]*/gm, "")
+    // Single-asterisk wrap only - a run of 2+ ("**bold**" markdown, or a
+    // literal "***" divider) is left alone, and a match never crosses a
+    // newline, so a stray unmatched "*" in real prose (a footnote marker,
+    // a typo) can't eat everything up to some unrelated later asterisk.
+    .replace(/(?<!\*)\*([^\s*][^*\n]*?)\*(?!\*)/g, "$1");
+}
+
 // Defensive cleanup for any stored body that might still carry raw HTML/CSS
 // or mojibake (legacy rows ingested before the source-side fixes, or any
 // future gap in them) - so already-clean bodies pass through untouched, but
@@ -175,6 +194,6 @@ function isReadableProse(text: string): boolean {
 export function cleanDisplayText(text: string): string {
   const repaired = repairMojibake(text);
   const htmlStripped = looksLikeHtml(repaired) ? htmlToPlainText(repaired) : repaired;
-  const cleaned = stripLeadingArtifactToken(stripCssRemnants(htmlStripped));
+  const cleaned = stripPlainTextArtifacts(stripLeadingArtifactToken(stripCssRemnants(htmlStripped)));
   return isReadableProse(cleaned) ? cleaned : "(no readable message content captured)";
 }

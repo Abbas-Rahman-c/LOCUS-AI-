@@ -15,7 +15,7 @@
 import { withAdmin } from "../_shared/db.ts";
 import {
   CONNECTORS, CORE_FEATURES, DATA_RESIDENCY, MEMORY_REFRESH_CYCLE_HOURS,
-  PLANS, RAW_CONTENT_RETENTION_DAYS, TEAM_PLAN_UPCOMING_FEATURES,
+  RAW_CONTENT_RETENTION_DAYS,
 } from "../_shared/productFacts.ts";
 
 const corsHeaders = {
@@ -159,23 +159,23 @@ async function checkRateLimit(sql: any, key: string, limit: number, windowMs: nu
 // access to - this is the FAQ/product/signup guide, not a logged-in
 // account assistant.
 //
-// Connectors, core features, and pricing are generated below from
+// Connectors and core features are generated below from
 // _shared/productFacts.ts rather than hand-typed here, so a real change to
 // those facts only has to happen in one file - deploying loci-chat after
 // editing productFacts.ts is the entire sync step, since Supabase bundles
 // that import into the function automatically like any other _shared file.
+//
+// Pricing is deliberately NOT sourced from productFacts.ts's PLANS here
+// (it was, until Loci started reciting exact dollar figures to visitors
+// unprompted) - pricing is handled entirely by the "How to behave" rule
+// below instead, so it never ends up baked into a ## Pricing section the
+// model can just read back verbatim.
 const liveConnectors = CONNECTORS.filter((c) => c.status === "live").map((c) => c.name);
 const roadmapConnectors = CONNECTORS.filter((c) => c.status === "roadmap").map((c) => c.name);
 const connectorsSection = `Live today: ${liveConnectors.join(", ")}. Read-only OAuth - Locus never writes back to a connected workspace. ${roadmapConnectors.join(", ")} ${roadmapConnectors.length === 1 ? "is" : "are"} on the roadmap, not shipped yet - if asked about a connector not in this list, say it isn't supported yet rather than guessing a timeline.`;
 
 const coreFeaturesSection = CORE_FEATURES.map((f) => `- ${f.title} - ${f.description}`).join("\n")
   + `\n- Memory refreshes on a ${MEMORY_REFRESH_CYCLE_HOURS}-hour cycle.`;
-
-const pricingSection = PLANS.map((p) => {
-  const base = `- ${p.name}: $${p.priceUsdPerMonth}/month - ${p.features.join(", ")}.`;
-  if (p.id !== "team" || TEAM_PLAN_UPCOMING_FEATURES.length === 0) return base;
-  return `${base} ${TEAM_PLAN_UPCOMING_FEATURES.join(", ")} ${TEAM_PLAN_UPCOMING_FEATURES.length === 1 ? "is" : "are"} marked "upcoming" on the Team plan (not live yet).`;
-}).join("\n") + "\n- There is no free tier or trial in the product today - do not tell anyone there is one.";
 
 const SYSTEM_PROMPT = `You are Loci (pronounced "Loki"), the support and product assistant on locusaiapp.com's chat widget. You help visitors understand Locus AI and get started - you do not have access to any individual user's account, connected sources, or data.
 
@@ -206,10 +206,6 @@ Locus does not have a widget, browser extension, or Slack app that posts back in
 
 Locus reads messages to build structured memory, then permanently deletes the raw content within ${RAW_CONTENT_RETENTION_DAYS} days - only the extracted context summary is kept, never the full message thread. Connectors are read-only (Locus never posts, edits, or deletes anything in a connected Slack/Notion/Gmail). No training on workspace data. Data residency is ${DATA_RESIDENCY}.
 
-## Pricing (monthly)
-
-${pricingSection}
-
 ## How to behave
 
 - Be direct and concise - most answers should be a few sentences, not an essay. Default to a single short paragraph even when the topic has multiple parts (e.g. "what's on the dashboard") - pick the 2-3 most relevant parts rather than listing every one in its own paragraph. This is a chat bubble, not a document - never structure an answer as a document either.
@@ -217,7 +213,8 @@ ${pricingSection}
 - Never use an em dash (—) or double hyphen (--). Use a period, comma, colon, or "and"/"but" to join or separate clauses instead.
 - You have NO access to any specific user's account, connected sources, decision log, or data. If asked something account-specific ("why isn't my Gmail syncing", "why don't I see decisions from last week"), say plainly that you can't see account details from this chat, and point them to their in-app Settings or the app's own support/contact option for anything account-specific.
 - Never invent a fact about Locus AI that isn't in this prompt - this applies even when a plausible-sounding answer would be easy to infer. If something isn't explicitly stated above (specific integrations beyond Gmail/Slack/Notion, security certifications, team size limits, uptime guarantees, anything not written out in this prompt), say you don't have that specific information rather than reasoning your way to a guess, and point them to the app's support/contact option. A confident-sounding wrong answer is worse than "I don't know, but here's who can tell you."
-- If someone seems ready to sign up, point them at the sign-up flow on locusaiapp.com and mention the two plans (Individual $12/mo, Team $15/mo) as the natural next step.`;
+- Never state a specific price, dollar figure, or plan cost, even if asked directly or pressed repeatedly - pricing isn't yours to share here. Say pricing is available on the sign-up flow itself and point them there.
+- If someone seems ready to sign up, point them at the sign-up flow on locusaiapp.com as the natural next step (without naming a price).`;
 
 function buildCorsResponse(status: number, body: unknown): Response {
   return new Response(JSON.stringify(body), {

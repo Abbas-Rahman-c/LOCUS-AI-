@@ -177,8 +177,13 @@ export default function TeamPulse() {
   const currentWeekEnd = useMemo(() => addDays(currentWeekStart, 6), [currentWeekStart])
   const [rangeStart, setRangeStart] = useState(currentWeekStart)
   const [rangeEnd, setRangeEnd] = useState(currentWeekEnd)
-  const [draftStart, setDraftStart] = useState(toInputDate(currentWeekStart))
-  const [draftEnd, setDraftEnd] = useState(toInputDate(currentWeekEnd))
+  // A single "jump to week" date, not a start/end pair - Pulse is a weekly
+  // digest ("Your week, synthesized. New every Monday"), and the digest
+  // itself is only ever generated for a full Mon-Sun week (see isFullWeek
+  // below), so letting someone pick an arbitrary multi-week range here was
+  // always going to land on a range nothing downstream actually supports.
+  // Whatever date is picked snaps to the Monday-Sunday week containing it.
+  const [draftWeekDate, setDraftWeekDate] = useState(toInputDate(currentWeekStart))
   const [isRangePickerOpen, setIsRangePickerOpen] = useState(false)
   const [pulse, setPulse] = useState<TeamPulseData | null>(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -212,11 +217,7 @@ export default function TeamPulse() {
   const isCurrentWeek =
     toInputDate(rangeStart) === toInputDate(currentWeekStart) &&
     toInputDate(rangeEnd) === toInputDate(currentWeekEnd)
-  const periodLabel = isCurrentWeek
-    ? 'This Week'
-    : isFullWeek
-      ? 'Selected Week'
-      : 'Selected Date Range'
+  const periodLabel = isCurrentWeek ? 'This Week' : 'Selected Week'
 
   // Real backend has no per-range digest endpoint (GET /digest only covers
   // the current ISO week), so the actual per-item list - for any range,
@@ -297,21 +298,19 @@ export default function TeamPulse() {
     const nextEnd = addDays(rangeEnd, dayOffset)
     setRangeStart(nextStart)
     setRangeEnd(nextEnd)
-    setDraftStart(toInputDate(nextStart))
-    setDraftEnd(toInputDate(nextEnd))
+    setDraftWeekDate(toInputDate(nextStart))
   }
 
   const openRangePicker = () => {
-    setDraftStart(toInputDate(rangeStart))
-    setDraftEnd(toInputDate(rangeEnd))
+    setDraftWeekDate(toInputDate(rangeStart))
     setIsRangePickerOpen(true)
   }
 
   const applyRange = () => {
-    const [startYear, startMonth, startDay] = draftStart.split('-').map(Number)
-    const [endYear, endMonth, endDay] = draftEnd.split('-').map(Number)
-    setRangeStart(new Date(startYear, startMonth - 1, startDay))
-    setRangeEnd(new Date(endYear, endMonth - 1, endDay))
+    const [year, month, day] = draftWeekDate.split('-').map(Number)
+    const weekStart = startOfWeek(new Date(year, month - 1, day))
+    setRangeStart(weekStart)
+    setRangeEnd(addDays(weekStart, 6))
     setIsRangePickerOpen(false)
   }
 
@@ -335,9 +334,7 @@ export default function TeamPulse() {
                   {formatWeekTitle(rangeStart, rangeEnd)}
                 </h2>
                 <span className="rounded-full bg-[#E8E5FF] px-3 py-1 text-[11px] font-medium text-[#6254D9]">
-                  {isFullWeek
-                    ? `Q${Math.floor(rangeStart.getMonth() / 3) + 1} · W${getIsoWeek(rangeStart)}`
-                    : `${rangeDays} days`}
+                  Q{Math.floor(rangeStart.getMonth() / 3) + 1} · W{getIsoWeek(rangeStart)}
                 </span>
               </div>
             </div>
@@ -369,29 +366,16 @@ export default function TeamPulse() {
 
                 {isRangePickerOpen ? (
                   <div className="absolute right-0 top-10 z-30 w-[290px] rounded-[8px] border border-[#E0E2E8] bg-white p-4 shadow-[0_12px_30px_rgba(24,24,35,0.14)]">
-                    <p className="text-[13px] font-semibold text-[#242334]">Select date range</p>
-                    <div className="mt-3 grid grid-cols-2 gap-3">
-                      <label className="text-[11px] font-medium text-[#747B8A]">
-                        Start date
-                        <input
-                          type="date"
-                          value={draftStart}
-                          max={draftEnd}
-                          onInput={(event) => setDraftStart(event.currentTarget.value)}
-                          className="mt-1 block h-9 w-full rounded-[6px] border border-[#DDE0E7] px-2 text-[12px] text-[#30303E] outline-none focus:border-[#6254D9]"
-                        />
-                      </label>
-                      <label className="text-[11px] font-medium text-[#747B8A]">
-                        End date
-                        <input
-                          type="date"
-                          value={draftEnd}
-                          min={draftStart}
-                          onInput={(event) => setDraftEnd(event.currentTarget.value)}
-                          className="mt-1 block h-9 w-full rounded-[6px] border border-[#DDE0E7] px-2 text-[12px] text-[#30303E] outline-none focus:border-[#6254D9]"
-                        />
-                      </label>
-                    </div>
+                    <p className="text-[13px] font-semibold text-[#242334]">Jump to week</p>
+                    <label className="mt-3 block text-[11px] font-medium text-[#747B8A]">
+                      Any date in the week
+                      <input
+                        type="date"
+                        value={draftWeekDate}
+                        onInput={(event) => setDraftWeekDate(event.currentTarget.value)}
+                        className="mt-1 block h-9 w-full rounded-[6px] border border-[#DDE0E7] px-2 text-[12px] text-[#30303E] outline-none focus:border-[#6254D9]"
+                      />
+                    </label>
                     <div className="mt-4 flex justify-end gap-2">
                       <button
                         type="button"
@@ -402,7 +386,7 @@ export default function TeamPulse() {
                       </button>
                       <button
                         type="button"
-                        disabled={!draftStart || !draftEnd || draftEnd < draftStart}
+                        disabled={!draftWeekDate}
                         onClick={applyRange}
                         className="h-8 rounded-[6px] bg-[#5143DB] px-4 text-[12px] font-medium text-white hover:bg-[#4033C5] disabled:cursor-not-allowed disabled:bg-[#B7B3E8]"
                       >
