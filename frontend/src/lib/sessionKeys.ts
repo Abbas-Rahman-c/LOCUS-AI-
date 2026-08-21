@@ -12,3 +12,9 @@ export const WORKSPACES_DONE_KEY = 'locus:workspaces-connected'
  */
 export const TEAM_PULSE_SEEN_KEY = 'locus:team-pulse-seen'
 export const TEAM_PULSE_SEEN_EVENT = 'locus:team-pulse-seen'
+
+/** localStorage flag marking that a visitor has already seen (and
+ * dismissed, or joined via) the early-access popup on the marketing site -
+ * same "survive a browser restart" reasoning as TEAM_PULSE_SEEN_KEY, so it
+ * only ever shows once per browser, not once per page load. */
+export const EARLY_ACCESS_POPUP_SEEN_KEY = 'locus:early-access-popup-seen'

@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import GetStarted from './GetStarted'
 import HowItWorks from './HowItWorks'
 import WhyLocus from './WhyLocus'
+import { EarlyAccessPopup } from './components/EarlyAccessPopup'
 
 export default function LandingPage({
   initialSection,
@@ -21,6 +22,7 @@ export default function LandingPage({
 
   return (
     <div className="w-full">
+      <EarlyAccessPopup />
       <section id="get-started" aria-label="Get started">
         <GetStarted />
       </section>
