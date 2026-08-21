@@ -17,6 +17,7 @@ import ConnectWorkspaces from './ConnectWorkspaces'
 import OAuthCallback from './OAuthCallback'
 import SourceOAuthCallback from './SourceOAuthCallback'
 import { getSupabaseClient, isSupabaseConfigured } from './lib/supabase'
+import { EARLY_ACCESS_WAITLIST_FORM_URL } from './lib/appUrl'
 import { rememberAccountFromSession } from './lib/accountRegistry'
 import { DEMO_EMAIL_KEY, WORKSPACES_DONE_KEY } from './lib/sessionKeys'
 import { fetchSourceConnections } from './lib/sourceConnections'
@@ -113,15 +114,23 @@ function WaitlistScreen({ email }: { email: string }) {
 
   return (
     <main className="flex min-h-screen flex-col items-center justify-center gap-3 bg-white px-6 text-center">
-      <h1 className="text-[20px] font-bold text-[#111827]">You're on the early access list</h1>
+      <h1 className="text-[20px] font-bold text-[#111827]">Locus AI is invite-only right now</h1>
       <p className="max-w-[420px] text-[14px] text-[#6B7280]">
-        Locus AI is currently invite-only. {email} isn't on the early access list yet -
-        we'll let you know as soon as it opens up.
+        {email} isn't on the early access list yet. Join the waitlist below and we'll let you
+        know as soon as it opens up.
       </p>
+      <a
+        href={EARLY_ACCESS_WAITLIST_FORM_URL}
+        target="_blank"
+        rel="noreferrer"
+        className="mt-3 rounded-full bg-[#4B3BD4] px-5 py-1.5 text-[14px] font-semibold text-white transition-colors hover:bg-[#3F30BC]"
+      >
+        Join the Early Access Waitlist
+      </a>
       <button
         type="button"
         onClick={handleLogOut}
-        className="mt-3 rounded-full border border-[#d1d5db] bg-white px-5 py-1.5 text-[14px] font-medium text-[#374151] transition-colors hover:bg-gray-50"
+        className="mt-1 rounded-full border border-[#d1d5db] bg-white px-5 py-1.5 text-[14px] font-medium text-[#374151] transition-colors hover:bg-gray-50"
       >
         Log out
       </button>

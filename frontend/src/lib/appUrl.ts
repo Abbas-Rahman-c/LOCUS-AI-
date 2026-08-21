@@ -17,3 +17,10 @@ export function getAppOrigin() {
 export function getAuthCallbackUrl() {
   return `${getAppOrigin()}/?auth_callback=1`
 }
+
+/** External Google Form for the early-access waitlist - shared by
+ * WelcomePage (before someone even attempts Google sign-in) and
+ * WaitlistScreen (the wall a signed-in-but-not-yet-allowlisted account
+ * hits), so both point at the same form and never drift. */
+export const EARLY_ACCESS_WAITLIST_FORM_URL =
+  'https://docs.google.com/forms/d/e/1FAIpQLScZe39--3qWgKwwmN6M-oQ3XIAAoBEgR2KzoAEdbZi5yYpPvw/viewform'

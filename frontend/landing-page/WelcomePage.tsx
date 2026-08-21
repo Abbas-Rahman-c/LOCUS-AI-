@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { getAuthCallbackUrl } from '../src/lib/appUrl'
+import { EARLY_ACCESS_WAITLIST_FORM_URL, getAuthCallbackUrl } from '../src/lib/appUrl'
 import { DEMO_EMAIL_KEY } from '../src/lib/sessionKeys'
 import { getSupabaseClient, isSupabaseConfigured } from '../src/lib/supabase'
 import { GoogleIcon } from './components/GoogleIcon'
@@ -124,6 +124,19 @@ export default function WelcomePage() {
               terms of service
             </Link>{' '}
             and privacy policy.
+          </p>
+
+          <p className="mt-6 rounded-[12px] bg-[#F8F7FF] px-4 py-3 text-[13px] leading-relaxed text-[#4B5563]">
+            Locus AI is currently invite-only. Not on the list yet?{' '}
+            <a
+              href={EARLY_ACCESS_WAITLIST_FORM_URL}
+              target="_blank"
+              rel="noreferrer"
+              className="font-semibold text-[#4B3BD4] underline"
+            >
+              Join the early access waitlist
+            </a>
+            .
           </p>
         </div>
       </section>
