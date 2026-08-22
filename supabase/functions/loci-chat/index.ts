@@ -1,12 +1,18 @@
 // supabase/functions/loci-chat/index.ts
 //
-// Backend for "Loci" (pronounced "Loki"), the support/FAQ chat widget for
-// locusaiapp.com itself. Hosted in the same Locus AI Supabase project as
-// the core pipeline; its tables (loci_*) carry no tenant_id since chat
-// visitors aren't tenants - they're anonymous site visitors identified only
-// by a client-generated session id. Reuses the same ANTHROPIC_API_KEY
-// secret already configured in this project, so it draws from the same
-// Anthropic billing/usage limit as the rest of Locus AI.
+// Backend for "Ask Locus", the public support/FAQ chat widget for
+// locusaiapp.com itself - renamed from "Loci" (this file/function name and
+// its loci_* tables are unchanged, no code churn) because the Memory
+// Intelligence layer's Loci query patterns are a real, tenant-authenticated
+// feature of the logged-in product. Having the public marketing chatbot
+// also call itself "Loci" implied it had access to a team's actual memory,
+// which it never has - this widget only knows locusaiapp.com's own FAQ
+// content, never any tenant's data. Hosted in the same Locus AI Supabase
+// project as the core pipeline; its tables (loci_*) carry no tenant_id
+// since chat visitors aren't tenants - they're anonymous site visitors
+// identified only by a client-generated session id. Reuses the same
+// ANTHROPIC_API_KEY secret already configured in this project, so it draws
+// from the same Anthropic billing/usage limit as the rest of Locus AI.
 //
 // Public-facing and reachable by anyone on the internet - unlike the
 // internal Gmail/Slack/Notion pipeline, which only ever processes data from
@@ -177,7 +183,7 @@ const connectorsSection = `Live today: ${liveConnectors.join(", ")}. Read-only O
 const coreFeaturesSection = CORE_FEATURES.map((f) => `- ${f.title} - ${f.description}`).join("\n")
   + `\n- Memory refreshes on a ${MEMORY_REFRESH_CYCLE_HOURS}-hour cycle.`;
 
-const SYSTEM_PROMPT = `You are Loci (pronounced "Loki"), the support and product assistant on locusaiapp.com's chat widget. You help visitors understand Locus AI and get started - you do not have access to any individual user's account, connected sources, or data.
+const SYSTEM_PROMPT = `You are Ask Locus, the support and product assistant on locusaiapp.com's chat widget. You help visitors understand Locus AI and get started - you do not have access to any individual user's account, connected sources, or data.
 
 ## What Locus AI is
 
@@ -193,10 +199,11 @@ ${coreFeaturesSection}
 
 ## The app itself (what a logged-in user actually sees)
 
-Top nav, present on every logged-in page: How it works, Dashboard, Memory Explorer, Team Pulse, Settings, plus an account menu (shows the signed-in email, lets someone sign into another Google account, and sign out).
+Top nav, present on every logged-in page: How it works, Dashboard, Memory Explorer, Memory Timeline, Team Pulse, Settings, plus an account menu (shows the signed-in email, lets someone sign into another Google account, and sign out).
 
 - Dashboard (home page after signing in): a greeting header, a search bar for asking questions across everything Locus has ingested (this is Context Search - type a question or just a topic/keyword and it answers from the team's real memory, with citations back to the source), a short "Recent Search" list, three metric cards showing counts of Decisions / Action Items / Blockers, a "Memory Sources" panel listing each connected source with its sync status and an "Add Memory Source" button, and a "Build Memory" panel showing the most recent captures (each tagged Decision/Blocker/Action item, click one to expand its full detail).
 - Memory Explorer: the full log of everything Locus has captured, filterable by type (Decision / Action Item / Blocker) and by source (Slack / Gmail / Notion). Click any row to expand it into full detail: a plain-language summary, who was involved, which source and when, current status (Current or Superseded, if a later decision replaced it), the reconstructed conversation it was drawn from, a "View Original" button linking back to the real source message, and a "Flag" button for reporting something wrong with it.
+- Memory Timeline (newer, still rolling out): pick a person/project/topic and see everything Locus knows about it laid out over time, including how earlier facts got superseded and any unresolved conflicts between sources. Has a point-in-time control to reconstruct what was known as of an earlier date. Some content may not show up yet if Locus can't yet confirm who has access to it - that's a known, temporary limitation while real permission data rolls out, not a bug.
 - Team Pulse (page header says "Pulse", tagline "Your week, synthesized"): an AI-generated narrative summary of the current week's decisions grouped by theme, plus three breakdown sections (Decisions, Action items, Blockers) each showing the top few by confidence and recency. Has previous/next week navigation and a custom date-range picker, plus a helpful/not-helpful feedback control. The narrative summary is only available for the current week and any week that's already been viewed once while it was current - it does not exist for weeks nobody has opened Team Pulse during yet.
 - Settings: manage connected sources here - connect or disconnect Gmail, Slack, and Notion. A tenant can have more than one connection per source (e.g. two Gmail accounts), each shown separately with its own real account or workspace name and last-synced time.
 
@@ -322,7 +329,7 @@ Deno.serve(async (req) => {
     }
     if (result.budgetExceeded) {
       return buildCorsResponse(503, {
-        error: "Loci has reached its usage budget for today - please try again tomorrow, or contact support directly.",
+        error: "Ask Locus has reached its usage budget for today - please try again tomorrow, or contact support directly.",
       });
     }
     if (result.error) {

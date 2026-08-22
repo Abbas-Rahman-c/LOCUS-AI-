@@ -1,5 +1,7 @@
 /**
- * Loci (pronounced "Loki") chat widget for locusaiapp.com.
+ * "Ask Locus" chat widget for locusaiapp.com (file/element ids kept as
+ * "loci-*" - cosmetic rename only, no code churn; see loci-chat/index.ts
+ * for why the displayed name changed).
  *
  * Standalone, framework-free, single file, served from frontend/public/ so
  * Vite exposes it at /loci-widget.js. Mounted site-wide via a plain
@@ -64,7 +66,7 @@
   root.innerHTML =
     '<button id="loci-bubble" aria-label="Open chat">💬</button>' +
     '<div id="loci-panel">' +
-      '<div id="loci-header"><div>Loci<small>Ask about Locus AI</small></div>' +
+      '<div id="loci-header"><div>Ask Locus<small>Ask about Locus AI</small></div>' +
       '<button id="loci-close" aria-label="Close chat">✕</button></div>' +
       '<div id="loci-messages"></div>' +
       '<div id="loci-input-row">' +
@@ -95,7 +97,7 @@
     opened = !opened;
     panel.classList.toggle("open", opened);
     if (opened && messagesEl.children.length === 0) {
-      addMessage("Hi, I'm Loci. Ask me anything about how Locus AI works, pricing, or getting started.", "assistant");
+      addMessage("Hi! Ask me anything about how Locus AI works, pricing, or getting started.", "assistant");
     }
     if (opened) input.focus();
   }
