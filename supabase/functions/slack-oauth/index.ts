@@ -113,10 +113,14 @@ Deno.serve(async (req: Request) => {
         // real channel listing); users:read added so users.info can
         // resolve a real display name for someone who chatted without
         // ever being named in a decision (see resolveSlackNamesLive in
-        // supabase/functions/api/index.ts) - existing connections need to
-        // reconnect to pick up either of these, a token from before this
-        // change won't have them.
-        "channels:history,groups:history,im:history,mpim:history,chat:write,channels:read,groups:read,mpim:read,im:read,users:read",
+        // supabase/functions/api/index.ts). users:read.email added so
+        // slack-membership-sync can resolve each channel member's real
+        // email - the only identifier isMemoryAccessible's permission-scope
+        // comparison actually understands (resolvePermissionScopes never
+        // returns a raw Slack user id, only the caller's email + workspace
+        // id) - existing connections need to reconnect to pick up any of
+        // these, a token from before this change won't have them.
+        "channels:history,groups:history,im:history,mpim:history,chat:write,channels:read,groups:read,mpim:read,im:read,users:read,users:read.email",
       );
       slackAuthUrl.searchParams.set("redirect_uri", REDIRECT_URI ?? "");
       slackAuthUrl.searchParams.set("state", encodeState(tenantId, redirectOrigin, syncMode));

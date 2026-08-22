@@ -14,6 +14,17 @@
 // already stores and backfillSlackHistory already calls conversations.list
 // with) - no new auth surface, per the decided fast-follow scope.
 //
+// member_identifier stores each member's real EMAIL, not their raw Slack
+// user id (U0123ABC) - found live: resolvePermissionScopes
+// (_shared/tenantAuth.ts) never returns a caller's Slack user id, only
+// their email and the workspace id, so a join on raw Slack ids could never
+// match anyone, ever, regardless of how fresh this sync is. Resolved via
+// users.list (one call per workspace token, not one per member) using the
+// users:read.email scope - connections made before that scope was added
+// won't return emails until reconnected, and members Slack won't disclose
+// an email for (bots, deleted users) are skipped rather than stored under
+// an identifier nothing will ever match.
+//
 // Meant to run on a recurring schedule (see the paired migration
 // 20260822020000_slack_membership_sync_cron.sql), NOT as a one-time
 // snapshot - a stale membership cache would reproduce the exact staleness
@@ -62,6 +73,32 @@ interface SyncOutcome {
   error?: string;
 }
 
+// One users.list call per workspace token gets every member's email in a
+// single request - far cheaper than a users.info call per member per
+// channel, and it's what member-identifier resolution needs regardless of
+// how many channels this connection has.
+async function fetchUserIdToEmail(accessToken: string): Promise<Map<string, string>> {
+  const map = new Map<string, string>();
+  let cursor = "";
+  do {
+    const url = new URL("https://slack.com/api/users.list");
+    url.searchParams.set("limit", "200");
+    if (cursor) url.searchParams.set("cursor", cursor);
+    const resp = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
+    const data = await resp.json();
+    if (!data.ok) {
+      console.error("slack-membership-sync: users.list failed:", data.error);
+      break;
+    }
+    for (const member of data.members ?? []) {
+      const email = member?.profile?.email;
+      if (email && !member.is_bot && !member.deleted) map.set(member.id, email);
+    }
+    cursor = data.response_metadata?.next_cursor ?? "";
+  } while (cursor);
+  return map;
+}
+
 async function syncOneConnection(conn: SlackConnection): Promise<SyncOutcome> {
   const outcome: SyncOutcome = { tenant_id: conn.tenant_id, channels_synced: 0, members_upserted: 0 };
 
@@ -72,6 +109,7 @@ async function syncOneConnection(conn: SlackConnection): Promise<SyncOutcome> {
   }
 
   try {
+    const userEmailById = await fetchUserIdToEmail(accessToken);
     const channelsResp = await fetch(
       "https://slack.com/api/conversations.list?types=public_channel,private_channel&limit=200",
       { headers: { Authorization: `Bearer ${accessToken}` } },
@@ -100,11 +138,18 @@ async function syncOneConnection(conn: SlackConnection): Promise<SyncOutcome> {
         const memberIds: string[] = membersData.members ?? [];
         if (memberIds.length === 0) continue;
 
+        // Raw Slack user ids with no resolvable email (bots, deleted
+        // users, or connections still on the pre-users:read.email scope)
+        // are skipped rather than stored - a row nothing can ever match is
+        // worse than a missing one, since it silently looks like coverage.
+        const memberEmails = [...new Set(memberIds.map((id) => userEmailById.get(id)).filter((e): e is string => !!e))];
+        if (memberEmails.length === 0) continue;
+
         await withTenant(conn.tenant_id, async (sql) => {
-          for (const memberId of memberIds) {
+          for (const email of memberEmails) {
             await sql`
               insert into public.source_scope_members (tenant_id, source, external_scope_id, member_identifier, last_synced_at)
-              values (${conn.tenant_id}, 'slack', ${channel.id}, ${memberId}, ${now})
+              values (${conn.tenant_id}, 'slack', ${channel.id}, ${email}, ${now})
               on conflict (tenant_id, source, external_scope_id, member_identifier)
               do update set last_synced_at = excluded.last_synced_at
             `;
@@ -120,7 +165,7 @@ async function syncOneConnection(conn: SlackConnection): Promise<SyncOutcome> {
         });
 
         outcome.channels_synced += 1;
-        outcome.members_upserted += memberIds.length;
+        outcome.members_upserted += memberEmails.length;
       } catch (err) {
         console.error(`slack-membership-sync: channel ${channel.id} (tenant ${conn.tenant_id}) failed:`, err);
       }
