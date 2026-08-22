@@ -30,6 +30,8 @@ import { decryptToken } from "../_shared/tokenCrypto.ts";
 import { enforceUserPromptLimit, PromptLimitExceededError } from "../_shared/userLimits.ts";
 import { enforceRouteRateLimit, RouteRateLimitExceededError } from "../_shared/routeRateLimit.ts";
 import * as jose from "npm:jose@5";
+import { getCurrentTenant, resolvePermissionScopes, type TenantContext } from "../_shared/tenantAuth.ts";
+import { answerLociQuery } from "../_shared/memory/lociPatterns.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -425,55 +427,10 @@ async function signTenantJwt(userId: string, tenantId: string, role: string): Pr
     .sign(secret);
 }
 
-type TenantContext = { userId: string; tenantId: string; role: string };
-
-async function verifyTenantJwt(token: string): Promise<TenantContext> {
-  const secret = new TextEncoder().encode(requireEnv("APP_SECRET_KEY"));
-  const { payload } = await jose.jwtVerify(token, secret, { issuer: TENANT_JWT_ISSUER });
-  if (!payload.tenant_id) throw new Error("JWT missing tenant_id claim");
-  return {
-    userId: String(payload.sub),
-    tenantId: String(payload.tenant_id),
-    role: String(payload.role ?? "member"),
-  };
-}
-
-async function getCurrentTenant(req: Request): Promise<TenantContext> {
-  const header = req.headers.get("Authorization") ?? "";
-  const match = header.match(/^Bearer\s+(.+)$/i);
-  if (!match) throw new Error("Missing Authorization: Bearer token");
-  return await verifyTenantJwt(match[1]);
-}
-
-// source_connections has no per-user column at all - it's tenant-wide, not
-// tied to whichever member happened to click "Connect". Scoping access to
-// only the caller's own login email meant a decision captured from a
-// connected Gmail account was invisible to every tenant member except the
-// one whose Supabase login email happened to exactly match the connected
-// Gmail address - in practice, "log in with Gmail and connect with that
-// same Gmail" was the only way anything ever showed up. Real fix: grant
-// every tenant member visibility into every source actually connected to
-// their tenant, not just their own identity. Broader than Gmail alone
-// (also covers Slack/Notion workspace ids) since the same gap applies to
-// all three connectors identically, not just Gmail.
-async function resolvePermissionScopes(userId: string, tenantId: string): Promise<string[]> {
-  const email = await withAdmin(async (sql) => {
-    const rows = await sql`SELECT email FROM auth.users WHERE id = ${userId}`;
-    return rows[0]?.email ?? null;
-  });
-
-  const connectedScopes = await withTenant(tenantId, async (sql) => {
-    const rows = await sql`
-      SELECT DISTINCT external_workspace_id FROM public.source_connections
-      WHERE tenant_id = ${tenantId} AND status = 'active' AND external_workspace_id IS NOT NULL
-    `;
-    return rows.map((r) => r.external_workspace_id as string);
-  });
-
-  const scopes = new Set<string>(connectedScopes);
-  if (email) scopes.add(email);
-  return [...scopes];
-}
+// verifyTenantJwt/getCurrentTenant/resolvePermissionScopes now live in
+// ../_shared/tenantAuth.ts (also used by memory-api's Memory Timeline and
+// evidence-drawer endpoints) - moved so a second function authenticating
+// real users doesn't grow its own hand-copied, silently-drifting version.
 
 // ── Handler: POST /auth/session ────────────────────────────────────────
 async function handleAuthSession(req: Request): Promise<Response> {
@@ -963,14 +920,29 @@ async function callClaude(
 
 // ── Query understanding (mirrors modules/query_understanding) ────────────
 
+// loci_pattern/target_entity_name/since_date extend this SAME call (spec
+// Section 9's pre-step) rather than adding a second Claude round-trip -
+// this codebase's own cost-conscious convention (see loci-chat's dropped
+// pricing-section comment for the same reasoning applied elsewhere).
+// "none" falls through to the existing, unmodified decisions RAG path with
+// zero behavior change - only a recognized pattern with a resolvable
+// entity (or catch_me_up, which doesn't need one) ever answers from the
+// memory layer instead.
+const LOCI_PATTERNS = [
+  "changes_since", "current_and_previous", "why_changed", "invalid_assumptions",
+  "customer_commitments", "catch_me_up", "evidence_for_answer", "none",
+] as const;
+
 type QueryAnalysis = {
   intent: string; question_type: string; entities: string[]; keywords: string[];
   department_guess: string; is_multi_document: boolean;
+  loci_pattern: string; target_entity_name: string | null; since_date: string | null;
 };
 
 const NULL_QUERY_ANALYSIS: QueryAnalysis = {
   intent: "unanalyzed", question_type: "other", entities: [], keywords: [],
   department_guess: "", is_multi_document: false,
+  loci_pattern: "none", target_entity_name: null, since_date: null,
 };
 
 const QUERY_ANALYSIS_TOOL = {
@@ -985,8 +957,21 @@ const QUERY_ANALYSIS_TOOL = {
       keywords: { type: "array", items: { type: "string" } },
       department_guess: { type: "string" },
       is_multi_document: { type: "boolean" },
+      loci_pattern: {
+        type: "string",
+        enum: [...LOCI_PATTERNS],
+        description: "Which memory-layer query pattern this question matches, if any - 'none' if it's a normal decision-search question.",
+      },
+      target_entity_name: {
+        type: ["string", "null"],
+        description: "The person/project/customer/topic name this question is about, if loci_pattern isn't 'none' and 'catch_me_up' (which needs no entity). Use the name as written, not an id.",
+      },
+      since_date: {
+        type: ["string", "null"],
+        description: "An ISO 8601 date (YYYY-MM-DD) if the question names or clearly implies one (e.g. 'this week', 'since March') and loci_pattern is 'changes_since' or 'catch_me_up'. Null otherwise - callers default to 7 days back.",
+      },
     },
-    required: ["intent", "question_type", "entities", "keywords", "department_guess", "is_multi_document"],
+    required: ["intent", "question_type", "entities", "keywords", "department_guess", "is_multi_document", "loci_pattern", "target_entity_name", "since_date"],
     additionalProperties: false,
   },
 };
@@ -1001,6 +986,17 @@ For the question below, determine:
 4. keywords - 3 to 8 high-signal retrieval terms capturing the core topic. Expand with likely synonyms and related terms a company's internal decision record might actually use - e.g. if the question mentions switching away from a product, include both the old and new product names, the general category, and the type of decision (e.g. "Stripe", "Paddle", "billing", "migration", "payment provider"). Do not include stopwords, question words, or generic verbs like "update" or "decide" unless they are genuinely distinctive to the topic.
 5. department_guess - the business domain/department this most likely relates to (e.g. engineering, finance, security, legal, hiring, marketing, product, analytics, customer support, infrastructure), or an empty string if genuinely unclear.
 6. is_multi_document - true if answering this well likely requires citing multiple decisions (broad "what have we decided about X" questions, list/summary/comparison questions), false for a question about one specific fact or decision.
+7. loci_pattern - classify against these seven memory-layer patterns, or "none" if the question doesn't match any of them:
+   - changes_since: "What changed with X this week/since [date]?"
+   - current_and_previous: "What is the current state of X, and what was it before?"
+   - why_changed: "Why did X change?"
+   - invalid_assumptions: "What assumptions about X are no longer valid?" / "what's outdated?"
+   - customer_commitments: "What commitments have we made to [customer]?"
+   - catch_me_up: "Catch me up on what matters since [date]" - broad, not about one specific thing
+   - evidence_for_answer: "What evidence supports that?" (a direct follow-up asking for sources)
+   Only classify a real match - most questions are "none" and should go through normal decision search.
+8. target_entity_name - the person/project/customer/topic name the question is about, if loci_pattern isn't "none" and isn't "catch_me_up" (which needs no entity). Null otherwise.
+9. since_date - an ISO 8601 date if the question names or clearly implies one and loci_pattern is "changes_since" or "catch_me_up". Null otherwise.
 
 Call the record_query_analysis tool exactly once with this analysis. Do not answer the question itself - you have not been given any decisions to answer from yet.`;
 
@@ -1144,6 +1140,53 @@ async function handleSearch(req: Request): Promise<Response> {
   try {
     const permissionScopes = await resolvePermissionScopes(ctx.userId, ctx.tenantId);
     const analysis = await analyzeQuery(question);
+
+    // Loci pre-step (spec Section 9) - a recognized pattern with a
+    // resolvable entity (or catch_me_up, which needs none) answers
+    // straight from the memory layer and returns early. Anything else -
+    // "none", or a pattern whose entity name doesn't resolve to a real
+    // entity - falls through to the unmodified decisions RAG path below
+    // with zero behavior change, exactly as before this pre-step existed.
+    if (analysis.loci_pattern !== "none" && LOCI_PATTERNS.includes(analysis.loci_pattern as typeof LOCI_PATTERNS[number])) {
+      const lociResult = await withTenant(ctx.tenantId, (sql) =>
+        answerLociQuery(sql, ctx.tenantId, permissionScopes, {
+          pattern: analysis.loci_pattern as Exclude<typeof LOCI_PATTERNS[number], "none">,
+          targetEntityName: analysis.target_entity_name,
+          sinceDate: analysis.since_date,
+        })
+      );
+      if (lociResult) {
+        return jsonResponse({
+          answer: lociResult.answer,
+          citations: [],
+          memory_citations: lociResult.memoriesUsed.map((m) => ({
+            memory_id: m.memory_id,
+            title: m.title,
+            type: m.type,
+            status: m.status,
+          })),
+          // Deterministically assembled from structured memory fields, not
+          // a language-model confidence estimate - 1 is the honest value,
+          // not a filled-in placeholder. reasoning omitted (matches the
+          // frontend's optional `reasoning?: string`) rather than null.
+          confidence: 1,
+          metadata: {
+            model: "memory-layer",
+            latency_ms: 0,
+            retrieved_count: lociResult.memoriesUsed.length,
+            authorized_count: lociResult.memoriesUsed.length,
+            decision_count: lociResult.memoriesUsed.length,
+            token_estimate: estimateTokens(lociResult.answer),
+            question_type: analysis.question_type,
+            is_multi_document: analysis.is_multi_document,
+            reranked: false,
+            recency_reranked: false,
+            source: "memory_layer",
+            loci_pattern: lociResult.pattern,
+          },
+        });
+      }
+    }
 
     let effectiveTopK = Math.max(requestedTopK, RERANK_MIN_TOP_K);
     if (analysis.is_multi_document) {
