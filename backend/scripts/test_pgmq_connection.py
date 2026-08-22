@@ -41,7 +41,7 @@ async def main() -> int:
     except Exception as exc:
         print(f"ERROR: Could not connect: {exc}")
         print("\nTip: pgmq usually needs a DIRECT Postgres URL, e.g.")
-        print("postgresql://postgres:pma%40locusai@db.imazdfzxinltbgktrgmv.supabase.co:5432/postgres")
+        print("postgresql://postgres:<password>@db.<project-ref>.supabase.co:5432/postgres")
         return 1
 
     try:
