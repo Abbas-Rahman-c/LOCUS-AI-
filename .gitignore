@@ -19,6 +19,10 @@ venv/
 .idea/
 .DS_Store
 
+# Claude Code local config (dev-server launch settings only, but the
+# directory name itself shouldn't be visible in the repo)
+.claude/
+
 # Tests / coverage
 .pytest_cache/
 .coverage
