@@ -26,6 +26,7 @@ import { DashboardShell } from './components/DashboardShell'
 import { TermsGateModal } from './components/TermsGateModal'
 import MainDashboardEntry from './pages/MainDashboardEntry'
 import DecisionLogPage from './pages/DecisionLogPage'
+import MemoryTimelinePage from './pages/MemoryTimelinePage'
 import TeamPulse from './pages/TeamPulse'
 import SettingsPage from './pages/SettingsPage'
 import TermsPage from './pages/TermsPage'
@@ -376,6 +377,7 @@ function App() {
           <Route element={<DashboardShell />}>
             <Route path="/dashboard" element={<MainDashboardEntry />} />
             <Route path="/decision-log" element={<DecisionLogPage />} />
+            <Route path="/memory-timeline" element={<MemoryTimelinePage />} />
             <Route path="/team-pulse" element={<TeamPulse />} />
             <Route path="/settings" element={<SettingsPage />} />
             {/* In-app "How it works" — keeps the dashboard nav/session visible,

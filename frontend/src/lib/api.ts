@@ -13,6 +13,14 @@ import { DEMO_EMAIL_KEY } from './sessionKeys'
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
+// memory-api is a separate Supabase Edge Function from api/index.ts (see
+// supabase/functions/memory-api/index.ts) - kept apart so nothing there can
+// regress /search or /digest. Its real-user routes (GET /memories, GET
+// /memories/:id/evidence) accept the exact same Locus-issued tenant JWT
+// apiFetch already obtains via /auth/session, so memoryApiFetch below
+// reuses getBackendToken() rather than a second login flow.
+const MEMORY_API_URL = import.meta.env.VITE_MEMORY_API_URL || 'http://localhost:8000'
+
 interface BackendSession {
   token: string
   tenantId: string
@@ -200,6 +208,32 @@ export async function apiFetch<T>(path: string, options: RequestInit = {}): Prom
   return response.json() as Promise<T>
 }
 
+async function memoryApiFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
+  const token = await getBackendToken()
+
+  const response = await fetch(`${MEMORY_API_URL}${path}`, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+      ...options.headers,
+    },
+  })
+
+  if (!response.ok) {
+    let detail = `Request failed (${response.status})`
+    try {
+      const body = (await response.json()) as { detail?: string }
+      if (body.detail) detail = body.detail
+    } catch {
+      // Response body wasn't JSON, keep the generic message.
+    }
+    throw new ApiError(detail, response.status)
+  }
+
+  return response.json() as Promise<T>
+}
+
 // ---- Response shapes, matching the real backend exactly (verified live) ----
 
 export interface SearchCitation {
@@ -374,4 +408,124 @@ export async function listAllDecisions(hardCap = 2000): Promise<DecisionOut[]> {
   }
 
   return items
+}
+
+// ---- Memory Intelligence layer (memory-api) ----
+// Mirrors supabase/functions/_shared/memory/types.ts's CanonicalMemoryObject
+// exactly - this is the JSON shape loadMemoriesForTenant() assembles and
+// GET /memories / GET /memories/:id/evidence return as-is, no reshaping.
+
+export type MemoryType =
+  | 'Context' | 'Change' | 'Commitment' | 'Decision'
+  | 'Rationale' | 'Blocker' | 'Outcome' | 'Requirement' | 'CustomerSignal'
+
+export type MemoryStatus =
+  | 'proposed' | 'current' | 'stale' | 'superseded' | 'contradicted' | 'unresolved'
+
+export type FreshnessState = 'fresh' | 'aging' | 'stale'
+
+export type EntityType = 'Person' | 'Team' | 'Project' | 'Customer' | 'Product' | 'Topic' | 'System'
+
+export interface MemoryEntityRef {
+  entity_id: string
+  entity_type: EntityType
+  canonical_name: string
+}
+
+export interface MemorySourceEventRef {
+  event_id: string
+  source: string
+  source_id: string
+  url: string | null
+}
+
+export interface MemoryCitation {
+  source_event: MemorySourceEventRef
+  excerpt_ref: string
+}
+
+export interface CanonicalMemory {
+  memory_id: string
+  organization_id: string
+  type: MemoryType
+  title: string
+  summary: string
+  payload: Record<string, unknown>
+  entities: MemoryEntityRef[]
+  occurred_at: string
+  valid_from: string
+  valid_until: string | null
+  observed_at: string
+  source_events: MemorySourceEventRef[]
+  citations: MemoryCitation[]
+  confidence: number
+  freshness: FreshnessState
+  authority: number | null
+  status: MemoryStatus
+  supersedes: string | null
+  contradicted_by: string | null
+  permissions: { inherited_from: MemorySourceEventRef[]; visible_to: string[] }
+  searchable_text: string
+}
+
+export interface ListMemoriesResponse {
+  memories: CanonicalMemory[]
+  hidden_count: number
+  /** True whenever this tenant has real content the caller can't be shown
+   * yet because no confirmed membership data exists for its scope - the
+   * fail-closed default, not a bug. The Memory Timeline surfaces this
+   * directly rather than silently looking empty/broken. */
+  some_content_hidden: boolean
+}
+
+export function listMemories(entityId?: string): Promise<ListMemoriesResponse> {
+  const params = entityId ? `?entity_id=${encodeURIComponent(entityId)}` : ''
+  return memoryApiFetch<ListMemoriesResponse>(`/memories${params}`)
+}
+
+export interface MemoryEvidence {
+  memory_id: string
+  title: string
+  summary: string
+  source_events: MemorySourceEventRef[]
+  citations: MemoryCitation[]
+  confidence: number
+  freshness: FreshnessState
+  status: MemoryStatus
+  supersedes: string | null
+}
+
+export function getMemoryEvidence(memoryId: string): Promise<MemoryEvidence> {
+  return memoryApiFetch<MemoryEvidence>(`/memories/${encodeURIComponent(memoryId)}/evidence`)
+}
+
+// ---- Attention strip (spec Section 10) ----
+
+export type AttentionCategory = 'conflict' | 'decision' | 'commitment' | 'staleness'
+export type ResolutionAction = 'confirm_decision' | 'check_in_commitment' | 'recheck_freshness' | 'dismiss_conflict'
+
+export interface AttentionItem {
+  memory_id: string
+  title: string
+  summary: string
+  type: MemoryType
+  category: AttentionCategory
+  weight: number
+  action: ResolutionAction
+}
+
+export interface AttentionResponse {
+  items: AttentionItem[]
+  total: number
+}
+
+export function listAttentionItems(limit = 4): Promise<AttentionResponse> {
+  return memoryApiFetch<AttentionResponse>(`/attention?limit=${limit}`)
+}
+
+export function resolveMemory(memoryId: string, action: ResolutionAction, note?: string): Promise<{ resolved: boolean }> {
+  return memoryApiFetch<{ resolved: boolean }>(`/memories/${encodeURIComponent(memoryId)}/resolve`, {
+    method: 'POST',
+    body: JSON.stringify({ action, note }),
+  })
 }
