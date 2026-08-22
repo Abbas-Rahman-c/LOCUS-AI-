@@ -37,3 +37,50 @@ export async function isMemoryAccessible(
   `;
   return rows.length > 0;
 }
+
+/**
+ * Same logic as isMemoryAccessible, applied to a whole list in one DB
+ * round trip instead of one query per memory. Found live: a tenant with
+ * 17 memories took ~21s to load through GET /memories because
+ * isMemoryAccessible ran once per memory over a single postgres.js
+ * connection, which serializes queries even under Promise.all - 17
+ * sequential round trips, not 17 parallel ones. This resolves the free
+ * checks (empty scope, literal overlap) in memory first, then issues a
+ * single source_scope_members query covering every remaining memory's
+ * scopes at once.
+ */
+export async function isMemoryAccessibleBatch(
+  // deno-lint-ignore no-explicit-any
+  sql: any,
+  tenantId: string,
+  permissionScopes: string[],
+  memoriesVisibleTo: string[][],
+): Promise<boolean[]> {
+  const results = new Array<boolean | null>(memoriesVisibleTo.length).fill(null);
+  const needsDbCheck: number[] = [];
+  const scopesToCheck = new Set<string>();
+
+  for (let i = 0; i < memoriesVisibleTo.length; i++) {
+    const visibleTo = memoriesVisibleTo[i];
+    if (visibleTo.length === 0 || visibleTo.some((s) => permissionScopes.includes(s))) {
+      results[i] = true;
+      continue;
+    }
+    needsDbCheck.push(i);
+    for (const s of visibleTo) scopesToCheck.add(s);
+  }
+
+  if (needsDbCheck.length > 0) {
+    const rows = await sql`
+      select distinct external_scope_id from public.source_scope_members
+      where tenant_id = ${tenantId} and external_scope_id = any(${[...scopesToCheck]})
+        and member_identifier = any(${permissionScopes})
+    `;
+    const grantedScopes = new Set(rows.map((r: { external_scope_id: string }) => r.external_scope_id));
+    for (const i of needsDbCheck) {
+      results[i] = memoriesVisibleTo[i].some((s) => grantedScopes.has(s));
+    }
+  }
+
+  return results as boolean[];
+}

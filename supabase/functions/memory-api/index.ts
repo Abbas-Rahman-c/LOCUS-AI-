@@ -18,7 +18,7 @@ import { writeMemory, detectConflicts, classifyRelation, ZeroSourceEventsError }
 import { embedText } from "../_shared/memory/embeddings.ts";
 import type { MemoryType } from "../_shared/memory/types.ts";
 import { requireServiceRole } from "../_shared/requireServiceRole.ts";
-import { isMemoryAccessible } from "../_shared/memory/permissions.ts";
+import { isMemoryAccessible, isMemoryAccessibleBatch } from "../_shared/memory/permissions.ts";
 import { loadMemoriesForTenant } from "../_shared/memory/loadMemories.ts";
 import { getCurrentTenant, resolvePermissionScopes } from "../_shared/tenantAuth.ts";
 import { runGoldenEval } from "../_shared/memory/eval/evalRunner.ts";
@@ -640,11 +640,14 @@ async function handleListMemories(req: Request): Promise<Response> {
   const entityId = url.searchParams.get("entity_id") ?? undefined;
 
   const permissionScopes = await resolvePermissionScopes(ctx.userId, ctx.tenantId);
-  const memories = await withTenant(ctx.tenantId, (sql) => loadMemoriesForTenant(sql, ctx.tenantId, entityId));
-
-  const accessFlags = await withTenant(ctx.tenantId, (sql) =>
-    Promise.all(memories.map((m) => isMemoryAccessible(sql, ctx.tenantId, permissionScopes, m.permissions.visible_to)))
-  );
+  // One pooled connection for both steps, not two - a fresh connection has
+  // its own real setup cost, and the batched permission check doesn't need
+  // a separate one now that it's a single query instead of N.
+  const { memories, accessFlags } = await withTenant(ctx.tenantId, async (sql) => {
+    const memories = await loadMemoriesForTenant(sql, ctx.tenantId, entityId);
+    const accessFlags = await isMemoryAccessibleBatch(sql, ctx.tenantId, permissionScopes, memories.map((m) => m.permissions.visible_to));
+    return { memories, accessFlags };
+  });
   const visible = memories.filter((_, i) => accessFlags[i]);
   const hiddenCount = memories.length - visible.length;
 
@@ -663,13 +666,14 @@ async function handleMemoryEvidence(req: Request, memoryId: string): Promise<Res
   const ctx = await getCurrentTenant(req);
   const permissionScopes = await resolvePermissionScopes(ctx.userId, ctx.tenantId);
 
-  const memories = await withTenant(ctx.tenantId, (sql) => loadMemoriesForTenant(sql, ctx.tenantId));
-  const memory = memories.find((m) => m.memory_id === memoryId);
+  const { memory, accessible } = await withTenant(ctx.tenantId, async (sql) => {
+    const memories = await loadMemoriesForTenant(sql, ctx.tenantId);
+    const memory = memories.find((m) => m.memory_id === memoryId);
+    if (!memory) return { memory: null, accessible: false };
+    const accessible = await isMemoryAccessible(sql, ctx.tenantId, permissionScopes, memory.permissions.visible_to);
+    return { memory, accessible };
+  });
   if (!memory) return json({ detail: "Memory not found" }, 404);
-
-  const accessible = await withTenant(ctx.tenantId, (sql) =>
-    isMemoryAccessible(sql, ctx.tenantId, permissionScopes, memory.permissions.visible_to)
-  );
   if (!accessible) return json({ detail: "Not accessible" }, 403);
 
   return json({
@@ -691,11 +695,11 @@ async function handleAttention(req: Request): Promise<Response> {
   const limit = Math.min(Math.max(Number(url.searchParams.get("limit") ?? 4), 1), 20);
 
   const permissionScopes = await resolvePermissionScopes(ctx.userId, ctx.tenantId);
-  const allMemories = await withTenant(ctx.tenantId, (sql) => loadMemoriesForTenant(sql, ctx.tenantId));
-  const accessFlags = await withTenant(ctx.tenantId, (sql) =>
-    Promise.all(allMemories.map((m) => isMemoryAccessible(sql, ctx.tenantId, permissionScopes, m.permissions.visible_to)))
-  );
-  const accessible = allMemories.filter((_, i) => accessFlags[i]);
+  const accessible = await withTenant(ctx.tenantId, async (sql) => {
+    const allMemories = await loadMemoriesForTenant(sql, ctx.tenantId);
+    const accessFlags = await isMemoryAccessibleBatch(sql, ctx.tenantId, permissionScopes, allMemories.map((m) => m.permissions.visible_to));
+    return allMemories.filter((_, i) => accessFlags[i]);
+  });
 
   const result = getAttentionItems(accessible, limit);
   return json({
@@ -727,19 +731,18 @@ async function handleResolveMemory(req: Request, memoryId: string): Promise<Resp
     return json({ detail: `action must be one of ${validActions.join(", ")}` }, 400);
   }
 
-  const memories = await withTenant(ctx.tenantId, (sql) => loadMemoriesForTenant(sql, ctx.tenantId));
-  const memory = memories.find((m) => m.memory_id === memoryId);
-  if (!memory) return json({ detail: "Memory not found" }, 404);
-
-  const accessible = await withTenant(ctx.tenantId, (sql) =>
-    isMemoryAccessible(sql, ctx.tenantId, permissionScopes, memory.permissions.visible_to)
-  );
-  if (!accessible) return json({ detail: "Not accessible" }, 403);
-
   try {
-    await withTenant(ctx.tenantId, (sql) =>
-      resolveMemory(sql, ctx.tenantId, memoryId, body.action as ResolutionAction, body.note ?? null, null)
-    );
+    const outcome = await withTenant(ctx.tenantId, async (sql) => {
+      const memories = await loadMemoriesForTenant(sql, ctx.tenantId);
+      const memory = memories.find((m) => m.memory_id === memoryId);
+      if (!memory) return "not_found" as const;
+      const accessible = await isMemoryAccessible(sql, ctx.tenantId, permissionScopes, memory.permissions.visible_to);
+      if (!accessible) return "not_accessible" as const;
+      await resolveMemory(sql, ctx.tenantId, memoryId, body.action as ResolutionAction, body.note ?? null, null);
+      return "resolved" as const;
+    });
+    if (outcome === "not_found") return json({ detail: "Memory not found" }, 404);
+    if (outcome === "not_accessible") return json({ detail: "Not accessible" }, 403);
   } catch (err) {
     if (err instanceof MemoryNotAccessibleError) return json({ detail: err.message }, 404);
     throw err;

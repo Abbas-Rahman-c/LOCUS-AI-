@@ -50,18 +50,22 @@ export async function getCurrentTenant(req: Request): Promise<TenantContext> {
  * retrofit closes for this one, once real membership data exists.
  */
 export async function resolvePermissionScopes(userId: string, tenantId: string): Promise<string[]> {
-  const email = await withAdmin(async (sql) => {
-    const rows = await sql`SELECT email FROM auth.users WHERE id = ${userId}`;
-    return rows[0]?.email ?? null;
-  });
-
-  const connectedScopes = await withTenant(tenantId, async (sql) => {
-    const rows = await sql`
-      SELECT DISTINCT external_workspace_id FROM public.source_connections
-      WHERE tenant_id = ${tenantId} AND status = 'active' AND external_workspace_id IS NOT NULL
-    `;
-    return rows.map((r) => r.external_workspace_id as string);
-  });
+  // Two separate connections (admin pool vs tenant pool) - genuinely
+  // independent, safe to run concurrently rather than paying both
+  // round-trip latencies back to back.
+  const [email, connectedScopes] = await Promise.all([
+    withAdmin(async (sql) => {
+      const rows = await sql`SELECT email FROM auth.users WHERE id = ${userId}`;
+      return rows[0]?.email ?? null;
+    }),
+    withTenant(tenantId, async (sql) => {
+      const rows = await sql`
+        SELECT DISTINCT external_workspace_id FROM public.source_connections
+        WHERE tenant_id = ${tenantId} AND status = 'active' AND external_workspace_id IS NOT NULL
+      `;
+      return rows.map((r) => r.external_workspace_id as string);
+    }),
+  ]);
 
   const scopes = new Set<string>(connectedScopes);
   if (email) scopes.add(email);

@@ -17,7 +17,7 @@
 import type { CanonicalMemoryObject, MemoryType } from "./types.ts";
 import { getChangesSince, getCurrentState } from "./temporalQueries.ts";
 import { loadMemoriesForTenant } from "./loadMemories.ts";
-import { isMemoryAccessible } from "./permissions.ts";
+import { isMemoryAccessibleBatch } from "./permissions.ts";
 
 export type LociPattern =
   | "changes_since"
@@ -207,9 +207,7 @@ export async function answerLociQuery(
   now: Date = new Date(),
 ): Promise<LociAnswer | null> {
   const allMemories = await loadMemoriesForTenant(sql, tenantId);
-  const accessFlags = await Promise.all(
-    allMemories.map((m) => isMemoryAccessible(sql, tenantId, permissionScopes, m.permissions.visible_to)),
-  );
+  const accessFlags = await isMemoryAccessibleBatch(sql, tenantId, permissionScopes, allMemories.map((m) => m.permissions.visible_to));
   const memories = allMemories.filter((_, i) => accessFlags[i]);
   if (memories.length === 0) return null;
 

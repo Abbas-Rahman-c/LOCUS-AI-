@@ -23,7 +23,7 @@ import { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { getServiceClient } from "../_shared/supabase.ts";
 import { withTenant } from "../_shared/db.ts";
 import { loadMemoriesForTenant } from "../_shared/memory/loadMemories.ts";
-import { isMemoryAccessible } from "../_shared/memory/permissions.ts";
+import { isMemoryAccessibleBatch } from "../_shared/memory/permissions.ts";
 import { resolvePermissionScopes } from "../_shared/tenantAuth.ts";
 import type { CanonicalMemoryObject } from "../_shared/memory/types.ts";
 
@@ -350,11 +350,11 @@ async function toolCheckAction(
   }
 
   const permissionScopes = await resolvePermissionScopes(ctx.userId, ctx.tenantId);
-  const allMemories = await withTenant(ctx.tenantId, (sql) => loadMemoriesForTenant(sql, ctx.tenantId));
-  const accessFlags = await withTenant(ctx.tenantId, (sql) =>
-    Promise.all(allMemories.map((m) => isMemoryAccessible(sql, ctx.tenantId, permissionScopes, m.permissions.visible_to)))
-  );
-  const accessible = allMemories.filter((_, i) => accessFlags[i]);
+  const accessible = await withTenant(ctx.tenantId, async (sql) => {
+    const allMemories = await loadMemoriesForTenant(sql, ctx.tenantId);
+    const accessFlags = await isMemoryAccessibleBatch(sql, ctx.tenantId, permissionScopes, allMemories.map((m) => m.permissions.visible_to));
+    return allMemories.filter((_, i) => accessFlags[i]);
+  });
 
   // "current or recently-superseded" per spec - superseded is included
   // deliberately (an agent about to redo something already reversed once

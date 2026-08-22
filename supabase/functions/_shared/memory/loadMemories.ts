@@ -24,33 +24,41 @@ export async function loadMemoriesForTenant(sql: any, tenantId: string, entityId
   if (memoryRows.length === 0) return [];
   const memoryIds = memoryRows.map((r: { memory_id: string }) => r.memory_id);
 
-  const entityRows = await sql`
-    select me.memory_id, e.entity_id, e.entity_type, e.canonical_name
-    from public.memory_entities me
-    join public.entities e on e.entity_id = me.entity_id
-    where me.memory_id = any(${memoryIds})
-  `;
-  const sourceRows = await sql`
-    select mse.memory_id, mfe.id as event_id, mfe.source, mfe.source_id, mfe.permission_scope
-    from public.memory_source_events mse
-    join public.memory_fixture_events mfe on mfe.id = mse.fixture_event_id
-    where mse.memory_id = any(${memoryIds})
-  `;
-  const citationRows = await sql`
-    select mc.memory_id, mfe.id as event_id, mfe.source, mfe.source_id, mc.excerpt_ref
-    from public.memory_citations mc
-    join public.memory_fixture_events mfe on mfe.id = mc.fixture_event_id
-    where mc.memory_id = any(${memoryIds})
-  `;
-  // memory_conflicts only ever stores the 'conflict' relationship (see
-  // reconcile.ts), one directed row per pair (memory_id = the newer side,
-  // related_memory_id = the candidate it conflicted with). A memory can be
-  // on either side depending on which one triggered the check, so this has
-  // to match on both columns to find every unresolved memory's sibling.
-  const conflictRows = await sql`
-    select memory_id, related_memory_id from public.memory_conflicts
-    where tenant_id = ${tenantId} and (memory_id = any(${memoryIds}) or related_memory_id = any(${memoryIds}))
-  `;
+  // Fired together (not one `await` at a time) so postgres.js pipelines
+  // them over the single connection instead of paying a full round-trip
+  // latency four times in a row - found live: a 17-memory tenant took 13s
+  // to load with these sequential, almost entirely round-trip overhead
+  // rather than query cost on a dataset this small.
+  const [entityRows, sourceRows, citationRows, conflictRows] = await Promise.all([
+    sql`
+      select me.memory_id, e.entity_id, e.entity_type, e.canonical_name
+      from public.memory_entities me
+      join public.entities e on e.entity_id = me.entity_id
+      where me.memory_id = any(${memoryIds})
+    `,
+    sql`
+      select mse.memory_id, mfe.id as event_id, mfe.source, mfe.source_id, mfe.permission_scope
+      from public.memory_source_events mse
+      join public.memory_fixture_events mfe on mfe.id = mse.fixture_event_id
+      where mse.memory_id = any(${memoryIds})
+    `,
+    sql`
+      select mc.memory_id, mfe.id as event_id, mfe.source, mfe.source_id, mc.excerpt_ref
+      from public.memory_citations mc
+      join public.memory_fixture_events mfe on mfe.id = mc.fixture_event_id
+      where mc.memory_id = any(${memoryIds})
+    `,
+    // memory_conflicts only ever stores the 'conflict' relationship (see
+    // reconcile.ts), one directed row per pair (memory_id = the newer
+    // side, related_memory_id = the candidate it conflicted with). A
+    // memory can be on either side depending on which one triggered the
+    // check, so this has to match on both columns to find every
+    // unresolved memory's sibling.
+    sql`
+      select memory_id, related_memory_id from public.memory_conflicts
+      where tenant_id = ${tenantId} and (memory_id = any(${memoryIds}) or related_memory_id = any(${memoryIds}))
+    `,
+  ]);
 
   const entitiesByMemory = new Map<string, EntityRef[]>();
   for (const r of entityRows) {
