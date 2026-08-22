@@ -29,7 +29,7 @@ export async function loadMemoriesForTenant(sql: any, tenantId: string, entityId
   // latency four times in a row - found live: a 17-memory tenant took 13s
   // to load with these sequential, almost entirely round-trip overhead
   // rather than query cost on a dataset this small.
-  const [entityRows, sourceRows, citationRows, conflictRows] = await Promise.all([
+  const [entityRows, sourceRows, citationRows, conflictRows, flaggedEntityIds] = await Promise.all([
     sql`
       select me.memory_id, e.entity_id, e.entity_type, e.canonical_name
       from public.memory_entities me
@@ -58,12 +58,22 @@ export async function loadMemoriesForTenant(sql: any, tenantId: string, entityId
       select memory_id, related_memory_id from public.memory_conflicts
       where tenant_id = ${tenantId} and (memory_id = any(${memoryIds}) or related_memory_id = any(${memoryIds}))
     `,
+    // Every entity currently flagged for merge review (confirmed, but a
+    // possible duplicate was found - see entityResolution.ts). Fetched
+    // tenant-wide rather than scoped to memoryIds' own entities, since
+    // it's a small set and this is simpler than intersecting against
+    // entityRows before that map even exists yet.
+    sql`
+      select distinct source_entity_id from public.unresolved_entities
+      where tenant_id = ${tenantId} and status = 'pending' and source_entity_id is not null
+    `,
   ]);
+  const flaggedSet = new Set(flaggedEntityIds.map((r: { source_entity_id: string }) => r.source_entity_id));
 
   const entitiesByMemory = new Map<string, EntityRef[]>();
   for (const r of entityRows) {
     const list = entitiesByMemory.get(r.memory_id) ?? [];
-    list.push({ entity_id: r.entity_id, entity_type: r.entity_type, canonical_name: r.canonical_name });
+    list.push({ entity_id: r.entity_id, entity_type: r.entity_type, canonical_name: r.canonical_name, flagged: flaggedSet.has(r.entity_id) });
     entitiesByMemory.set(r.memory_id, list);
   }
   const sourcesByMemory = new Map<string, SourceEventRef[]>();

@@ -3,13 +3,17 @@ import { useSearchParams } from 'react-router-dom'
 import {
   ApiError,
   getMemoryEvidence,
+  getRelatedEntities,
   listMemories,
   type CanonicalMemory,
+  type EntityType,
   type MemoryEvidence,
   type MemoryStatus,
   type MemoryType,
+  type RelatedEntity,
 } from '../lib/api'
 import { getStateAsOf } from '../lib/memoryTemporal'
+import { computeEntityActivity, isActiveThisWeek, relativeRecencyLabel, type EntityActivity } from '../lib/entityActivity'
 
 // Wider status set than MemoryRecordDetail's STATUS_STYLES (Current/
 // Superseded only, for the old decisions table) - the memory layer has six
@@ -48,8 +52,212 @@ type TypeFilter = typeof ALL_TYPES | MemoryType
 type SourceFilter = typeof ALL_SOURCES | string
 type StatusFilter = typeof ALL_STATUSES | MemoryStatus
 
+// Browse mode's grouping (spec: "People, Projects, Teams, Systems &
+// Topics, Customers, only rendering non-empty groups"). Product doesn't
+// have its own named group in the spec - folded into the closest existing
+// bucket (Systems & Topics) rather than inventing a 6th group, since it's
+// rare enough in practice not to need its own shelf, and the "only
+// non-empty groups" rule already keeps an all-Product tenant from being
+// stuck with a silently-missing type.
+const ENTITY_GROUPS: { label: string; types: EntityType[] }[] = [
+  { label: 'People', types: ['Person'] },
+  { label: 'Projects', types: ['Project'] },
+  { label: 'Teams', types: ['Team'] },
+  { label: 'Systems & Topics', types: ['System', 'Topic', 'Product'] },
+  { label: 'Customers', types: ['Customer'] },
+]
+
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+}
+
+// One visual per card, not a chart plus a number plus a trend arrow - 7
+// bars, one per week, height scaled by that week's memory count.
+function ActivitySparkline({ weeklyCounts }: { weeklyCounts: number[] }) {
+  const max = Math.max(1, ...weeklyCounts)
+  return (
+    <div className="flex h-4 items-end gap-[2px]" aria-hidden="true">
+      {weeklyCounts.map((count, i) => (
+        <div
+          key={i}
+          className={`w-[3px] rounded-sm ${count > 0 ? 'bg-[#5A45FF]' : 'bg-[#E5E7EB]'}`}
+          style={{ height: `${Math.max(15, (count / max) * 100)}%` }}
+        />
+      ))}
+    </div>
+  )
+}
+
+function EntityCard({ id, name, activity, flagged, onSelect }: { id: string; name: string; activity: EntityActivity; flagged: boolean; onSelect: (id: string) => void }) {
+  return (
+    <button
+      type="button"
+      onClick={() => onSelect(id)}
+      className="flex flex-col gap-2 rounded-xl border border-[#E5E7EB] bg-white p-3.5 text-left transition-colors hover:border-[#C7C2FF] hover:bg-[#FAFAFF]"
+    >
+      <div className="flex items-start justify-between gap-2">
+        <p className="min-w-0 truncate text-[13px] font-semibold text-[#111827]">{name}</p>
+        {flagged ? (
+          <span
+            title="Possible duplicate - pending review"
+            className="shrink-0 rounded-full bg-[#FEF3C7] px-1.5 py-0.5 text-[10px] font-semibold text-[#92400E]"
+          >
+            ⚠
+          </span>
+        ) : null}
+      </div>
+      <div className="flex items-center justify-between gap-2">
+        <ActivitySparkline weeklyCounts={activity.weeklyCounts} />
+        <span className="shrink-0 text-[11px] text-[#9CA3AF]">{relativeRecencyLabel(activity.lastActiveAt)}</span>
+      </div>
+    </button>
+  )
+}
+
+function BrowseMode({
+  memories,
+  query,
+  onSelect,
+}: {
+  memories: CanonicalMemory[]
+  query: string
+  onSelect: (id: string) => void
+}) {
+  const now = useMemo(() => new Date(), [])
+
+  const entities = useMemo(() => {
+    const byId = new Map<string, { name: string; type: EntityType; flagged: boolean }>()
+    for (const m of memories) {
+      for (const e of m.entities) byId.set(e.entity_id, { name: e.canonical_name, type: e.entity_type, flagged: e.flagged })
+    }
+    return [...byId.entries()]
+      .map(([id, v]) => ({ id, ...v, activity: computeEntityActivity(memories, id, now) }))
+      .filter((e) => e.name.toLowerCase().includes(query.toLowerCase()))
+  }, [memories, query, now])
+
+  if (entities.length === 0) {
+    return <p className="mt-4 text-[13px] text-[#9CA3AF]">No entities found yet.</p>
+  }
+
+  const activeThisWeek = entities.filter((e) => isActiveThisWeek(e.activity, now)).sort((a, b) => (b.activity.lastActiveAt ?? '').localeCompare(a.activity.lastActiveAt ?? ''))
+
+  return (
+    <div className="mt-4 flex flex-col gap-6">
+      {activeThisWeek.length > 0 ? (
+        <div>
+          <p className="mb-2 text-[11px] font-semibold tracking-[0.06em] text-[#9CA3AF]">ACTIVE THIS WEEK</p>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
+            {activeThisWeek.map((e) => (
+              <EntityCard key={e.id} id={e.id} name={e.name} activity={e.activity} flagged={e.flagged} onSelect={onSelect} />
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      {ENTITY_GROUPS.map((group) => {
+        const inGroup = entities.filter((e) => group.types.includes(e.type)).sort((a, b) => a.name.localeCompare(b.name))
+        if (inGroup.length === 0) return null
+        return (
+          <div key={group.label}>
+            <p className="mb-2 text-[11px] font-semibold tracking-[0.06em] text-[#9CA3AF]">
+              {group.label.toUpperCase()} ({inGroup.length})
+            </p>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
+              {inGroup.map((e) => (
+                <EntityCard key={e.id} id={e.id} name={e.name} activity={e.activity} flagged={e.flagged} onSelect={onSelect} />
+              ))}
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+function FindMode({
+  memories,
+  query,
+  onSelect,
+}: {
+  memories: CanonicalMemory[]
+  query: string
+  onSelect: (id: string) => void
+}) {
+  const entityOptions = useMemo(() => {
+    const byId = new Map<string, { name: string; flagged: boolean }>()
+    for (const m of memories) {
+      for (const e of m.entities) byId.set(e.entity_id, { name: e.canonical_name, flagged: e.flagged })
+    }
+    return [...byId.entries()]
+      .map(([id, v]) => ({ id, ...v }))
+      .filter((e) => e.name.toLowerCase().includes(query.toLowerCase()))
+      .sort((a, b) => a.name.localeCompare(b.name))
+  }, [memories, query])
+
+  return (
+    <div className="mt-4 flex flex-wrap gap-2">
+      {entityOptions.map((e) => (
+        <button
+          key={e.id}
+          type="button"
+          onClick={() => onSelect(e.id)}
+          className="inline-flex items-center gap-1.5 rounded-full border border-[#E5E7EB] bg-white px-3 py-1.5 text-[12px] font-medium text-[#374151] hover:bg-[#F9FAFB]"
+        >
+          {e.name}
+          {e.flagged ? <span title="Possible duplicate - pending review">⚠</span> : null}
+        </button>
+      ))}
+      {entityOptions.length === 0 ? <p className="text-[13px] text-[#9CA3AF]">No entities found yet.</p> : null}
+    </div>
+  )
+}
+
+function RelatedPanel({ entityId, onSelect }: { entityId: string; onSelect: (id: string) => void }) {
+  const [related, setRelated] = useState<RelatedEntity[] | null>(null)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    let active = true
+    setRelated(null)
+    setError('')
+    getRelatedEntities(entityId)
+      .then((res) => {
+        if (active) setRelated(res.related)
+      })
+      .catch((err: unknown) => {
+        if (active) setError(err instanceof ApiError ? err.message : 'Unable to load related entities.')
+      })
+    return () => {
+      active = false
+    }
+  }, [entityId])
+
+  if (error) return null // quiet fail - this is a supplementary panel, not core content
+  if (related !== null && related.length === 0) return null
+
+  return (
+    <div className="mt-4 rounded-xl border border-[#E5E7EB] bg-white p-4">
+      <p className="text-[11px] font-semibold tracking-[0.06em] text-[#9CA3AF]">RELATED</p>
+      {related === null ? (
+        <p className="mt-2 text-[12px] text-[#9CA3AF]">Loading…</p>
+      ) : (
+        <div className="mt-2 flex flex-wrap gap-2">
+          {related.map((r) => (
+            <button
+              key={r.entity_id}
+              type="button"
+              onClick={() => onSelect(r.entity_id)}
+              className="inline-flex items-center gap-1.5 rounded-full border border-[#E5E7EB] bg-[#FAFAFF] px-3 py-1.5 text-[12px] font-medium text-[#374151] hover:bg-[#F3F1FF]"
+            >
+              {r.canonical_name}
+              <span className="rounded-full bg-white px-1.5 text-[10px] font-semibold text-[#5A45FF]">{r.count}</span>
+              {r.flagged ? <span title="Possible duplicate - pending review">⚠</span> : null}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
 }
 
 function MemoryCard({
@@ -103,8 +311,9 @@ function MemoryCard({
 
       <div className="mt-3 flex flex-wrap items-center gap-2">
         {memory.entities.map((e) => (
-          <span key={e.entity_id} className="rounded-full bg-[#F3F4F6] px-2.5 py-1 text-[11px] text-[#6B7280]">
+          <span key={e.entity_id} className="inline-flex items-center gap-1 rounded-full bg-[#F3F4F6] px-2.5 py-1 text-[11px] text-[#6B7280]">
             {e.canonical_name}
+            {e.flagged ? <span title="Possible duplicate - pending review">⚠</span> : null}
           </span>
         ))}
       </div>
@@ -203,6 +412,7 @@ export default function MemoryTimelinePage() {
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState('')
 
+  const [pickerMode, setPickerMode] = useState<'browse' | 'find'>('browse')
   const [typeFilter, setTypeFilter] = useState<TypeFilter>(ALL_TYPES)
   const [sourceFilter, setSourceFilter] = useState<SourceFilter>(ALL_SOURCES)
   const [statusFilter, setStatusFilter] = useState<StatusFilter>(ALL_STATUSES)
@@ -211,8 +421,8 @@ export default function MemoryTimelinePage() {
   const [evidenceMemoryId, setEvidenceMemoryId] = useState<string | null>(null)
 
   // One fetch on mount (or when the selected entity changes) - every other
-  // filter, and the point-in-time slider, runs client-side over this same
-  // list. No network round trip per slider move or filter click.
+  // filter, and the point-in-time control, runs client-side over this same
+  // list. No network round trip per point-in-time change or filter click.
   useEffect(() => {
     let active = true
     setIsLoading(true)
@@ -235,17 +445,6 @@ export default function MemoryTimelinePage() {
     }
   }, [entityId])
 
-  const entityOptions = useMemo(() => {
-    const byId = new Map<string, string>()
-    for (const m of memories) {
-      for (const e of m.entities) byId.set(e.entity_id, e.canonical_name)
-    }
-    return [...byId.entries()]
-      .map(([id, name]) => ({ id, name }))
-      .filter((e) => e.name.toLowerCase().includes(entityQuery.toLowerCase()))
-      .sort((a, b) => a.name.localeCompare(b.name))
-  }, [memories, entityQuery])
-
   const selectedEntityName = entityId ? memories.find((m) => m.entities.some((e) => e.entity_id === entityId))?.entities.find((e) => e.entity_id === entityId)?.canonical_name : undefined
 
   const sourceOptions = useMemo(() => {
@@ -253,6 +452,11 @@ export default function MemoryTimelinePage() {
     for (const m of memories) for (const se of m.source_events) set.add(se.source)
     return [...set].sort()
   }, [memories])
+
+  // Explains the "why does the Source filter only show one option" case
+  // directly, rather than leaving it to look broken - real when
+  // fail-closed permissions are hiding content from other sources.
+  const sourceOptionsLimitedByHiding = someContentHidden && sourceOptions.length <= 1
 
   const displayedMemories = useMemo(() => {
     let list = memories
@@ -294,7 +498,28 @@ export default function MemoryTimelinePage() {
 
       {!entityId ? (
         <div className="mt-6 rounded-2xl border border-[#E5E7EB] bg-white p-5">
-          <p className="text-[13px] font-semibold text-[#111827]">Pick an entity to see its timeline</p>
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-[13px] font-semibold text-[#111827]">
+              {pickerMode === 'browse' ? 'Browse everything Locus knows about' : 'Find a specific entity'}
+            </p>
+            <div className="flex rounded-full border border-[#E5E7EB] p-0.5">
+              <button
+                type="button"
+                onClick={() => setPickerMode('browse')}
+                className={`rounded-full px-3 py-1 text-[12px] font-semibold transition-colors ${pickerMode === 'browse' ? 'bg-[#5A45FF] text-white' : 'text-[#6B7280]'}`}
+              >
+                Browse
+              </button>
+              <button
+                type="button"
+                onClick={() => setPickerMode('find')}
+                className={`rounded-full px-3 py-1 text-[12px] font-semibold transition-colors ${pickerMode === 'find' ? 'bg-[#5A45FF] text-white' : 'text-[#6B7280]'}`}
+              >
+                Find
+              </button>
+            </div>
+          </div>
+
           <input
             type="text"
             value={entityQuery}
@@ -302,96 +527,99 @@ export default function MemoryTimelinePage() {
             placeholder="Search people, projects, customers…"
             className="mt-3 h-10 w-full rounded-full border border-[#E5E7EB] px-4 text-[13px] outline-none placeholder:text-[#9CA3AF] focus:border-[#5A45FF]"
           />
-          <div className="mt-3 flex flex-wrap gap-2">
-            {entityOptions.map((e) => (
-              <button
-                key={e.id}
-                type="button"
-                onClick={() => selectEntity(e.id)}
-                className="rounded-full border border-[#E5E7EB] bg-white px-3 py-1.5 text-[12px] font-medium text-[#374151] hover:bg-[#F9FAFB]"
-              >
-                {e.name}
-              </button>
-            ))}
-            {entityOptions.length === 0 && !isLoading ? (
-              <p className="text-[13px] text-[#9CA3AF]">No entities found yet.</p>
-            ) : null}
-          </div>
+
+          {pickerMode === 'browse' ? (
+            <BrowseMode memories={memories} query={entityQuery} onSelect={selectEntity} />
+          ) : (
+            <FindMode memories={memories} query={entityQuery} onSelect={selectEntity} />
+          )}
         </div>
       ) : (
-        <div className="mt-6 flex flex-wrap items-center gap-3">
-          <button
-            type="button"
-            onClick={() => setSearchParams({})}
-            className="rounded-full border border-[#E5E7EB] bg-white px-3 py-1.5 text-[12px] font-semibold text-[#5A45FF] hover:bg-[#F8F7FF]"
-          >
-            ← Change entity
-          </button>
-          <span className="text-[15px] font-semibold text-[#111827]">{selectedEntityName ?? entityId}</span>
-        </div>
+        <>
+          <div className="mt-6 flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              onClick={() => setSearchParams({})}
+              className="rounded-full border border-[#E5E7EB] bg-white px-3 py-1.5 text-[12px] font-semibold text-[#5A45FF] hover:bg-[#F8F7FF]"
+            >
+              ← Change entity
+            </button>
+            <span className="text-[15px] font-semibold text-[#111827]">{selectedEntityName ?? entityId}</span>
+          </div>
+
+          {/* Promoted: the single most "acts like a brain" control in the
+              product, previously buried as one input among filters. Its
+              own card, not a row alongside three unrelated dropdowns. */}
+          <div className="mt-4 rounded-xl border border-[#DCD6FF] bg-[#FAFAFF] p-4">
+            <label className="flex flex-wrap items-center gap-3">
+              <span className="text-[13px] font-semibold text-[#5A45FF]">See what we knew as of</span>
+              <input
+                type="date"
+                value={pointInTime}
+                onChange={(e) => setPointInTime(e.target.value)}
+                className="h-10 rounded-lg border border-[#DCD6FF] bg-white px-3 text-[13px] outline-none focus:border-[#5A45FF]"
+              />
+              {pointInTime ? (
+                <button
+                  type="button"
+                  onClick={() => setPointInTime('')}
+                  className="text-[12px] font-semibold text-[#5A45FF] hover:underline"
+                >
+                  Back to current state
+                </button>
+              ) : (
+                <span className="text-[12px] text-[#9CA3AF]">Showing current state</span>
+              )}
+            </label>
+          </div>
+
+          <RelatedPanel entityId={entityId} onSelect={selectEntity} />
+        </>
       )}
 
       {entityId ? (
-        <div className="mt-4 flex flex-wrap items-center gap-3">
-          <label className="flex items-center gap-2 text-[12px] font-semibold text-[#6B7280]">
-            As of
-            <input
-              type="date"
-              value={pointInTime}
-              onChange={(e) => setPointInTime(e.target.value)}
-              className="h-9 rounded-lg border border-[#E5E7EB] px-2 text-[13px] outline-none focus:border-[#5A45FF]"
-            />
-          </label>
-          {pointInTime ? (
-            <button
-              type="button"
-              onClick={() => setPointInTime('')}
-              className="text-[12px] font-semibold text-[#5A45FF] hover:underline"
-            >
-              Back to current state
-            </button>
+        <div className="mt-4 flex flex-wrap items-center gap-2">
+          <select
+            value={typeFilter}
+            onChange={(e) => setTypeFilter(e.target.value as TypeFilter)}
+            className="h-9 rounded-lg border border-[#E5E7EB] px-2 text-[12px] text-[#374151]"
+          >
+            <option value={ALL_TYPES}>{ALL_TYPES}</option>
+            {(['Context', 'Change', 'Commitment', 'Decision', 'Rationale', 'Blocker', 'Outcome', 'Requirement', 'CustomerSignal'] as MemoryType[]).map((t) => (
+              <option key={t} value={t}>
+                {t}
+              </option>
+            ))}
+          </select>
+          <select
+            value={sourceFilter}
+            onChange={(e) => setSourceFilter(e.target.value)}
+            className="h-9 rounded-lg border border-[#E5E7EB] px-2 text-[12px] text-[#374151]"
+          >
+            <option value={ALL_SOURCES}>{ALL_SOURCES}</option>
+            {sourceOptions.map((s) => (
+              <option key={s} value={s}>
+                {s}
+              </option>
+            ))}
+          </select>
+          {sourceOptionsLimitedByHiding ? (
+            <span className="text-[11px] text-[#9CA3AF]">Only sources with visible content are listed</span>
           ) : null}
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
+            className="h-9 rounded-lg border border-[#E5E7EB] px-2 text-[12px] text-[#374151]"
+          >
+            <option value={ALL_STATUSES}>{ALL_STATUSES}</option>
+            {(Object.keys(STATUS_LABELS) as MemoryStatus[]).map((s) => (
+              <option key={s} value={s}>
+                {STATUS_LABELS[s]}
+              </option>
+            ))}
+          </select>
         </div>
       ) : null}
-
-      <div className="mt-4 flex flex-wrap gap-2">
-        <select
-          value={typeFilter}
-          onChange={(e) => setTypeFilter(e.target.value as TypeFilter)}
-          className="h-9 rounded-lg border border-[#E5E7EB] px-2 text-[12px] text-[#374151]"
-        >
-          <option value={ALL_TYPES}>{ALL_TYPES}</option>
-          {(['Context', 'Change', 'Commitment', 'Decision', 'Rationale', 'Blocker', 'Outcome', 'Requirement', 'CustomerSignal'] as MemoryType[]).map((t) => (
-            <option key={t} value={t}>
-              {t}
-            </option>
-          ))}
-        </select>
-        <select
-          value={sourceFilter}
-          onChange={(e) => setSourceFilter(e.target.value)}
-          className="h-9 rounded-lg border border-[#E5E7EB] px-2 text-[12px] text-[#374151]"
-        >
-          <option value={ALL_SOURCES}>{ALL_SOURCES}</option>
-          {sourceOptions.map((s) => (
-            <option key={s} value={s}>
-              {s}
-            </option>
-          ))}
-        </select>
-        <select
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
-          className="h-9 rounded-lg border border-[#E5E7EB] px-2 text-[12px] text-[#374151]"
-        >
-          <option value={ALL_STATUSES}>{ALL_STATUSES}</option>
-          {(Object.keys(STATUS_LABELS) as MemoryStatus[]).map((s) => (
-            <option key={s} value={s}>
-              {STATUS_LABELS[s]}
-            </option>
-          ))}
-        </select>
-      </div>
 
       {error ? <p className="mt-6 text-[13px] text-[#DC2626]">{error}</p> : null}
       {isLoading ? <p className="mt-6 text-[13px] text-[#9CA3AF]">Loading…</p> : null}

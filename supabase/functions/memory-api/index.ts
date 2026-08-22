@@ -360,8 +360,12 @@ async function handleListUnresolvedEntities(tenantId: string): Promise<Response>
 async function handleConfirmNewEntity(req: Request): Promise<Response> {
   const body = await req.json() as { tenant_id?: string; unresolved_id?: string };
   if (!body.tenant_id || !body.unresolved_id) return json({ detail: "tenant_id and unresolved_id are required" }, 400);
-  const entityId = await withTenant(body.tenant_id, (sql) => confirmNewEntity(sql, body.tenant_id!, body.unresolved_id!));
-  return json({ entity_id: entityId });
+  const result = await withTenant(body.tenant_id, (sql) => confirmNewEntity(sql, body.tenant_id!, body.unresolved_id!));
+  return json({
+    entity_id: result.entityId,
+    attached_existing: result.attachedExisting,
+    flagged_for_merge_review: result.flaggedForMergeReview,
+  });
 }
 
 async function handleMergeEntity(req: Request): Promise<Response> {
@@ -619,6 +623,101 @@ async function handleDebugTestReconciliation(req: Request): Promise<Response> {
   return json(outcomes);
 }
 
+// Live reproduction of the exact bug found in production: two mentions of
+// one real new entity, queued separately during extraction (when neither
+// had anything to match against yet), then confirmed in the same
+// sequential batch. Before the fix, confirmNewEntity never re-checked
+// against what the batch itself had already created - this proves the fix
+// actually catches it, not just that the code reads like it should.
+async function handleDebugTestEntityMergeGuard(req: Request): Promise<Response> {
+  const body = await req.json() as { tenant_id?: string };
+  if (!body.tenant_id) return json({ detail: "tenant_id is required" }, 400);
+  const tenantId = body.tenant_id;
+
+  const suffix = Date.now();
+  const result = await withTenant(tenantId, async (sql) => {
+    // Two DIFFERENT strings for the same real thing (not an exact-text
+    // duplicate - this specifically tests the similarity re-check, the
+    // part that was actually missing). Inserted directly, bypassing
+    // resolveEntityMention, to mirror the exact real state a genuine
+    // extraction run leaves behind: two pending rows, neither with a
+    // candidate, because nothing existed to match against when either was
+    // queued.
+    const q1 = await sql`
+      insert into public.unresolved_entities (tenant_id, mention_text, entity_type_guess, status)
+      values (${tenantId}, ${"Debug Merge Guard Sync " + suffix}, 'Project', 'pending') returning id
+    `;
+    const q2 = await sql`
+      insert into public.unresolved_entities (tenant_id, mention_text, entity_type_guess, status)
+      values (${tenantId}, ${"Debug Merge Guard Synchronization " + suffix}, 'Project', 'pending') returning id
+    `;
+
+    const first = await confirmNewEntity(sql, tenantId, q1[0].id as string);
+    const second = await confirmNewEntity(sql, tenantId, q2[0].id as string);
+
+    const entityRows = await sql`
+      select entity_id, canonical_name, status from public.entities
+      where tenant_id = ${tenantId} and canonical_name ilike ${"Debug Merge Guard%" + suffix}
+    `;
+
+    return { first, second, real_entity_count: entityRows.length, entities: entityRows };
+  });
+
+  const passed = result.real_entity_count === 1 || (result.real_entity_count === 2 && result.second.flaggedForMergeReview !== null);
+  return json({
+    tenant_id: tenantId,
+    first_confirm: result.first,
+    second_confirm: result.second,
+    real_entity_count: result.real_entity_count,
+    entities: result.entities,
+    passed,
+    verdict: passed
+      ? (result.real_entity_count === 1 ? "second confirm auto-attached to the first - no duplicate created" : "second confirm created a second entity but correctly flagged it for merge review")
+      : "FAIL: a duplicate entity was created with no flag - the bug reproduced",
+  });
+}
+
+// Retroactive cleanup for entities that were confirmed BEFORE the
+// confirmNewEntity fix existed - real duplicates that got created with no
+// flag at all (the "worse bug" scenario). Queues each entity_id in the
+// cluster as a source_entity_id-based unresolved_entities row, exactly the
+// same shape the fixed confirmNewEntity now produces going forward, so
+// they go through the same real review UI rather than a manual fix. A
+// target_entity_id pre-populates the suggested merge (still requires a
+// human click via /entities/merge to execute); omitting it queues the
+// cluster as flagged-ambiguous with no pre-selected direction.
+async function handleDebugFlagEntityCluster(req: Request): Promise<Response> {
+  const body = await req.json() as { tenant_id?: string; entity_ids?: string[]; target_entity_id?: string; note?: string };
+  if (!body.tenant_id || !body.entity_ids || body.entity_ids.length < 2) {
+    return json({ detail: "tenant_id and at least 2 entity_ids are required" }, 400);
+  }
+  const tenantId = body.tenant_id;
+
+  const flagged = await withTenant(tenantId, async (sql) => {
+    const entityRows = await sql`
+      select entity_id, entity_type, canonical_name from public.entities
+      where tenant_id = ${tenantId} and entity_id = any(${body.entity_ids})
+    `;
+    const byId = new Map(entityRows.map((r: { entity_id: string; entity_type: string; canonical_name: string }) => [r.entity_id, r]));
+
+    const results = [];
+    for (const entityId of body.entity_ids!) {
+      if (entityId === body.target_entity_id) continue; // the survivor doesn't flag itself
+      const entity = byId.get(entityId) as { entity_type: string; canonical_name: string } | undefined;
+      if (!entity) continue;
+      const row = await sql`
+        insert into public.unresolved_entities (tenant_id, mention_text, entity_type_guess, source_entity_id, candidate_entity_id, status)
+        values (${tenantId}, ${entity.canonical_name}, ${entity.entity_type}, ${entityId}, ${body.target_entity_id ?? null}, 'pending')
+        returning id
+      `;
+      results.push({ unresolved_id: row[0].id, entity_id: entityId, canonical_name: entity.canonical_name, suggested_target: body.target_entity_id ?? null });
+    }
+    return results;
+  });
+
+  return json({ tenant_id: tenantId, flagged_count: flagged.length, flagged });
+}
+
 // ── Real-user-facing endpoints (Memory Timeline, evidence drawer) ───────
 //
 // Everything above this line is admin/debug/fixture-loading and gated on
@@ -660,6 +759,39 @@ async function handleListMemories(req: Request): Promise<Response> {
     // the user.
     some_content_hidden: hiddenCount > 0,
   });
+}
+
+// "Related" panel: which other entities co-occur with this one, ranked by
+// how many accessible memories they share. Real join-table query against
+// data that already exists (memory_entities), not a new engine - never
+// bypasses permissions, since it's computed from the SAME
+// isMemoryAccessible-filtered memory list every other read path uses, not
+// a raw cross-tenant SQL join.
+async function handleRelatedEntities(req: Request, entityId: string): Promise<Response> {
+  const ctx = await getCurrentTenant(req);
+  const permissionScopes = await resolvePermissionScopes(ctx.userId, ctx.tenantId);
+
+  const related = await withTenant(ctx.tenantId, async (sql) => {
+    const memories = await loadMemoriesForTenant(sql, ctx.tenantId, entityId);
+    const accessFlags = await isMemoryAccessibleBatch(sql, ctx.tenantId, permissionScopes, memories.map((m) => m.permissions.visible_to));
+    const accessible = memories.filter((_, i) => accessFlags[i]);
+
+    const counts = new Map<string, { canonical_name: string; entity_type: string; flagged: boolean; count: number }>();
+    for (const m of accessible) {
+      for (const e of m.entities) {
+        if (e.entity_id === entityId) continue;
+        const existing = counts.get(e.entity_id);
+        if (existing) existing.count++;
+        else counts.set(e.entity_id, { canonical_name: e.canonical_name, entity_type: e.entity_type, flagged: e.flagged, count: 1 });
+      }
+    }
+    return [...counts.entries()]
+      .map(([id, v]) => ({ entity_id: id, ...v }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 10);
+  });
+
+  return json({ entity_id: entityId, related });
 }
 
 async function handleMemoryEvidence(req: Request, memoryId: string): Promise<Response> {
@@ -759,6 +891,7 @@ Deno.serve(async (req) => {
 
   const evidenceMatch = path.match(/\/memories\/([0-9a-f-]{36})\/evidence$/i);
   const resolveMatch = path.match(/\/memories\/([0-9a-f-]{36})\/resolve$/i);
+  const relatedMatch = path.match(/\/entities\/([0-9a-f-]{36})\/related$/i);
 
   try {
     // Real-user routes: their own JWT check, not the service-role gate.
@@ -786,6 +919,13 @@ Deno.serve(async (req) => {
     if (resolveMatch && req.method === "POST") {
       try {
         return await handleResolveMemory(req, resolveMatch[1]);
+      } catch (err) {
+        return json({ detail: err instanceof Error ? err.message : "Unauthorized" }, 401);
+      }
+    }
+    if (relatedMatch && req.method === "GET") {
+      try {
+        return await handleRelatedEntities(req, relatedMatch[1]);
       } catch (err) {
         return json({ detail: err instanceof Error ? err.message : "Unauthorized" }, 401);
       }
@@ -821,6 +961,8 @@ Deno.serve(async (req) => {
     if (path.endsWith("/audit/historical-duplicates") && req.method === "POST") return await handleAuditHistoricalDuplicates(req);
     if (path.endsWith("/eval/run") && req.method === "POST") return await handleRunGoldenEval();
     if (path.endsWith("/debug/test-reconciliation") && req.method === "POST") return await handleDebugTestReconciliation(req);
+    if (path.endsWith("/debug/test-entity-merge-guard") && req.method === "POST") return await handleDebugTestEntityMergeGuard(req);
+    if (path.endsWith("/debug/flag-entity-cluster") && req.method === "POST") return await handleDebugFlagEntityCluster(req);
     return json({ detail: "Not found" }, 404);
   } catch (err) {
     console.error("memory-api unhandled error:", err);

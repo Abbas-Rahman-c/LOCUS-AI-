@@ -430,6 +430,7 @@ export interface MemoryEntityRef {
   entity_id: string
   entity_type: EntityType
   canonical_name: string
+  flagged: boolean
 }
 
 export interface MemorySourceEventRef {
@@ -528,4 +529,18 @@ export function resolveMemory(memoryId: string, action: ResolutionAction, note?:
     method: 'POST',
     body: JSON.stringify({ action, note }),
   })
+}
+
+// ---- Related entities panel ----
+
+export interface RelatedEntity {
+  entity_id: string
+  canonical_name: string
+  entity_type: EntityType
+  flagged: boolean
+  count: number
+}
+
+export function getRelatedEntities(entityId: string): Promise<{ entity_id: string; related: RelatedEntity[] }> {
+  return memoryApiFetch(`/entities/${encodeURIComponent(entityId)}/related`)
 }

@@ -23,6 +23,12 @@ export interface EntityRef {
   // Added for the Memory Timeline's entity picker - without a display name
   // there's nothing a person can search or click on to pick an entity.
   canonical_name: string;
+  // True when this entity has a pending row in unresolved_entities with
+  // source_entity_id = this entity (flagged as a possible duplicate after
+  // confirmation, not a fresh unconfirmed mention). The picker must never
+  // render this identically to a clean, unflagged entity - same rule
+  // already applied to memory status badges.
+  flagged: boolean;
 }
 
 export interface SourceEventRef {
