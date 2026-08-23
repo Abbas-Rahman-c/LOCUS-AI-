@@ -242,7 +242,7 @@ Deno.serve(async (req: Request) => {
       .update({ status: "revoked" })
       .eq("id", connectionId)
       .eq("tenant_id", tenantId)
-      .select("id");
+      .select("id, source");
 
     if (revokeError) {
       console.error("Failed to revoke source_connections row:", revokeError);
@@ -255,7 +255,7 @@ Deno.serve(async (req: Request) => {
     if (deleteHistory) {
       const { data: rawEventRows, error: rawEventsError } = await supabase
         .from("raw_events")
-        .select("id")
+        .select("id, source_id")
         .eq("connection_id", connectionId)
         .eq("tenant_id", tenantId);
 
@@ -277,6 +277,68 @@ Deno.serve(async (req: Request) => {
         if (decisionsError) {
           console.error("Failed to delete decisions for connection:", decisionsError);
           return jsonResponse({ error: "Disconnected, but could not delete every captured decision" }, 500);
+        }
+
+        // Real gap found live: this handler predates the Memory Intelligence
+        // layer (memories/memory_fixture_events/...) and was never updated
+        // to clean it up too - "delete history" fully removed raw_events
+        // and decisions (the old pipeline) while leaving that source's
+        // memories, entities-in-Browse-mode, and Source filter option
+        // behind, looking connected when it wasn't. memory_fixture_events
+        // has no connection_id of its own (it only knows tenant_id/source/
+        // source_id), so scope by the exact source_ids this connection's
+        // raw_events carried - never the bare source name, which could
+        // also belong to a second, still-active connection of the same
+        // type (this tenant has exactly that: two Notion connections, one
+        // revoked, one active).
+        const rawSourceIds = (rawEventRows ?? []).map((row) => row.source_id as string).filter(Boolean);
+        if (rawSourceIds.length > 0) {
+          const { data: fixtureRows, error: fixtureLookupError } = await supabase
+            .from("memory_fixture_events")
+            .select("id")
+            .eq("tenant_id", tenantId)
+            .in("source_id", rawSourceIds);
+          if (fixtureLookupError) {
+            console.error("Failed to look up memory_fixture_events for deletion:", fixtureLookupError);
+            return jsonResponse({ error: "Disconnected, but could not delete every captured memory" }, 500);
+          }
+          const fixtureEventIds = (fixtureRows ?? []).map((row) => row.id as string);
+          if (fixtureEventIds.length > 0) {
+            const { data: sourceEventRows, error: sourceEventLookupError } = await supabase
+              .from("memory_source_events")
+              .select("memory_id")
+              .eq("tenant_id", tenantId)
+              .in("fixture_event_id", fixtureEventIds);
+            if (sourceEventLookupError) {
+              console.error("Failed to look up memory_source_events for deletion:", sourceEventLookupError);
+              return jsonResponse({ error: "Disconnected, but could not delete every captured memory" }, 500);
+            }
+            const memoryIds = [...new Set((sourceEventRows ?? []).map((row) => row.memory_id as string))];
+            if (memoryIds.length > 0) {
+              // memory_source_events/memory_entities/memory_embeddings/
+              // memory_citations/memory_conflicts all cascade off
+              // memories(memory_id) - only memories and
+              // memory_fixture_events themselves need an explicit delete.
+              const { error: memoriesDeleteError } = await supabase
+                .from("memories")
+                .delete()
+                .eq("tenant_id", tenantId)
+                .in("memory_id", memoryIds);
+              if (memoriesDeleteError) {
+                console.error("Failed to delete memories for connection:", memoriesDeleteError);
+                return jsonResponse({ error: "Disconnected, but could not delete every captured memory" }, 500);
+              }
+            }
+            const { error: fixtureDeleteError } = await supabase
+              .from("memory_fixture_events")
+              .delete()
+              .eq("tenant_id", tenantId)
+              .in("id", fixtureEventIds);
+            if (fixtureDeleteError) {
+              console.error("Failed to delete memory_fixture_events for connection:", fixtureDeleteError);
+              return jsonResponse({ error: "Disconnected, but could not delete every captured memory" }, 500);
+            }
+          }
         }
 
         const { error: rawDeleteError } = await supabase
