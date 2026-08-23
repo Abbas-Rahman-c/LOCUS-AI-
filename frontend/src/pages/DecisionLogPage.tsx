@@ -2,6 +2,7 @@ import { Fragment, useEffect, useState } from 'react'
 import {
   ApiError,
   listDecisions,
+  listDecisionSources,
   type DecisionOut,
   type DecisionRecordType,
 } from '../lib/api'
@@ -14,7 +15,8 @@ import {
 } from '../components/MemoryRecordDetail'
 
 type FilterType = 'All Types' | DecisionRecordType
-type SourceFilter = 'All Sources' | 'slack' | 'gmail' | 'notion'
+const ALL_SOURCES = 'All Sources'
+type SourceFilter = typeof ALL_SOURCES | string
 
 const FILTERS: { id: FilterType; label: string }[] = [
   { id: 'All Types', label: 'All Types' },
@@ -23,12 +25,9 @@ const FILTERS: { id: FilterType; label: string }[] = [
   { id: 'blocker', label: 'Blocker' },
 ]
 
-const SOURCE_FILTERS: { id: SourceFilter; label: string }[] = [
-  { id: 'All Sources', label: 'All Sources' },
-  { id: 'slack', label: 'Slack' },
-  { id: 'gmail', label: 'Gmail' },
-  { id: 'notion', label: 'Notion' },
-]
+function sourceLabel(source: string): string {
+  return source.charAt(0).toUpperCase() + source.slice(1)
+}
 
 const TYPE_LABELS: Record<DecisionRecordType, MemoryRecordType> = {
   decision: 'Decision',
@@ -81,7 +80,8 @@ function SourceCell({ sourceLinks, sourcePlatforms }: { sourceLinks: string[]; s
 
 export default function DecisionLogPage() {
   const [selectedType, setSelectedType] = useState<FilterType>('All Types')
-  const [selectedSource, setSelectedSource] = useState<SourceFilter>('All Sources')
+  const [selectedSource, setSelectedSource] = useState<SourceFilter>(ALL_SOURCES)
+  const [availableSources, setAvailableSources] = useState<string[]>([])
   const [currentPage, setCurrentPage] = useState(1)
   const [entries, setEntries] = useState<DecisionOut[]>([])
   const [total, setTotal] = useState(0)
@@ -97,7 +97,7 @@ export default function DecisionLogPage() {
 
     const offset = (page - 1) * PAGE_SIZE
     const recordType = selectedType === 'All Types' ? undefined : selectedType
-    const source = selectedSource === 'All Sources' ? undefined : selectedSource
+    const source = selectedSource === ALL_SOURCES ? undefined : selectedSource
     return listDecisions(PAGE_SIZE, offset, recordType, source)
       .then((response) => {
         setEntries(response.items)
@@ -116,6 +116,17 @@ export default function DecisionLogPage() {
     void loadPage(currentPage)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentPage, selectedType, selectedSource])
+
+  // Real available sources, not a hardcoded Slack/Gmail/Notion list - a
+  // disconnected source with its history deleted has no real raw_events
+  // left to join through, so it stops appearing here on its own. Fetched
+  // once independently of the current filter/page, so switching to
+  // "All Sources" doesn't lose track of what's actually available.
+  useEffect(() => {
+    listDecisionSources()
+      .then((res) => setAvailableSources(res.sources))
+      .catch(() => setAvailableSources([])) // quiet fail - filter row just shows "All Sources" only
+  }, [])
 
   // Filtering by type and source now happens server-side (see loadPage), so
   // `entries` already reflects the current filter across the whole archive,
@@ -196,7 +207,7 @@ export default function DecisionLogPage() {
         role="radiogroup"
         aria-label="Filter by source"
       >
-        {SOURCE_FILTERS.map((filter) => {
+        {[{ id: ALL_SOURCES, label: ALL_SOURCES }, ...availableSources.map((s) => ({ id: s, label: sourceLabel(s) }))].map((filter) => {
           const isSelected = selectedSource === filter.id
           return (
             <button

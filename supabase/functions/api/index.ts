@@ -1546,6 +1546,32 @@ async function handleDecisions(req: Request, url: URL): Promise<Response> {
 
   const parts = url.pathname.split("/api/v1/decisions")[1]?.split("/").filter(Boolean) ?? [];
 
+  // Real bug found live: Memory Explorer's Source filter buttons (Slack/
+  // Gmail/Notion) were a hardcoded frontend array, never checked against
+  // real connection state or real data - disconnecting a source and
+  // deleting its history left the button sitting there clickable
+  // regardless, since nothing about it was ever wired to reality. This
+  // returns only sources with an actual, currently-real decision behind
+  // them (same "only show what's real" rule Memory Timeline's picker
+  // already follows for its own Source filter).
+  if (req.method === "GET" && parts.length === 1 && parts[0] === "sources") {
+    try {
+      const sources = await withTenant(ctx.tenantId, async (sql) => {
+        const rows = await sql`
+          SELECT DISTINCT re.source
+          FROM decisions d
+          JOIN raw_events re ON re.id = d.origin_raw_event_id AND re.tenant_id = d.tenant_id
+          WHERE d.tenant_id = ${ctx.tenantId} AND d.superseded_by IS NULL AND re.source IS NOT NULL
+        `;
+        return rows.map((r) => r.source as string).sort();
+      });
+      return jsonResponse({ sources });
+    } catch (err) {
+      console.error("list decision sources failed:", err);
+      return errorResponse(500, "Failed to list decision sources");
+    }
+  }
+
   if (req.method === "GET" && parts.length === 0) {
     const limit = Math.min(Math.max(Number(url.searchParams.get("limit") ?? 50), 1), 200);
     const offset = Math.max(Number(url.searchParams.get("offset") ?? 0), 0);

@@ -356,6 +356,10 @@ export function listDecisions(
   return apiFetch<DecisionListResponse>(`/api/v1/decisions?${params.toString()}`)
 }
 
+export function listDecisionSources(): Promise<{ sources: string[] }> {
+  return apiFetch('/api/v1/decisions/sources')
+}
+
 /** Fetches one decision with its full reconstructed conversation thread -
  * every message sharing the same thread_ref as the source event, not just
  * the single message that got extracted. */
