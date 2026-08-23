@@ -186,7 +186,7 @@ export default function EntityReviewQueuePage() {
         <div className="mt-6">
           <p className="text-[11px] font-semibold tracking-[0.06em] text-[#9CA3AF]">
             {current.kind === 'confirmed_duplicate' ? 'POSSIBLE DUPLICATE' : 'UNCONFIRMED MENTION'} · {current.left.entity_type} ·{' '}
-            {index + 1} of {items.length}
+            {index + 1} of {items?.length ?? 0}
           </p>
 
           <div className="mt-3 flex flex-col gap-3 sm:flex-row">
