@@ -61,8 +61,10 @@ function extractNotionPageText(page: any): string {
 
 // Same field-extraction rules as api/index.ts's extractEventText - Gmail
 // gets its subject prefixed, Notion reads page properties, everything else
-// falls back to the first populated text-shaped field.
-function extractEventText(rawContent: unknown, source: string): string {
+// falls back to the first populated text-shaped field. Exported so a
+// debug endpoint can inspect exactly what replay would extract from a raw
+// row without re-implementing the same logic a second time.
+export function extractEventText(rawContent: unknown, source: string): string {
   if (!rawContent || typeof rawContent !== "object") return cleanDisplayText(String(rawContent ?? ""));
   const content = rawContent as Record<string, unknown>;
   if (source === "gmail") {
@@ -122,7 +124,19 @@ export async function replayHistoricalEvents(
         } catch {
           // Some rows may already be plain text rather than a JSON envelope.
         }
-        plainText = extractEventText(parsed, source);
+        // Real live-ingestion rows decrypt to an envelope (actor, source,
+        // permission_scope, ... AND a nested raw_content field holding the
+        // actual Gmail/Slack/Notion message) - not the bare message
+        // extractEventText expects. Found live: every real Gmail sample
+        // decrypted fine but extracted to an empty string because subject/
+        // body were being looked for one level too shallow. Unwrap the
+        // inner raw_content when present; fall back to the parsed value
+        // itself for rows that are already bare (hand-written fixtures,
+        // or any row shaped without the envelope).
+        const unwrapped = (parsed && typeof parsed === "object" && "raw_content" in (parsed as Record<string, unknown>))
+          ? (parsed as Record<string, unknown>).raw_content
+          : parsed;
+        plainText = extractEventText(unwrapped, source);
       } catch (err) {
         console.error(`historicalReplay: failed to decrypt raw_events.id=${row.id}:`, err);
         continue; // skip unreadable rows rather than fail the whole replay

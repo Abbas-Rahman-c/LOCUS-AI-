@@ -11,7 +11,8 @@
 
 import { withAdmin, withTenant } from "../_shared/db.ts";
 import { extractMemory, validatePayloadForType } from "../_shared/memory/extraction.ts";
-import { replayHistoricalEvents, type NormalizedEvent } from "../_shared/memory/historicalReplay.ts";
+import { replayHistoricalEvents, extractEventText, type NormalizedEvent } from "../_shared/memory/historicalReplay.ts";
+import { byteaToUint8Array, decryptRawContent } from "../_shared/memory/crypto.ts";
 import { STARTER_EVENTS } from "../_shared/memory/fixtures/starterEvents.ts";
 import { resolveEntityMention, resolveReferencedMention, confirmNewEntity, mergeIntoExistingEntity, linkQueuedMentionsToMemory } from "../_shared/memory/entityResolution.ts";
 import { writeMemory, detectConflicts, classifyRelation, ZeroSourceEventsError } from "../_shared/memory/reconcile.ts";
@@ -243,6 +244,54 @@ async function handleFixturesLoad(req: Request): Promise<Response> {
   }, {} as Record<string, number>);
 
   return json({ tenant_id: tenantId, fixture_set: body.fixture_set, total_events: events.length, summary, results });
+}
+
+// Diagnoses why a source contributed zero (or few) memories despite having
+// real raw_events - decrypts and runs the exact same extractEventText a
+// real replay would, WITHOUT calling Claude or writing anything, so the
+// question "did decryption fail, or did it decrypt to nothing useful, or
+// did extraction just judge it not memory-worthy" gets a real answer
+// instead of a guess. Read-only, admin pool.
+async function handleDebugInspectReplaySource(req: Request): Promise<Response> {
+  const body = await req.json() as { tenant_id?: string; source?: string; limit?: number };
+  if (!body.tenant_id || !body.source) return json({ detail: "tenant_id and source are required" }, 400);
+  const limit = Math.min(body.limit ?? 15, 50);
+
+  const rows = await withAdmin((sql) => sql`
+    select re.id, re.source_id, re.received_at, re.raw_content
+    from public.raw_events re
+    where re.tenant_id = ${body.tenant_id} and re.source = ${body.source}
+    order by re.received_at desc
+    limit ${limit}
+  `);
+
+  const inspected = await Promise.all(rows.map(async (row: Record<string, unknown>) => {
+    try {
+      const encrypted = byteaToUint8Array(row.raw_content);
+      const decrypted = await decryptRawContent(encrypted);
+      let parsed: unknown = decrypted;
+      try {
+        parsed = JSON.parse(decrypted);
+      } catch {
+        // plain text row, not a JSON envelope
+      }
+      const unwrapped = (parsed && typeof parsed === "object" && "raw_content" in (parsed as Record<string, unknown>))
+        ? (parsed as Record<string, unknown>).raw_content
+        : parsed;
+      const plainText = extractEventText(unwrapped, body.source!);
+      return {
+        source_id: row.source_id,
+        received_at: row.received_at,
+        decrypt_ok: true,
+        extracted_text_preview: plainText.slice(0, 200),
+        would_be_skipped: !plainText || plainText === "(no readable message content captured)",
+      };
+    } catch (err) {
+      return { source_id: row.source_id, received_at: row.received_at, decrypt_ok: false, error: err instanceof Error ? err.message : String(err) };
+    }
+  }));
+
+  return json({ tenant_id: body.tenant_id, source: body.source, sampled: inspected.length, results: inspected });
 }
 
 // Small debug helper - which tenants actually have raw_events to replay,
@@ -1209,6 +1258,7 @@ Deno.serve(async (req) => {
 
     if (path.endsWith("/fixtures/load") && req.method === "POST") return await handleFixturesLoad(req);
     if (path.endsWith("/debug/tenants") && req.method === "GET") return await handleDebugTenants();
+    if (path.endsWith("/debug/inspect-replay-source") && req.method === "POST") return await handleDebugInspectReplaySource(req);
     if (path.endsWith("/debug/memories") && req.method === "GET") {
       const tenantId = url.searchParams.get("tenant_id");
       if (!tenantId) return json({ detail: "tenant_id query param required" }, 400);
