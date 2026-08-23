@@ -68,6 +68,7 @@ const ENTITY_GROUPS: { label: string; types: EntityType[] }[] = [
 ]
 
 const ALL_GROUPS = 'All Types'
+const ALL_SOURCES_PICKER = 'All Sources'
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
@@ -139,11 +140,13 @@ function BrowseMode({
   memories,
   query,
   groupFilter,
+  sourceFilter,
   onSelect,
 }: {
   memories: CanonicalMemory[]
   query: string
   groupFilter: string
+  sourceFilter: string
   onSelect: (id: string) => void
 }) {
   const now = useMemo(() => new Date(), [])
@@ -158,7 +161,8 @@ function BrowseMode({
       .map(([id, v]) => ({ id, ...v, activity: computeEntityActivity(memories, id, now), description: entityDescription(memories, id) }))
       .filter((e) => e.name.toLowerCase().includes(query.toLowerCase()))
       .filter((e) => !allowedTypes || allowedTypes.includes(e.type))
-  }, [memories, query, groupFilter, now])
+      .filter((e) => sourceFilter === ALL_SOURCES_PICKER || memories.some((m) => m.entities.some((me) => me.entity_id === e.id) && m.source_events.some((se) => se.source === sourceFilter)))
+  }, [memories, query, groupFilter, sourceFilter, now])
 
   if (entities.length === 0) {
     return <p className="mt-4 text-[13px] text-[#9CA3AF]">No entities found yet.</p>
@@ -203,11 +207,13 @@ function FindMode({
   memories,
   query,
   groupFilter,
+  sourceFilter,
   onSelect,
 }: {
   memories: CanonicalMemory[]
   query: string
   groupFilter: string
+  sourceFilter: string
   onSelect: (id: string) => void
 }) {
   const entityOptions = useMemo(() => {
@@ -220,8 +226,9 @@ function FindMode({
       .map(([id, v]) => ({ id, ...v }))
       .filter((e) => e.name.toLowerCase().includes(query.toLowerCase()))
       .filter((e) => !allowedTypes || allowedTypes.includes(e.type))
+      .filter((e) => sourceFilter === ALL_SOURCES_PICKER || memories.some((m) => m.entities.some((me) => me.entity_id === e.id) && m.source_events.some((se) => se.source === sourceFilter)))
       .sort((a, b) => a.name.localeCompare(b.name))
-  }, [memories, query, groupFilter])
+  }, [memories, query, groupFilter, sourceFilter])
 
   return (
     <div className="mt-4 flex flex-wrap gap-2">
@@ -449,6 +456,7 @@ export default function MemoryTimelinePage() {
   // organizes by - filtering to the same 5 buckets a user already sees as
   // section headers, not a 7th vocabulary to learn.
   const [pickerGroupFilter, setPickerGroupFilter] = useState<string>(ALL_GROUPS)
+  const [pickerSourceFilter, setPickerSourceFilter] = useState<string>(ALL_SOURCES_PICKER)
   const [typeFilter, setTypeFilter] = useState<TypeFilter>(ALL_TYPES)
   const [sourceFilter, setSourceFilter] = useState<SourceFilter>(ALL_SOURCES)
   const [statusFilter, setStatusFilter] = useState<StatusFilter>(ALL_STATUSES)
@@ -579,10 +587,29 @@ export default function MemoryTimelinePage() {
             ))}
           </div>
 
+          {sourceOptions.length > 1 ? (
+            <div className="mt-1.5 flex flex-wrap gap-1.5">
+              {[ALL_SOURCES_PICKER, ...sourceOptions].map((label) => (
+                <button
+                  key={label}
+                  type="button"
+                  onClick={() => setPickerSourceFilter(label)}
+                  className={`rounded-full border px-3 py-1 text-[12px] font-medium transition-colors ${
+                    pickerSourceFilter === label
+                      ? 'border-[#5A45FF] bg-[#EEEBFF] text-[#5A45FF]'
+                      : 'border-[#E5E7EB] bg-white text-[#6B7280] hover:bg-[#F9FAFB]'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          ) : null}
+
           {pickerMode === 'browse' ? (
-            <BrowseMode memories={memories} query={entityQuery} groupFilter={pickerGroupFilter} onSelect={selectEntity} />
+            <BrowseMode memories={memories} query={entityQuery} groupFilter={pickerGroupFilter} sourceFilter={pickerSourceFilter} onSelect={selectEntity} />
           ) : (
-            <FindMode memories={memories} query={entityQuery} groupFilter={pickerGroupFilter} onSelect={selectEntity} />
+            <FindMode memories={memories} query={entityQuery} groupFilter={pickerGroupFilter} sourceFilter={pickerSourceFilter} onSelect={selectEntity} />
           )}
         </div>
       ) : (
