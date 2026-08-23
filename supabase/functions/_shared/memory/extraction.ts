@@ -127,6 +127,8 @@ If KEEP or UNCERTAIN, extract exactly one memory:
 - attribute_key identifies WHAT this memory is about, stable across updates to the same fact - e.g. "project-x-launch-date", "acme-corp-onboarding-owner". Two memories about the same underlying fact (even if the value changed) MUST share the same attribute_key - this is what lets the system detect that one supersedes the other. Two memories about genuinely different facts (e.g. a beta-launch date vs. a public-launch date) MUST get different attribute_keys, even if worded similarly.
 - valid_from is when this became the believed-true state - usually the event's occurred_at, but if the text describes something that became true earlier or will become true later, use that date instead.
 - entities: every Person, Team, Project, Customer, Product, Topic, or System explicitly named or clearly referenced. Give the exact mention text as it appears (a name, an email, a project name) - never invent an id, never resolve it yourself.
+- role, per entity: "subject" if this memory is actually about that entity - it did something, something happened to it, it's what changed/was decided/was blocked. "referenced" if it's only named to explain or locate the real subject - a comparison ("matches the work he did on X"), a pointer to a different ticket ("Task 22"), a schedule label ("Phase 5", "Phase 2"), or a plural/collective description of similar-but-unnamed other work ("the Phase 2 AI pipeline tasks"). A Person or Team is "subject" whenever they're a real participant in the described event (did the work, owns the result, was reassigned) even if the sentence is really about something else - people and teams are always worth tracking. Project/System/Topic/Product/Customer entities get "referenced" specifically when the mention is a pointer/comparison/label rather than something this memory is itself describing.
+  Worked example: text reads "Reassigned to the data science team, same pattern as the Phase 2 AI pipeline tasks... Sudhira freed up for MCP Server work instead (Task 22)." about a ticket titled "Hybrid RAG Retrieval Engine". Correct extraction: {mention_text: "Hybrid RAG Retrieval Engine", entity_type_guess: "Project", role: "subject"} - this ticket is what the memory is about. {mention_text: "data science team", entity_type_guess: "Team", role: "subject"} - real team taking ownership. {mention_text: "Sudhira", entity_type_guess: "Person", role: "subject"} - real person being reassigned. {mention_text: "MCP Server", entity_type_guess: "System", role: "referenced"} - named only as where Sudhira is going, not what this memory describes. "Phase 2 AI pipeline" and "Task 22" should NOT appear as entities at all here - the first is a vague plural comparison ("tasks", not one named thing), the second is a bare pointer to another ticket already captured via "MCP Server".
 - payload fields: fill only the ones that apply to the chosen type (see the tool schema); leave the rest null.
 
 Never invent a fact not stated in the text. Never fill entities with something not actually mentioned.`;
@@ -174,8 +176,13 @@ const EXTRACTION_TOOL = {
               type: "string",
               enum: ["Person", "Team", "Project", "Customer", "Product", "Topic", "System"],
             },
+            role: {
+              type: "string",
+              enum: ["subject", "referenced"],
+              description: "'subject' if this memory is actually about this entity; 'referenced' if it's only named in passing to explain or locate the real subject (a comparison, a pointer to different work, a schedule label).",
+            },
           },
-          required: ["mention_text", "entity_type_guess"],
+          required: ["mention_text", "entity_type_guess", "role"],
           additionalProperties: false,
         },
       },
@@ -188,6 +195,7 @@ const EXTRACTION_TOOL = {
 export interface EntityMention {
   mention_text: string;
   entity_type_guess: string;
+  role: "subject" | "referenced";
 }
 
 export interface ExtractionResult {

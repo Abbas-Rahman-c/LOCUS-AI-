@@ -13,7 +13,7 @@ import { withAdmin, withTenant } from "../_shared/db.ts";
 import { extractMemory, validatePayloadForType } from "../_shared/memory/extraction.ts";
 import { replayHistoricalEvents, type NormalizedEvent } from "../_shared/memory/historicalReplay.ts";
 import { STARTER_EVENTS } from "../_shared/memory/fixtures/starterEvents.ts";
-import { resolveEntityMention, confirmNewEntity, mergeIntoExistingEntity, linkQueuedMentionsToMemory } from "../_shared/memory/entityResolution.ts";
+import { resolveEntityMention, resolveReferencedMention, confirmNewEntity, mergeIntoExistingEntity, linkQueuedMentionsToMemory } from "../_shared/memory/entityResolution.ts";
 import { writeMemory, detectConflicts, classifyRelation, ZeroSourceEventsError } from "../_shared/memory/reconcile.ts";
 import { embedText } from "../_shared/memory/embeddings.ts";
 import type { MemoryType } from "../_shared/memory/types.ts";
@@ -153,9 +153,25 @@ async function handleFixturesLoad(req: Request): Promise<Response> {
 
         // Batch 2 real entity resolution: exact match -> embedding
         // similarity -> queue for review, never silently auto-create.
+        //
+        // Mentions extraction marked role="referenced" on a
+        // Project/System/Topic/Product/Customer type skip that pipeline
+        // entirely - a passing comparison or schedule label ("Phase 5",
+        // "matches the work he did on Gmail's OAuth") should link to an
+        // existing entity if one clearly matches and otherwise be dropped,
+        // never create a new entity or occupy a review-queue row. Person/
+        // Team mentions always take the full path regardless of role -
+        // real people and teams are worth tracking even when named only in
+        // passing (see extraction.ts's prompt for why).
+        const REFERENCE_ELIGIBLE_TYPES = new Set(["Project", "System", "Topic", "Product", "Customer"]);
         const entityIds: string[] = [];
         const queuedUnresolvedIds: string[] = [];
         for (const mention of extraction.entities) {
+          if (mention.role === "referenced" && REFERENCE_ELIGIBLE_TYPES.has(mention.entity_type_guess)) {
+            const matchedId = await resolveReferencedMention(sql, tenantId, mention.mention_text, mention.entity_type_guess);
+            if (matchedId) entityIds.push(matchedId);
+            continue;
+          }
           const resolved = await resolveEntityMention(sql, tenantId, mention.mention_text, mention.entity_type_guess);
           if (resolved.entityId) entityIds.push(resolved.entityId);
           else if (resolved.unresolvedId) queuedUnresolvedIds.push(resolved.unresolvedId);
@@ -343,24 +359,107 @@ async function handleDebugZeroSourceTest(req: Request): Promise<Response> {
 
 // ── Entity review queue ───────────────────────────────────────────────
 
-async function handleListUnresolvedEntities(tenantId: string): Promise<Response> {
-  const rows = await withTenant(tenantId, async (sql) => {
-    return await sql`
-      select ue.id, ue.mention_text, ue.entity_type_guess, ue.candidate_score, ue.status,
-             e.canonical_name as candidate_name
+// One side of a review-queue card - either the flagged/mentioned thing, or
+// the candidate it might be a duplicate of. Same shape for both sides so
+// the frontend renders one component twice rather than two.
+interface ReviewQueueSide {
+  entity_id: string | null; // null for a raw mention that was never confirmed into an entity
+  name: string;
+  entity_type: string;
+  memory_count: number;
+  snippet: string | null; // most recent linked memory's summary, or the one memory that named a raw mention
+  sources: string[];
+}
+
+async function entitySide(
+  // deno-lint-ignore no-explicit-any
+  sql: any,
+  entityId: string | null,
+  name: string,
+  entityType: string,
+): Promise<ReviewQueueSide> {
+  if (!entityId) return { entity_id: null, name, entity_type: entityType, memory_count: 0, snippet: null, sources: [] };
+  const rows = await sql`
+    select m.summary, m.valid_from,
+      (select array_agg(distinct mfe.source) from public.memory_source_events mse
+       join public.memory_fixture_events mfe on mfe.id = mse.fixture_event_id
+       where mse.memory_id = m.memory_id) as sources
+    from public.memory_entities me
+    join public.memories m on m.memory_id = me.memory_id
+    where me.entity_id = ${entityId}
+    order by m.valid_from desc
+  `;
+  const sourceSet = new Set<string>();
+  for (const r of rows) for (const s of (r.sources as string[] | null) ?? []) sourceSet.add(s);
+  return {
+    entity_id: entityId,
+    name,
+    entity_type: entityType,
+    memory_count: rows.length,
+    snippet: rows[0]?.summary ?? null,
+    sources: [...sourceSet],
+  };
+}
+
+// Real-user route (moved above the service-role gate, see Deno.serve
+// dispatch) - a real bug found while wiring this up: these three routes
+// previously only accepted a client-supplied tenant_id (query param or
+// body field) with no verification it matched the caller, which was
+// harmless only because they sat behind requireServiceRole. Now that a
+// logged-in user's own session calls them directly, tenant_id must come
+// from the verified JWT (ctx.tenantId), never trusted from the request.
+async function handleListUnresolvedEntities(req: Request): Promise<Response> {
+  const ctx = await getCurrentTenant(req);
+  const items = await withTenant(ctx.tenantId, async (sql) => {
+    const rows = await sql`
+      select ue.id, ue.mention_text, ue.entity_type_guess, ue.candidate_score, ue.source_entity_id, ue.memory_id,
+             ue.candidate_entity_id, e_cand.canonical_name as candidate_name, e_cand.entity_type as candidate_type,
+             e_src.canonical_name as source_name, e_src.entity_type as source_type,
+             m.summary as raw_mention_snippet,
+             (select array_agg(distinct mfe.source) from public.memory_source_events mse
+              join public.memory_fixture_events mfe on mfe.id = mse.fixture_event_id
+              where mse.memory_id = ue.memory_id) as raw_mention_sources
       from public.unresolved_entities ue
-      left join public.entities e on e.entity_id = ue.candidate_entity_id
-      where ue.tenant_id = ${tenantId} and ue.status = 'pending'
+      left join public.entities e_cand on e_cand.entity_id = ue.candidate_entity_id
+      left join public.entities e_src on e_src.entity_id = ue.source_entity_id
+      left join public.memories m on m.memory_id = ue.memory_id
+      where ue.tenant_id = ${ctx.tenantId} and ue.status = 'pending'
       order by ue.created_at desc
     `;
+
+    return await Promise.all(rows.map(async (row: Record<string, unknown>) => {
+      const isRawMention = row.source_entity_id === null;
+      const left: ReviewQueueSide = isRawMention
+        ? {
+            entity_id: null,
+            name: row.mention_text as string,
+            entity_type: row.entity_type_guess as string,
+            memory_count: row.memory_id ? 1 : 0,
+            snippet: (row.raw_mention_snippet as string | null) ?? null,
+            sources: (row.raw_mention_sources as string[] | null) ?? [],
+          }
+        : await entitySide(sql, row.source_entity_id as string, row.source_name as string, row.source_type as string);
+      const right = row.candidate_entity_id
+        ? await entitySide(sql, row.candidate_entity_id as string, row.candidate_name as string, row.candidate_type as string)
+        : null;
+      return {
+        id: row.id,
+        kind: isRawMention ? "raw_mention" : "confirmed_duplicate",
+        candidate_score: row.candidate_score,
+        left,
+        right,
+      };
+    }));
   });
-  return json({ tenant_id: tenantId, pending: rows });
+
+  return json({ tenant_id: ctx.tenantId, pending: items });
 }
 
 async function handleConfirmNewEntity(req: Request): Promise<Response> {
-  const body = await req.json() as { tenant_id?: string; unresolved_id?: string };
-  if (!body.tenant_id || !body.unresolved_id) return json({ detail: "tenant_id and unresolved_id are required" }, 400);
-  const result = await withTenant(body.tenant_id, (sql) => confirmNewEntity(sql, body.tenant_id!, body.unresolved_id!));
+  const ctx = await getCurrentTenant(req);
+  const body = await req.json() as { unresolved_id?: string };
+  if (!body.unresolved_id) return json({ detail: "unresolved_id is required" }, 400);
+  const result = await withTenant(ctx.tenantId, (sql) => confirmNewEntity(sql, ctx.tenantId, body.unresolved_id!));
   return json({
     entity_id: result.entityId,
     attached_existing: result.attachedExisting,
@@ -369,12 +468,30 @@ async function handleConfirmNewEntity(req: Request): Promise<Response> {
 }
 
 async function handleMergeEntity(req: Request): Promise<Response> {
-  const body = await req.json() as { tenant_id?: string; unresolved_id?: string; target_entity_id?: string };
-  if (!body.tenant_id || !body.unresolved_id || !body.target_entity_id) {
-    return json({ detail: "tenant_id, unresolved_id, and target_entity_id are required" }, 400);
+  const ctx = await getCurrentTenant(req);
+  const body = await req.json() as { unresolved_id?: string; target_entity_id?: string };
+  if (!body.unresolved_id || !body.target_entity_id) {
+    return json({ detail: "unresolved_id and target_entity_id are required" }, 400);
   }
-  await withTenant(body.tenant_id, (sql) => mergeIntoExistingEntity(sql, body.tenant_id!, body.unresolved_id!, body.target_entity_id!));
+  await withTenant(ctx.tenantId, (sql) => mergeIntoExistingEntity(sql, ctx.tenantId, body.unresolved_id!, body.target_entity_id!));
   return json({ merged: true });
+}
+
+// "Keep separate"/"skip for now" - the reviewer looked at both sides and
+// decided not to act, at least not right now. Leaves both entities exactly
+// as they are (no merge, no new entity), just takes the row off the
+// pending list so it stops competing for review attention. Distinct from
+// merge/confirm, which is why it's its own status rather than overloading
+// 'merged' or 'confirmed_new' for a row where nothing was actually created.
+async function handleDismissUnresolvedEntity(req: Request): Promise<Response> {
+  const ctx = await getCurrentTenant(req);
+  const body = await req.json() as { unresolved_id?: string };
+  if (!body.unresolved_id) return json({ detail: "unresolved_id is required" }, 400);
+  await withTenant(ctx.tenantId, (sql) => sql`
+    update public.unresolved_entities set status = 'dismissed', resolved_at = now()
+    where id = ${body.unresolved_id} and tenant_id = ${ctx.tenantId} and status = 'pending'
+  `);
+  return json({ dismissed: true });
 }
 
 // ── Batch 2 audits: reconcile what Batch 1's interim logic already did ──
@@ -930,6 +1047,39 @@ Deno.serve(async (req) => {
         return json({ detail: err instanceof Error ? err.message : "Unauthorized" }, 401);
       }
     }
+    // Review-queue routes - real-user auth, scoped to the caller's own
+    // tenant via ctx.tenantId, never a client-supplied tenant_id. Moved
+    // here from the service-role block below: a real logged-in user's
+    // session token, not the service role key, is what the review-queue
+    // page actually has to call these with.
+    if (path.endsWith("/entities/unresolved") && req.method === "GET") {
+      try {
+        return await handleListUnresolvedEntities(req);
+      } catch (err) {
+        return json({ detail: err instanceof Error ? err.message : "Unauthorized" }, 401);
+      }
+    }
+    if (path.endsWith("/entities/confirm-new") && req.method === "POST") {
+      try {
+        return await handleConfirmNewEntity(req);
+      } catch (err) {
+        return json({ detail: err instanceof Error ? err.message : "Unauthorized" }, 401);
+      }
+    }
+    if (path.endsWith("/entities/merge") && req.method === "POST") {
+      try {
+        return await handleMergeEntity(req);
+      } catch (err) {
+        return json({ detail: err instanceof Error ? err.message : "Unauthorized" }, 401);
+      }
+    }
+    if (path.endsWith("/entities/dismiss") && req.method === "POST") {
+      try {
+        return await handleDismissUnresolvedEntity(req);
+      } catch (err) {
+        return json({ detail: err instanceof Error ? err.message : "Unauthorized" }, 401);
+      }
+    }
 
     // Everything else is admin/debug/fixture-loading - service-role only.
     const authError = requireServiceRole(req);
@@ -950,13 +1100,8 @@ Deno.serve(async (req) => {
       const rows = await withTenant(tenantId, (sql) => sql`select entity_id, entity_type, canonical_name from public.entities where tenant_id = ${tenantId} order by canonical_name`);
       return json({ tenant_id: tenantId, count: rows.length, entities: rows });
     }
-    if (path.endsWith("/entities/unresolved") && req.method === "GET") {
-      const tenantId = url.searchParams.get("tenant_id");
-      if (!tenantId) return json({ detail: "tenant_id query param required" }, 400);
-      return await handleListUnresolvedEntities(tenantId);
-    }
-    if (path.endsWith("/entities/confirm-new") && req.method === "POST") return await handleConfirmNewEntity(req);
-    if (path.endsWith("/entities/merge") && req.method === "POST") return await handleMergeEntity(req);
+    // /entities/unresolved, /confirm-new, /merge, /dismiss now live above,
+    // as real-user routes - see that block for why.
     if (path.endsWith("/audit/batch1-entities") && req.method === "POST") return await handleAuditBatch1Entities(req);
     if (path.endsWith("/audit/historical-duplicates") && req.method === "POST") return await handleAuditHistoricalDuplicates(req);
     if (path.endsWith("/eval/run") && req.method === "POST") return await handleRunGoldenEval();

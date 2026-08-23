@@ -166,6 +166,38 @@ export async function resolveEntityMention(
   };
 }
 
+/**
+ * For entity mentions extraction marked role="referenced" on a
+ * Project/System/Topic/Product/Customer type - a name mentioned only as a
+ * comparison, a pointer to other work, or a schedule label, not something
+ * this memory is actually about. These should link to an already-existing
+ * entity when one clearly matches, but must never create a new one and
+ * must never enter the human review queue - queuing a passing mention
+ * would just move the "phantom project" problem from entities into the
+ * review queue instead of fixing it. Checks both same-type and cross-type
+ * (a referenced mention isn't asserting a type, just pointing at
+ * something), and only links on a confident match - same AUTO_MATCH_FLOOR
+ * bar as resolveEntityMention's own auto-match tier, no separate constant.
+ * Person/Team mentions never call this - see extraction.ts's prompt for
+ * why those stay on the full resolveEntityMention path regardless of role.
+ */
+export async function resolveReferencedMention(
+  // deno-lint-ignore no-explicit-any
+  sql: any,
+  tenantId: string,
+  mentionText: string,
+  entityTypeGuess: string,
+): Promise<string | null> {
+  const trimmed = mentionText.trim();
+  const { exact, best, crossTypeExact, crossTypeBest } = await findBestMatch(sql, tenantId, trimmed, entityTypeGuess, true, "query");
+
+  if (exact) return exact.entityId;
+  if (crossTypeExact) return crossTypeExact.entityId;
+  if (best && best.similarity >= AUTO_MATCH_FLOOR) return best.entityId;
+  if (crossTypeBest && crossTypeBest.similarity >= AUTO_MATCH_FLOOR) return crossTypeBest.entityId;
+  return null;
+}
+
 /** Backfills memory_id onto rows queued before the memory existed (the
  * normal fixture-load ordering: entity resolution runs, then writeMemory).
  * Safe to call with an empty array. */

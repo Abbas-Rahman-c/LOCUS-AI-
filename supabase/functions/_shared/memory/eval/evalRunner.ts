@@ -34,10 +34,26 @@ export async function runExtractionCases(): Promise<CategoryResult> {
       const actualOutcome = result.decision === "DISCARD" ? "DISCARD" : "KEEP";
       const typeMatches = c.expectedOutcome === "DISCARD" || result.type === c.expectedType;
       const outcomeMatches = actualOutcome === c.expectedOutcome || (c.expectedOutcome === "KEEP" && actualOutcome !== "DISCARD");
-      if (outcomeMatches && typeMatches) {
+
+      const findMention = (text: string) =>
+        result.entities.find((e) => e.mention_text.toLowerCase().includes(text.toLowerCase()));
+      const subjectFailures = (c.expectedSubjectMentions ?? []).filter((text) => {
+        const found = findMention(text);
+        return !found || found.role !== "subject";
+      });
+      const referencedFailures = (c.expectedReferencedOrAbsent ?? []).filter((text) => {
+        const found = findMention(text);
+        return found && found.role !== "referenced"; // present as "subject" is the failure; absent is fine
+      });
+
+      if (outcomeMatches && typeMatches && subjectFailures.length === 0 && referencedFailures.length === 0) {
         correct++;
       } else {
-        failures.push(`${c.id}: expected ${c.expectedOutcome}/${c.expectedType}, got ${actualOutcome}/${result.type}`);
+        const entityDetail = [
+          ...subjectFailures.map((t) => `"${t}" not extracted as subject`),
+          ...referencedFailures.map((t) => `"${t}" wrongly extracted as subject`),
+        ];
+        failures.push(`${c.id}: expected ${c.expectedOutcome}/${c.expectedType}, got ${actualOutcome}/${result.type}${entityDetail.length ? `; ${entityDetail.join(", ")}` : ""}`);
       }
     } catch (err) {
       failures.push(`${c.id}: threw ${err instanceof Error ? err.message : String(err)}`);

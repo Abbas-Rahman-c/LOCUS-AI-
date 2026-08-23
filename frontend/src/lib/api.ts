@@ -544,3 +544,38 @@ export interface RelatedEntity {
 export function getRelatedEntities(entityId: string): Promise<{ entity_id: string; related: RelatedEntity[] }> {
   return memoryApiFetch(`/entities/${encodeURIComponent(entityId)}/related`)
 }
+
+// ---- Entity review queue ----
+
+export interface ReviewQueueSide {
+  entity_id: string | null
+  name: string
+  entity_type: string
+  memory_count: number
+  snippet: string | null
+  sources: string[]
+}
+
+export interface ReviewQueueItem {
+  id: string
+  kind: 'raw_mention' | 'confirmed_duplicate'
+  candidate_score: number | null
+  left: ReviewQueueSide
+  right: ReviewQueueSide | null
+}
+
+export function listUnresolvedEntities(): Promise<{ tenant_id: string; pending: ReviewQueueItem[] }> {
+  return memoryApiFetch('/entities/unresolved')
+}
+
+export function confirmNewEntity(unresolvedId: string): Promise<{ entity_id: string; attached_existing: boolean; flagged_for_merge_review: string | null }> {
+  return memoryApiFetch('/entities/confirm-new', { method: 'POST', body: JSON.stringify({ unresolved_id: unresolvedId }) })
+}
+
+export function mergeEntity(unresolvedId: string, targetEntityId: string): Promise<{ merged: boolean }> {
+  return memoryApiFetch('/entities/merge', { method: 'POST', body: JSON.stringify({ unresolved_id: unresolvedId, target_entity_id: targetEntityId }) })
+}
+
+export function dismissUnresolvedEntity(unresolvedId: string): Promise<{ dismissed: boolean }> {
+  return memoryApiFetch('/entities/dismiss', { method: 'POST', body: JSON.stringify({ unresolved_id: unresolvedId }) })
+}

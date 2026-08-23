@@ -26,6 +26,14 @@ export interface ExtractionCase {
   occurredAt: string;
   expectedOutcome: "KEEP" | "DISCARD";
   expectedType: MemoryType | null; // null when expectedOutcome is DISCARD
+  // Optional entity-role checks (mention_text matched case-insensitively,
+  // substring). expectedSubjectMentions: must appear with role="subject".
+  // expectedReferencedOrAbsent: if present at all, must be role="referenced"
+  // - never "subject" - but it's fine if the model drops it entirely (see
+  // extraction.ts's prompt: vague/collective/redundant-pointer mentions
+  // should often not be extracted as an entity at all).
+  expectedSubjectMentions?: string[];
+  expectedReferencedOrAbsent?: string[];
 }
 
 export const EXTRACTION_CASES: ExtractionCase[] = [
@@ -49,6 +57,46 @@ export const EXTRACTION_CASES: ExtractionCase[] = [
   { id: "ex-18", source: "slack", actorDisplayName: "Sam Ortiz", rawContent: "Reconciliation test plan finished and approved - Stripe switch is unblocked.", occurredAt: "2026-07-25T17:00:00Z", expectedOutcome: "KEEP", expectedType: "Outcome" },
   { id: "ex-19", source: "notion", actorDisplayName: "Priya Sharma", rawContent: "Requirement: the payment processor switch must not interrupt any in-flight subscription billing cycle.", occurredAt: "2026-07-08T10:00:00Z", expectedOutcome: "KEEP", expectedType: "Requirement" },
   { id: "ex-20", source: "gmail", actorDisplayName: "Jordan Lee", rawContent: "Subject: Re: Beta feedback\nBrightline Inc's PM said the new dashboard export feature is exactly what they needed and it's already saving their team time.", occurredAt: "2026-07-12T16:00:00Z", expectedOutcome: "KEEP", expectedType: "CustomerSignal" },
+  // Real case, verbatim from production data (LOCUS-AI-APP tenant, ticket
+  // BE-19) that surfaced the mention-vs-subject bug: extraction was minting
+  // a standalone Project entity for every named thing in the sentence,
+  // including "Task 22" (a bare pointer to a different ticket, already
+  // captured via "MCP Server" in the same clause) and "Phase 2 AI pipeline"
+  // (a vague plural comparison - "the ... tasks" - not one named thing).
+  // Real people/teams named in passing (Sudhira, the data science team)
+  // must still come through as subjects - the fix is narrower than "ignore
+  // anything not literally the ticket title."
+  {
+    id: "ex-21",
+    source: "notion",
+    actorDisplayName: "Rajith",
+    rawContent: "Task Name: Hybrid RAG Retrieval Engine\nNotes: Reassigned to the data science team, same pattern as the Phase 2 AI pipeline tasks. Query embedding, vector similarity search, and keyword search all built by Rajith's team, merged into main, and verified working end to end via the /search endpoint (real query, real citations, real decision returned). Sudhira freed up for MCP Server work instead (Task 22).",
+    occurredAt: "2026-08-02T09:30:08Z",
+    expectedOutcome: "KEEP",
+    expectedType: "Outcome",
+    expectedSubjectMentions: ["Hybrid RAG Retrieval Engine", "data science team", "Sudhira"],
+    expectedReferencedOrAbsent: ["MCP Server", "Task 22", "Phase 2 AI pipeline"],
+  },
+  // Real case, verbatim reconstruction of the exact field-per-line text
+  // extractNotionPageText() actually produces for a Notion tracker row
+  // (LOCUS-AI-APP tenant, ticket BE-14) - not hand-written prose like
+  // ex-21. Tests the OTHER sub-pattern the audit found: a structured
+  // `Sprint: Phase 2` field line (plus `Dependencies: Phase 1 Ingestion
+  // complete`, another phase reference) rather than a phase mentioned
+  // inside a sentence. ex-21's worked example only covers comparison/
+  // pointer mentions in prose - this checks the fix generalizes to a
+  // schedule-label field on its own line, which is a different shape.
+  {
+    id: "ex-22",
+    source: "notion",
+    actorDisplayName: "Rajith",
+    rawContent: "Schema Validation\nEpic: AI/ML\nRole: Developer\nNotes: Strict schema validation on extraction output. Built by Rajith's AI/data science team, not the originally assigned owner.\nSprint: Phase 2\nStatus: Completed\nPriority: P1 High\nWorkstream: AI/RAG\nDependencies: Phase 1 Ingestion complete",
+    occurredAt: "2026-08-02T09:30:07Z",
+    expectedOutcome: "KEEP",
+    expectedType: "Outcome",
+    expectedSubjectMentions: ["Schema Validation", "data science team"],
+    expectedReferencedOrAbsent: ["Phase 2", "Phase 1", "AI/RAG"],
+  },
 ];
 
 // ── Category 2: current-state / temporal accuracy (8 cases, pure functions) ──
