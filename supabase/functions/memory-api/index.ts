@@ -20,7 +20,7 @@ import type { MemoryType } from "../_shared/memory/types.ts";
 import { requireServiceRole } from "../_shared/requireServiceRole.ts";
 import { isMemoryAccessible, isMemoryAccessibleBatch } from "../_shared/memory/permissions.ts";
 import { loadMemoriesForTenant } from "../_shared/memory/loadMemories.ts";
-import { getCurrentTenant, resolvePermissionScopes } from "../_shared/tenantAuth.ts";
+import { getCurrentTenant, resolvePermissionScopes, type TenantContext } from "../_shared/tenantAuth.ts";
 import { runGoldenEval } from "../_shared/memory/eval/evalRunner.ts";
 import { getAttentionItems, resolveMemory, actionForCategory, MemoryNotAccessibleError, type ResolutionAction } from "../_shared/memory/attentionStrip.ts";
 
@@ -172,7 +172,11 @@ async function handleFixturesLoad(req: Request): Promise<Response> {
             if (matchedId) entityIds.push(matchedId);
             continue;
           }
-          const resolved = await resolveEntityMention(sql, tenantId, mention.mention_text, mention.entity_type_guess);
+          // The judgment tier reasons over this exact text - the memory's
+          // own generated title+summary, the same content a human reviewer
+          // would read to make the same call.
+          const mentionContext = `${extraction.title ?? ""}. ${extraction.summary ?? ""}`;
+          const resolved = await resolveEntityMention(sql, tenantId, mention.mention_text, mention.entity_type_guess, undefined, mentionContext);
           if (resolved.entityId) entityIds.push(resolved.entityId);
           else if (resolved.unresolvedId) queuedUnresolvedIds.push(resolved.unresolvedId);
         }
@@ -371,6 +375,29 @@ interface ReviewQueueSide {
   sources: string[];
 }
 
+// Lets the internal review-queue page (staff only, not customer-facing -
+// removed from the customer nav entirely) look at ANY tenant's queue for
+// extraction/resolution quality checks, while every customer-facing call
+// into these same five endpoints (confirm/merge/dismiss/search/list, all
+// still real-user auth, no service-role key involved) keeps working
+// unchanged for its own tenant. A requested tenant_id is only ever
+// honored for a caller whose own email is on STAFF_EMAILS - anyone else
+// requesting a different tenant is refused, not silently redirected to
+// their own.
+const STAFF_EMAILS = new Set(
+  (Deno.env.get("STAFF_EMAILS") ?? "").split(",").map((s) => s.trim().toLowerCase()).filter(Boolean),
+);
+
+async function resolveTargetTenant(ctx: TenantContext, requestedTenantId: string | null): Promise<string> {
+  if (!requestedTenantId || requestedTenantId === ctx.tenantId) return ctx.tenantId;
+  const rows = await withAdmin((sql) => sql`select email from auth.users where id = ${ctx.userId}`);
+  const email = (rows[0]?.email as string | undefined)?.toLowerCase();
+  if (!email || !STAFF_EMAILS.has(email)) {
+    throw new Error("Not authorized to view another tenant's data");
+  }
+  return requestedTenantId;
+}
+
 async function entitySide(
   // deno-lint-ignore no-explicit-any
   sql: any,
@@ -413,27 +440,33 @@ async function handleSearchEntities(req: Request): Promise<Response> {
   const ctx = await getCurrentTenant(req);
   const url = new URL(req.url);
   const q = (url.searchParams.get("q") ?? "").trim();
+  const tenantId = await resolveTargetTenant(ctx, url.searchParams.get("tenant_id"));
   if (q.length < 2) return json({ entities: [] });
-  const rows = await withTenant(ctx.tenantId, (sql) => sql`
+  const rows = await withTenant(tenantId, (sql) => sql`
     select entity_id, canonical_name, entity_type
     from public.entities
-    where tenant_id = ${ctx.tenantId} and status = 'current' and canonical_name ilike ${"%" + q + "%"}
+    where tenant_id = ${tenantId} and status = 'current' and canonical_name ilike ${"%" + q + "%"}
     order by canonical_name
     limit 10
   `);
   return json({ entities: rows });
 }
 
-// Real-user route (moved above the service-role gate, see Deno.serve
+// Real-user routes (moved above the service-role gate, see Deno.serve
 // dispatch) - a real bug found while wiring this up: these three routes
 // previously only accepted a client-supplied tenant_id (query param or
 // body field) with no verification it matched the caller, which was
-// harmless only because they sat behind requireServiceRole. Now that a
-// logged-in user's own session calls them directly, tenant_id must come
-// from the verified JWT (ctx.tenantId), never trusted from the request.
+// harmless only because they sat behind requireServiceRole. tenant_id now
+// only ever comes from the verified JWT (ctx.tenantId) UNLESS the caller
+// is confirmed staff (resolveTargetTenant) - the customer-facing path
+// (attention strip) never passes tenant_id at all, so its behavior is
+// unchanged; the internal review-queue page passes it explicitly to view
+// any tenant for extraction/resolution quality checks.
 async function handleListUnresolvedEntities(req: Request): Promise<Response> {
   const ctx = await getCurrentTenant(req);
-  const items = await withTenant(ctx.tenantId, async (sql) => {
+  const url = new URL(req.url);
+  const tenantId = await resolveTargetTenant(ctx, url.searchParams.get("tenant_id"));
+  const items = await withTenant(tenantId, async (sql) => {
     const rows = await sql`
       select ue.id, ue.mention_text, ue.entity_type_guess, ue.candidate_score, ue.source_entity_id, ue.memory_id,
              ue.candidate_entity_id, e_cand.canonical_name as candidate_name, e_cand.entity_type as candidate_type,
@@ -446,7 +479,7 @@ async function handleListUnresolvedEntities(req: Request): Promise<Response> {
       left join public.entities e_cand on e_cand.entity_id = ue.candidate_entity_id
       left join public.entities e_src on e_src.entity_id = ue.source_entity_id
       left join public.memories m on m.memory_id = ue.memory_id
-      where ue.tenant_id = ${ctx.tenantId} and ue.status = 'pending'
+      where ue.tenant_id = ${tenantId} and ue.status = 'pending'
       order by ue.created_at desc
     `;
 
@@ -475,14 +508,15 @@ async function handleListUnresolvedEntities(req: Request): Promise<Response> {
     }));
   });
 
-  return json({ tenant_id: ctx.tenantId, pending: items });
+  return json({ tenant_id: tenantId, pending: items });
 }
 
 async function handleConfirmNewEntity(req: Request): Promise<Response> {
   const ctx = await getCurrentTenant(req);
-  const body = await req.json() as { unresolved_id?: string };
+  const body = await req.json() as { unresolved_id?: string; tenant_id?: string };
   if (!body.unresolved_id) return json({ detail: "unresolved_id is required" }, 400);
-  const result = await withTenant(ctx.tenantId, (sql) => confirmNewEntity(sql, ctx.tenantId, body.unresolved_id!));
+  const tenantId = await resolveTargetTenant(ctx, body.tenant_id ?? null);
+  const result = await withTenant(tenantId, (sql) => confirmNewEntity(sql, tenantId, body.unresolved_id!));
   return json({
     entity_id: result.entityId,
     attached_existing: result.attachedExisting,
@@ -492,11 +526,12 @@ async function handleConfirmNewEntity(req: Request): Promise<Response> {
 
 async function handleMergeEntity(req: Request): Promise<Response> {
   const ctx = await getCurrentTenant(req);
-  const body = await req.json() as { unresolved_id?: string; target_entity_id?: string };
+  const body = await req.json() as { unresolved_id?: string; target_entity_id?: string; tenant_id?: string };
   if (!body.unresolved_id || !body.target_entity_id) {
     return json({ detail: "unresolved_id and target_entity_id are required" }, 400);
   }
-  await withTenant(ctx.tenantId, (sql) => mergeIntoExistingEntity(sql, ctx.tenantId, body.unresolved_id!, body.target_entity_id!));
+  const tenantId = await resolveTargetTenant(ctx, body.tenant_id ?? null);
+  await withTenant(tenantId, (sql) => mergeIntoExistingEntity(sql, tenantId, body.unresolved_id!, body.target_entity_id!));
   return json({ merged: true });
 }
 
@@ -508,11 +543,12 @@ async function handleMergeEntity(req: Request): Promise<Response> {
 // 'merged' or 'confirmed_new' for a row where nothing was actually created.
 async function handleDismissUnresolvedEntity(req: Request): Promise<Response> {
   const ctx = await getCurrentTenant(req);
-  const body = await req.json() as { unresolved_id?: string };
+  const body = await req.json() as { unresolved_id?: string; tenant_id?: string };
   if (!body.unresolved_id) return json({ detail: "unresolved_id is required" }, 400);
-  await withTenant(ctx.tenantId, (sql) => sql`
+  const tenantId = await resolveTargetTenant(ctx, body.tenant_id ?? null);
+  await withTenant(tenantId, (sql) => sql`
     update public.unresolved_entities set status = 'dismissed', resolved_at = now()
-    where id = ${body.unresolved_id} and tenant_id = ${ctx.tenantId} and status = 'pending'
+    where id = ${body.unresolved_id} and tenant_id = ${tenantId} and status = 'pending'
   `);
   return json({ dismissed: true });
 }
@@ -763,6 +799,32 @@ async function handleDebugTestReconciliation(req: Request): Promise<Response> {
   return json(outcomes);
 }
 
+// Live test of the judgment tier added to resolveEntityMention - proves
+// it actually calls the model and acts on a real answer, not just that
+// the code reads like it should. Requires an existing entity of a
+// DIFFERENT type with the exact same name already in the tenant (the
+// cross-type-exact case, which findBestMatch always returns regardless of
+// embedding score) - the judgment call should confidently attach the
+// mention to it rather than creating a duplicate or queuing.
+async function handleDebugTestJudgmentTier(req: Request): Promise<Response> {
+  const body = await req.json() as { tenant_id?: string; existing_entity_name?: string; existing_entity_type?: string; mention_type_guess?: string; mention_context?: string };
+  if (!body.tenant_id || !body.existing_entity_name || !body.existing_entity_type || !body.mention_type_guess || !body.mention_context) {
+    return json({ detail: "tenant_id, existing_entity_name, existing_entity_type, mention_type_guess, and mention_context are required" }, 400);
+  }
+  const tenantId = body.tenant_id;
+
+  const result = await withTenant(tenantId, (sql) =>
+    resolveEntityMention(sql, tenantId, body.existing_entity_name!, body.mention_type_guess!, undefined, body.mention_context!)
+  );
+
+  return json({
+    reason: result.reason,
+    entity_id: result.entityId,
+    queued: result.queued,
+    passed: result.reason === "judged_match",
+  });
+}
+
 // Live reproduction of the exact bug found in production: two mentions of
 // one real new entity, queued separately during extraction (when neither
 // had anything to match against yet), then confirmed in the same
@@ -967,15 +1029,45 @@ async function handleAttention(req: Request): Promise<Response> {
   const limit = Math.min(Math.max(Number(url.searchParams.get("limit") ?? 4), 1), 20);
 
   const permissionScopes = await resolvePermissionScopes(ctx.userId, ctx.tenantId);
-  const accessible = await withTenant(ctx.tenantId, async (sql) => {
+  const { accessible, entityDuplicates } = await withTenant(ctx.tenantId, async (sql) => {
     const allMemories = await loadMemoriesForTenant(sql, ctx.tenantId);
     const accessFlags = await isMemoryAccessibleBatch(sql, ctx.tenantId, permissionScopes, allMemories.map((m) => m.permissions.visible_to));
-    return allMemories.filter((_, i) => accessFlags[i]);
+    const accessible = allMemories.filter((_, i) => accessFlags[i]);
+
+    // Only rows with a specific suggested target - a genuine "possible
+    // duplicate of X" the customer can act on in one click. No-candidate
+    // rows have nothing actionable to show here; they stay staff-only,
+    // visible on the internal review-queue page for quality checks.
+    const rows = await sql`
+      select ue.id, ue.mention_text, ue.entity_type_guess, e.entity_id as candidate_entity_id, e.canonical_name as candidate_name
+      from public.unresolved_entities ue
+      join public.entities e on e.entity_id = ue.candidate_entity_id
+      where ue.tenant_id = ${ctx.tenantId} and ue.status = 'pending' and ue.candidate_entity_id is not null
+      order by ue.created_at desc
+    `;
+    const entityDuplicates = rows.map((r: Record<string, unknown>) => ({
+      unresolvedId: r.id as string,
+      mentionText: r.mention_text as string,
+      entityType: r.entity_type_guess as string,
+      candidateEntityId: r.candidate_entity_id as string,
+      candidateName: r.candidate_name as string,
+    }));
+    return { accessible, entityDuplicates };
   });
 
-  const result = getAttentionItems(accessible, limit);
+  const result = getAttentionItems(accessible, entityDuplicates, limit);
   return json({
-    items: result.items.map((item) => ({
+    items: result.items.map((item) => item.kind === "entity_duplicate" ? {
+      kind: "entity_duplicate",
+      unresolved_id: item.unresolvedId,
+      mention_text: item.mentionText,
+      entity_type: item.entityType,
+      candidate_entity_id: item.candidateEntityId,
+      candidate_name: item.candidateName,
+      category: item.category,
+      weight: item.weight,
+    } : {
+      kind: "memory",
       memory_id: item.memory.memory_id,
       title: item.memory.title,
       summary: item.memory.summary,
@@ -983,7 +1075,7 @@ async function handleAttention(req: Request): Promise<Response> {
       category: item.category,
       weight: item.weight,
       action: actionForCategory(item.category),
-    })),
+    }),
     total: result.total,
   });
 }
@@ -1137,6 +1229,7 @@ Deno.serve(async (req) => {
     if (path.endsWith("/eval/run") && req.method === "POST") return await handleRunGoldenEval();
     if (path.endsWith("/debug/test-reconciliation") && req.method === "POST") return await handleDebugTestReconciliation(req);
     if (path.endsWith("/debug/test-entity-merge-guard") && req.method === "POST") return await handleDebugTestEntityMergeGuard(req);
+    if (path.endsWith("/debug/test-judgment-tier") && req.method === "POST") return await handleDebugTestJudgmentTier(req);
     if (path.endsWith("/debug/flag-entity-cluster") && req.method === "POST") return await handleDebugFlagEntityCluster(req);
     return json({ detail: "Not found" }, 404);
   } catch (err) {

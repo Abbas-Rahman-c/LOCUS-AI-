@@ -19,10 +19,104 @@ import { embedText } from "./embeddings.ts";
 export const AUTO_MATCH_FLOOR = 0.90;
 export const CANDIDATE_FLOOR = 0.75;
 
+// ── Judgment tier ────────────────────────────────────────────────────────
+//
+// A real Claude call, same pattern as reconcile.ts's classifyRelation -
+// not a lower similarity number. Sits between "similarity says probably"
+// and "queue it, a human has to look": when embedding similarity alone
+// can't confidently resolve a mention (same-type score in the ambiguous
+// [CANDIDATE_FLOOR, AUTO_MATCH_FLOOR) band, or ANY cross-type match), this
+// gives the model the actual mention context and the candidate's own
+// identity and asks it to judge, the way a person would - not "how close
+// are these two vectors" but "are these actually the same real thing."
+// Explicitly does NOT touch AUTO_MATCH_FLOOR/CANDIDATE_FLOOR - a genuinely
+// uncertain judgment still falls through to the existing queue tier
+// unchanged. This is a second, independent signal, not a lower bar.
+
+const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY") ?? "";
+const JUDGE_MODEL = Deno.env.get("ANTHROPIC_EXTRACT_MODEL") ?? "claude-haiku-4-5-20251001";
+
+async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: number): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+const JUDGE_SYSTEM_PROMPT = `You decide whether a newly-mentioned entity is the SAME real-world thing as an existing entity already on record, using actual context - not just how similar the names look.
+
+You'll see: the new mention's exact text, the type it was guessed as, the sentence/memory it came from, and the existing candidate's canonical name, type, and known aliases.
+
+Judge same_entity true only when you have real grounds - the same person under a nickname or last-name-only reference, the same system/project referred to two different ways, a name that's an obvious typo or reformatting of the other. Judge same_entity false when the names merely resemble each other but context gives no real reason to think they're the same thing - two different people who happen to share a first name, a project name that happens to match a system name by coincidence, or when you simply don't have enough information either way.
+
+confidence "high" means you'd stake real correctness on this call - a wrong high-confidence answer permanently merges or permanently keeps separate two things that shouldn't be. confidence "medium" or "low" means you have a lean but real doubt remains - always pair those with same_entity based on your best guess, but the caller only acts automatically on "high"; anything else is treated as genuinely unresolved and left for a human.
+
+Worked examples:
+- Mention "Sudhira" (Person) in "Sudhira freed up for MCP Server work" vs candidate "Sudhira Chegu" (Person, no aliases) -> same_entity: true, confidence: high. First-name-only reference to someone whose full name is already on record is a completely ordinary way to refer to the same person.
+- Mention "MCP Server" (Project) in "reassigned to X, Y freed up for MCP Server work" vs candidate "MCP Server" (System, canonical name identical) -> same_entity: true, confidence: high. Identical name, and the sentence is plainly talking about the same system being built, just guessed as a different entity type.
+- Mention "Task 22" (Project) vs candidate "Team Pulse Digest + MCP Server" (Project) -> same_entity: false, confidence: low. There's no textual or contextual link connecting "Task 22" to that specific ticket beyond a guess - genuinely unresolved, not a confident no.`;
+
+const JUDGE_TOOL = {
+  name: "record_entity_judgment",
+  description: "Judge whether a newly-mentioned entity is the same real-world thing as an existing candidate entity.",
+  input_schema: {
+    type: "object",
+    properties: {
+      same_entity: { type: "boolean" },
+      confidence: { type: "string", enum: ["high", "medium", "low"] },
+      reason: { type: "string" },
+    },
+    required: ["same_entity", "confidence", "reason"],
+    additionalProperties: false,
+  },
+};
+
+export interface EntityJudgment {
+  sameEntity: boolean;
+  confidence: "high" | "medium" | "low";
+  reason: string;
+}
+
+export async function judgeEntityMatch(
+  mentionText: string,
+  entityTypeGuess: string,
+  mentionContext: string,
+  candidate: { canonicalName: string; entityType: string; aliases: string[] },
+): Promise<EntityJudgment> {
+  const userMessage = `New mention: "${mentionText}" (guessed type: ${entityTypeGuess})
+Context it appeared in: ${mentionContext}
+
+Existing candidate: "${candidate.canonicalName}" (type: ${candidate.entityType})${candidate.aliases.length > 0 ? `, known aliases: ${candidate.aliases.join(", ")}` : ""}`;
+
+  const resp = await fetchWithTimeout("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: { "x-api-key": ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01", "content-type": "application/json" },
+    body: JSON.stringify({
+      model: JUDGE_MODEL,
+      max_tokens: 512,
+      temperature: 0,
+      system: [{ type: "text", text: JUDGE_SYSTEM_PROMPT, cache_control: { type: "ephemeral" } }],
+      messages: [{ role: "user", content: userMessage }],
+      tools: [JUDGE_TOOL],
+      tool_choice: { type: "tool", name: "record_entity_judgment" },
+    }),
+  }, 30_000);
+
+  if (!resp.ok) throw new Error(`Anthropic API error ${resp.status}: ${await resp.text()}`);
+  const data = await resp.json();
+  const block = (data.content ?? []).find((b: { type?: string }) => b.type === "tool_use");
+  if (!block) throw new Error("Claude did not return a tool_use block for record_entity_judgment");
+  const input = block.input as { same_entity: boolean; confidence: "high" | "medium" | "low"; reason: string };
+  return { sameEntity: input.same_entity, confidence: input.confidence, reason: input.reason };
+}
+
 export interface EntityResolutionResult {
   entityId: string | null;
   queued: boolean;
-  reason: "exact_match" | "auto_match" | "queued_with_candidate" | "queued_no_candidate";
+  reason: "exact_match" | "auto_match" | "judged_match" | "judged_new" | "queued_with_candidate" | "queued_no_candidate";
   // Set only when queued=true - the real unresolved_entities.id, so a
   // caller that doesn't have a memoryId yet (the memory hasn't been
   // written) can backfill memory_id onto this specific row once it does.
@@ -39,6 +133,7 @@ interface MatchCandidate {
   entityId: string;
   entityType: string;
   canonicalName: string;
+  aliases: string[];
   similarity: number;
   crossType: boolean;
 }
@@ -74,18 +169,18 @@ async function findBestMatch(
   const trimmed = text.trim();
 
   const exactRows = await sql`
-    select entity_id, entity_type, canonical_name from public.entities
+    select entity_id, entity_type, canonical_name, aliases from public.entities
     where tenant_id = ${tenantId} and entity_type = ${entityType} and status = 'current'
       and (lower(canonical_name) = lower(${trimmed}) or lower(${trimmed}) = any(select lower(a) from unnest(aliases) as a))
     limit 1
   `;
   const exact: MatchCandidate | null = exactRows[0]
-    ? { entityId: exactRows[0].entity_id, entityType: exactRows[0].entity_type, canonicalName: exactRows[0].canonical_name, similarity: 1, crossType: false }
+    ? { entityId: exactRows[0].entity_id, entityType: exactRows[0].entity_type, canonicalName: exactRows[0].canonical_name, aliases: exactRows[0].aliases ?? [], similarity: 1, crossType: false }
     : null;
 
   const embedding = await embedText(trimmed, inputType);
   const sameTypeRows = await sql`
-    select e.entity_id, e.entity_type, e.canonical_name, 1 - (ee.embedding <=> ${JSON.stringify(embedding)}::vector) as similarity
+    select e.entity_id, e.entity_type, e.canonical_name, e.aliases, 1 - (ee.embedding <=> ${JSON.stringify(embedding)}::vector) as similarity
     from public.entity_embeddings ee
     join public.entities e on e.entity_id = ee.entity_id
     where ee.tenant_id = ${tenantId} and e.entity_type = ${entityType} and e.status = 'current'
@@ -93,7 +188,7 @@ async function findBestMatch(
     limit 1
   `;
   const best: MatchCandidate | null = sameTypeRows[0]
-    ? { entityId: sameTypeRows[0].entity_id, entityType: sameTypeRows[0].entity_type, canonicalName: sameTypeRows[0].canonical_name, similarity: Number(sameTypeRows[0].similarity), crossType: false }
+    ? { entityId: sameTypeRows[0].entity_id, entityType: sameTypeRows[0].entity_type, canonicalName: sameTypeRows[0].canonical_name, aliases: sameTypeRows[0].aliases ?? [], similarity: Number(sameTypeRows[0].similarity), crossType: false }
     : null;
 
   let crossTypeExact: MatchCandidate | null = null;
@@ -103,21 +198,22 @@ async function findBestMatch(
     // once, Project another time) is a stronger signal than any
     // similarity score - worth its own exact check across types, not
     // just folded into the similarity pass below. Still never
-    // auto-merged (a cross-type match is always flagged for review, per
-    // the same rule as the similarity case), just reported with
-    // similarity=1 so it's not lost to a lower-scoring similarity hit.
+    // auto-merged purely on score (a cross-type match by score alone is
+    // always flagged for review), just reported with similarity=1 so it's
+    // not lost to a lower-scoring similarity hit - the judgment tier can
+    // still auto-resolve it with real reasoning, see resolveEntityMention.
     const crossExactRows = await sql`
-      select entity_id, entity_type, canonical_name from public.entities
+      select entity_id, entity_type, canonical_name, aliases from public.entities
       where tenant_id = ${tenantId} and entity_type != ${entityType} and status = 'current'
         and (lower(canonical_name) = lower(${trimmed}) or lower(${trimmed}) = any(select lower(a) from unnest(aliases) as a))
       limit 1
     `;
     crossTypeExact = crossExactRows[0]
-      ? { entityId: crossExactRows[0].entity_id, entityType: crossExactRows[0].entity_type, canonicalName: crossExactRows[0].canonical_name, similarity: 1, crossType: true }
+      ? { entityId: crossExactRows[0].entity_id, entityType: crossExactRows[0].entity_type, canonicalName: crossExactRows[0].canonical_name, aliases: crossExactRows[0].aliases ?? [], similarity: 1, crossType: true }
       : null;
 
     const crossRows = await sql`
-      select e.entity_id, e.entity_type, e.canonical_name, 1 - (ee.embedding <=> ${JSON.stringify(embedding)}::vector) as similarity
+      select e.entity_id, e.entity_type, e.canonical_name, e.aliases, 1 - (ee.embedding <=> ${JSON.stringify(embedding)}::vector) as similarity
       from public.entity_embeddings ee
       join public.entities e on e.entity_id = ee.entity_id
       where ee.tenant_id = ${tenantId} and e.entity_type != ${entityType} and e.status = 'current'
@@ -125,7 +221,7 @@ async function findBestMatch(
       limit 1
     `;
     crossTypeBest = crossRows[0]
-      ? { entityId: crossRows[0].entity_id, entityType: crossRows[0].entity_type, canonicalName: crossRows[0].canonical_name, similarity: Number(crossRows[0].similarity), crossType: true }
+      ? { entityId: crossRows[0].entity_id, entityType: crossRows[0].entity_type, canonicalName: crossRows[0].canonical_name, aliases: crossRows[0].aliases ?? [], similarity: Number(crossRows[0].similarity), crossType: true }
       : null;
   }
 
@@ -139,15 +235,52 @@ export async function resolveEntityMention(
   mentionText: string,
   entityTypeGuess: string,
   memoryId?: string,
+  // The memory's own title+summary (or equivalent) - what the judgment
+  // tier actually reasons over. Without it, the judgment tier is skipped
+  // entirely and behavior is unchanged from before it existed (falls
+  // straight through to the queue tier) - a judgment call with no real
+  // context to judge from would just be a coin flip wearing a costume.
+  mentionContext?: string,
 ): Promise<EntityResolutionResult> {
   const trimmed = mentionText.trim();
-  const { exact, best } = await findBestMatch(sql, tenantId, trimmed, entityTypeGuess, false);
+  const { exact, best, crossTypeExact, crossTypeBest } = await findBestMatch(sql, tenantId, trimmed, entityTypeGuess, true);
 
   if (exact) {
     return { entityId: exact.entityId, queued: false, reason: "exact_match", unresolvedId: null };
   }
   if (best && best.similarity >= AUTO_MATCH_FLOOR) {
     return { entityId: best.entityId, queued: false, reason: "auto_match", unresolvedId: null };
+  }
+
+  // Judgment tier: only engages when there's an actual candidate worth
+  // judging AND real context to judge it with. A confident "same" resolves
+  // immediately - even cross-type, since this is a reasoned call, not a
+  // score crossing a line. A confident "different" means we now have
+  // stronger grounds to create this as genuinely new than a bare "nothing
+  // scored high enough" ever gave us, so it's created outright rather than
+  // routed to the queue to be rubber-stamped. Anything less than
+  // confident falls straight through to the existing queue tier,
+  // unchanged - AUTO_MATCH_FLOOR/CANDIDATE_FLOOR are never touched by this.
+  const judgeCandidate = (best && best.similarity >= CANDIDATE_FLOOR)
+    ? best
+    : crossTypeExact ?? (crossTypeBest && crossTypeBest.similarity >= CANDIDATE_FLOOR ? crossTypeBest : null);
+
+  if (judgeCandidate && mentionContext) {
+    const judgment = await judgeEntityMatch(trimmed, entityTypeGuess, mentionContext, {
+      canonicalName: judgeCandidate.canonicalName,
+      entityType: judgeCandidate.entityType,
+      aliases: judgeCandidate.aliases,
+    });
+
+    if (judgment.confidence === "high" && judgment.sameEntity) {
+      return { entityId: judgeCandidate.entityId, queued: false, reason: "judged_match", unresolvedId: null };
+    }
+    if (judgment.confidence === "high" && !judgment.sameEntity) {
+      const entityId = await createEntity(sql, tenantId, entityTypeGuess, trimmed);
+      return { entityId, queued: false, reason: "judged_new", unresolvedId: null };
+    }
+    // else: genuinely uncertain - falls through to the queue tier below,
+    // same as if no judgment had been possible at all.
   }
 
   // Tier 3: not confident enough - queue for human review, never auto-create.
@@ -164,6 +297,24 @@ export async function resolveEntityMention(
     reason: candidateEntityId ? "queued_with_candidate" : "queued_no_candidate",
     unresolvedId: inserted[0].id as string,
   };
+}
+
+// deno-lint-ignore no-explicit-any
+async function createEntity(sql: any, tenantId: string, entityType: string, canonicalName: string): Promise<string> {
+  const inserted = await sql`
+    insert into public.entities (tenant_id, entity_type, canonical_name)
+    values (${tenantId}, ${entityType}, ${canonicalName})
+    on conflict (tenant_id, entity_type, canonical_name) do update set canonical_name = excluded.canonical_name
+    returning entity_id
+  `;
+  const entityId = inserted[0].entity_id as string;
+  const embedding = await embedText(canonicalName, "document");
+  await sql`
+    insert into public.entity_embeddings (entity_id, tenant_id, embedding)
+    values (${entityId}, ${tenantId}, ${JSON.stringify(embedding)})
+    on conflict (entity_id) do update set embedding = excluded.embedding
+  `;
+  return entityId;
 }
 
 /**

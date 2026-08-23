@@ -35,7 +35,7 @@ function SideCard({ side, label }: { side: ReviewQueueSide; label: string }) {
 // row never gets one). Without this, those rows were a dead end - the
 // only options were two buttons that both just dismissed, with no way to
 // say "I found the match myself."
-function ManualMatchSearch({ onPick }: { onPick: (result: EntitySearchResult) => void }) {
+function ManualMatchSearch({ tenantId, onPick }: { tenantId: string; onPick: (result: EntitySearchResult) => void }) {
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<EntitySearchResult[]>([])
   const [searching, setSearching] = useState(false)
@@ -49,7 +49,7 @@ function ManualMatchSearch({ onPick }: { onPick: (result: EntitySearchResult) =>
     let active = true
     setSearching(true)
     const timer = setTimeout(() => {
-      searchEntities(trimmed)
+      searchEntities(trimmed, tenantId)
         .then((res) => {
           if (active) setResults(res.entities)
         })
@@ -64,7 +64,7 @@ function ManualMatchSearch({ onPick }: { onPick: (result: EntitySearchResult) =>
       active = false
       clearTimeout(timer)
     }
-  }, [query])
+  }, [query, tenantId])
 
   return (
     <div className="flex-1 rounded-xl border border-dashed border-[#E5E7EB] p-4">
@@ -99,7 +99,16 @@ function ManualMatchSearch({ onPick }: { onPick: (result: EntitySearchResult) =>
   )
 }
 
+// Internal-only tool, not linked from the customer-facing nav - staff use
+// this to inspect extraction/resolution quality across tenants, entering
+// whichever tenant_id they want to look at. Left blank, it shows the
+// caller's own tenant (harmless if a non-staff account somehow lands on
+// this URL - they only ever see their own data; the backend refuses any
+// other tenant_id from a non-staff caller). Requesting a different tenant
+// requires the caller's email to be on the STAFF_EMAILS backend allowlist.
 export default function EntityReviewQueuePage() {
+  const [tenantIdInput, setTenantIdInput] = useState('')
+  const [activeTenantId, setActiveTenantId] = useState<string | undefined>(undefined)
   const [items, setItems] = useState<ReviewQueueItem[] | null>(null)
   const [index, setIndex] = useState(0)
   const [error, setError] = useState('')
@@ -108,7 +117,8 @@ export default function EntityReviewQueuePage() {
 
   const load = () => {
     setError('')
-    listUnresolvedEntities()
+    setItems(null)
+    listUnresolvedEntities(activeTenantId)
       .then((res) => {
         setItems(res.pending)
         setIndex((i) => Math.min(i, Math.max(res.pending.length - 1, 0)))
@@ -116,7 +126,7 @@ export default function EntityReviewQueuePage() {
       .catch((err: unknown) => setError(err instanceof ApiError ? err.message : 'Unable to load the review queue.'))
   }
 
-  useEffect(load, [])
+  useEffect(load, [activeTenantId])
 
   const current = items && items.length > 0 ? items[index] : null
 
@@ -139,31 +149,35 @@ export default function EntityReviewQueuePage() {
     }
   }
 
-  if (error) {
-    return (
-      <div className="mx-auto max-w-2xl px-4 py-8">
-        <p className="text-[13px] text-[#DC2626]">{error}</p>
-      </div>
-    )
-  }
-
-  if (items === null) {
-    return (
-      <div className="mx-auto max-w-2xl px-4 py-8">
-        <p className="text-[13px] text-[#9CA3AF]">Loading…</p>
-      </div>
-    )
-  }
-
   return (
     <div className="mx-auto max-w-2xl px-4 py-8">
       <h1 className="text-[22px] font-bold text-[#111827]">Entity Review Queue</h1>
       <p className="mt-1 text-[13px] text-[#6B7280]">
-        Possible duplicates and unconfirmed mentions flagged by extraction. Nothing here has been merged automatically -
-        every decision needs your click.
+        Internal only - possible duplicates and unconfirmed mentions flagged by extraction, for checking
+        extraction/resolution quality across tenants. Nothing here is customer-facing or required of anyone.
       </p>
 
-      {items.length === 0 ? (
+      <div className="mt-4 flex items-center gap-2">
+        <input
+          type="text"
+          value={tenantIdInput}
+          onChange={(e) => setTenantIdInput(e.target.value)}
+          placeholder="tenant_id (blank = your own tenant)"
+          className="h-9 flex-1 rounded-lg border border-[#E5E7EB] px-3 text-[12px] font-mono outline-none placeholder:font-sans placeholder:text-[#9CA3AF] focus:border-[#5A45FF]"
+        />
+        <button
+          type="button"
+          onClick={() => setActiveTenantId(tenantIdInput.trim() || undefined)}
+          className="h-9 shrink-0 rounded-lg border border-[#E5E7EB] px-3 text-[12px] font-semibold text-[#374151] hover:bg-[#F9FAFB]"
+        >
+          Load
+        </button>
+      </div>
+
+      {error ? <p className="mt-4 text-[13px] text-[#DC2626]">{error}</p> : null}
+      {!error && items === null ? <p className="mt-4 text-[13px] text-[#9CA3AF]">Loading…</p> : null}
+
+      {!error && items && items.length === 0 ? (
         <div className="mt-6 rounded-xl border border-[#E5E7EB] bg-white p-6 text-center">
           <p className="text-[14px] font-semibold text-[#111827]">Nothing pending.</p>
           <p className="mt-1 text-[13px] text-[#9CA3AF]">The queue is clear.</p>
@@ -181,7 +195,8 @@ export default function EntityReviewQueuePage() {
               <SideCard side={current.right} label="Possible match" />
             ) : (
               <ManualMatchSearch
-                onPick={(result) => void runAction(() => mergeEntity(current.id, result.entity_id))}
+                tenantId={activeTenantId ?? ''}
+                onPick={(result) => void runAction(() => mergeEntity(current.id, result.entity_id, activeTenantId))}
               />
             )}
           </div>
@@ -193,7 +208,7 @@ export default function EntityReviewQueuePage() {
               <button
                 type="button"
                 disabled={acting}
-                onClick={() => void runAction(() => mergeEntity(current.id, current.right!.entity_id as string))}
+                onClick={() => void runAction(() => mergeEntity(current.id, current.right!.entity_id as string, activeTenantId))}
                 className="rounded-full bg-[#5A45FF] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#4C39E0] disabled:opacity-50"
               >
                 Merge into {current.right.name}
@@ -203,7 +218,7 @@ export default function EntityReviewQueuePage() {
               <button
                 type="button"
                 disabled={acting}
-                onClick={() => void runAction(() => mergeEntity(current.id, current.right!.entity_id as string))}
+                onClick={() => void runAction(() => mergeEntity(current.id, current.right!.entity_id as string, activeTenantId))}
                 className="rounded-full bg-[#5A45FF] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#4C39E0] disabled:opacity-50"
               >
                 Merge into {current.right.name}
@@ -213,7 +228,7 @@ export default function EntityReviewQueuePage() {
               <button
                 type="button"
                 disabled={acting}
-                onClick={() => void runAction(() => confirmNewEntity(current.id))}
+                onClick={() => void runAction(() => confirmNewEntity(current.id, activeTenantId))}
                 className="rounded-full border border-[#5A45FF] px-4 py-2 text-[13px] font-semibold text-[#5A45FF] hover:bg-[#F8F7FF] disabled:opacity-50"
               >
                 Confirm as new
@@ -227,7 +242,7 @@ export default function EntityReviewQueuePage() {
               <button
                 type="button"
                 disabled={acting}
-                onClick={() => void runAction(() => dismissUnresolvedEntity(current.id))}
+                onClick={() => void runAction(() => dismissUnresolvedEntity(current.id, activeTenantId))}
                 className="rounded-full border border-[#E5E7EB] px-4 py-2 text-[13px] font-semibold text-[#374151] hover:bg-[#F9FAFB] disabled:opacity-50"
               >
                 Keep separate
@@ -236,7 +251,7 @@ export default function EntityReviewQueuePage() {
             <button
               type="button"
               disabled={acting}
-              onClick={() => void runAction(() => dismissUnresolvedEntity(current.id))}
+              onClick={() => void runAction(() => dismissUnresolvedEntity(current.id, activeTenantId))}
               className="rounded-full border border-[#E5E7EB] px-4 py-2 text-[13px] font-semibold text-[#374151] hover:bg-[#F9FAFB] disabled:opacity-50"
             >
               Skip for now

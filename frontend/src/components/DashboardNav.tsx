@@ -3,7 +3,6 @@ import { NavLink, useNavigate } from 'react-router-dom'
 import logoMark from '../assets/locuslogo.png'
 import { getSupabaseClient, isSupabaseConfigured } from '../lib/supabase'
 import { getAuthCallbackUrl } from '../lib/appUrl'
-import { listUnresolvedEntities } from '../lib/api'
 import {
   forgetAccount,
   listOtherAccounts,
@@ -23,7 +22,6 @@ const NAV_LINKS = [
   { label: 'Memory Explorer', to: '/decision-log' },
   { label: 'Memory Timeline', to: '/memory-timeline' },
   { label: 'Team Pulse', to: '/team-pulse' },
-  { label: 'Review Queue', to: '/review-queue' },
   { label: 'Settings', to: '/settings' },
 ] as const
 
@@ -74,14 +72,6 @@ export function DashboardNav() {
   // cleared no matter how many times the page had been viewed. Mirrors
   // TeamPulse's own mount effect: 'true' present means seen.
   const [pulseUnseen, setPulseUnseen] = useState(() => !localStorage.getItem(TEAM_PULSE_SEEN_KEY))
-  const [reviewQueueCount, setReviewQueueCount] = useState<number | null>(null)
-
-  useEffect(() => {
-    if (isDemo || !isSupabaseConfigured()) return
-    listUnresolvedEntities()
-      .then((res) => setReviewQueueCount(res.pending.length))
-      .catch(() => setReviewQueueCount(null)) // quiet fail - this is a nav badge, not core content
-  }, [isDemo])
 
   useEffect(() => {
     const markSeen = () => setPulseUnseen(false)
@@ -246,11 +236,6 @@ export function DashboardNav() {
                     {link.label}
                     {link.label === 'Team Pulse' && pulseUnseen ? (
                       <span className="absolute -right-2.5 top-0 h-[6px] w-[6px] rounded-full bg-[#5A45FF]" />
-                    ) : null}
-                    {link.label === 'Review Queue' && reviewQueueCount ? (
-                      <span className="absolute -right-4 -top-1.5 flex h-[15px] min-w-[15px] items-center justify-center rounded-full bg-[#5A45FF] px-[3px] text-[9px] font-bold text-white">
-                        {reviewQueueCount}
-                      </span>
                     ) : null}
                   </span>
                   {isActive ? (

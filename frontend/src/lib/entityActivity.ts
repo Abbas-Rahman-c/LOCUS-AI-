@@ -37,6 +37,21 @@ export function computeEntityActivity(memories: CanonicalMemory[], entityId: str
   return { weeklyCounts, lastActiveAt, totalCount }
 }
 
+// One line of context per entity card, same mechanism regardless of type -
+// the most recent linked memory's own summary, not a separate generated
+// description. "Most recent" rather than "highest confidence" to match
+// this codebase's existing convention (entitySide's snippet lookup on the
+// backend, RelatedPanel, MemoryCard) - every other place that shows "the"
+// summary for an entity already picks the latest one.
+export function entityDescription(memories: CanonicalMemory[], entityId: string): string | null {
+  let latest: CanonicalMemory | null = null
+  for (const m of memories) {
+    if (!m.entities.some((e) => e.entity_id === entityId)) continue
+    if (!latest || m.valid_from > latest.valid_from) latest = m
+  }
+  return latest?.summary ?? null
+}
+
 export function isActiveThisWeek(activity: EntityActivity, now: Date = new Date()): boolean {
   if (!activity.lastActiveAt) return false
   return now.getTime() - new Date(activity.lastActiveAt).getTime() < WEEK_MS

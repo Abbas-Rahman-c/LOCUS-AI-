@@ -505,7 +505,8 @@ export function getMemoryEvidence(memoryId: string): Promise<MemoryEvidence> {
 export type AttentionCategory = 'conflict' | 'decision' | 'commitment' | 'staleness'
 export type ResolutionAction = 'confirm_decision' | 'check_in_commitment' | 'recheck_freshness' | 'dismiss_conflict'
 
-export interface AttentionItem {
+export interface MemoryAttentionItem {
+  kind: 'memory'
   memory_id: string
   title: string
   summary: string
@@ -514,6 +515,24 @@ export interface AttentionItem {
   weight: number
   action: ResolutionAction
 }
+
+// Surfaced only when the judgment tier (entity resolution) couldn't
+// resolve a mention confidently either way - genuinely ambiguous, with a
+// real suggested target. No-candidate ambiguity never reaches here; it
+// stays on the internal-only review-queue page instead, since there's
+// nothing one-click actionable to show a customer for it.
+export interface EntityDuplicateAttentionItem {
+  kind: 'entity_duplicate'
+  unresolved_id: string
+  mention_text: string
+  entity_type: string
+  candidate_entity_id: string
+  candidate_name: string
+  category: 'entity_duplicate'
+  weight: number
+}
+
+export type AttentionItem = MemoryAttentionItem | EntityDuplicateAttentionItem
 
 export interface AttentionResponse {
   items: AttentionItem[]
@@ -564,20 +583,25 @@ export interface ReviewQueueItem {
   right: ReviewQueueSide | null
 }
 
-export function listUnresolvedEntities(): Promise<{ tenant_id: string; pending: ReviewQueueItem[] }> {
-  return memoryApiFetch('/entities/unresolved')
+// tenantId is only ever honored server-side for a caller on STAFF_EMAILS -
+// the customer-facing Attention strip never passes it, so its calls are
+// unaffected. Only the internal review-queue page passes it, to inspect a
+// tenant other than the staff member's own.
+export function listUnresolvedEntities(tenantId?: string): Promise<{ tenant_id: string; pending: ReviewQueueItem[] }> {
+  const params = tenantId ? `?tenant_id=${encodeURIComponent(tenantId)}` : ''
+  return memoryApiFetch(`/entities/unresolved${params}`)
 }
 
-export function confirmNewEntity(unresolvedId: string): Promise<{ entity_id: string; attached_existing: boolean; flagged_for_merge_review: string | null }> {
-  return memoryApiFetch('/entities/confirm-new', { method: 'POST', body: JSON.stringify({ unresolved_id: unresolvedId }) })
+export function confirmNewEntity(unresolvedId: string, tenantId?: string): Promise<{ entity_id: string; attached_existing: boolean; flagged_for_merge_review: string | null }> {
+  return memoryApiFetch('/entities/confirm-new', { method: 'POST', body: JSON.stringify({ unresolved_id: unresolvedId, tenant_id: tenantId }) })
 }
 
-export function mergeEntity(unresolvedId: string, targetEntityId: string): Promise<{ merged: boolean }> {
-  return memoryApiFetch('/entities/merge', { method: 'POST', body: JSON.stringify({ unresolved_id: unresolvedId, target_entity_id: targetEntityId }) })
+export function mergeEntity(unresolvedId: string, targetEntityId: string, tenantId?: string): Promise<{ merged: boolean }> {
+  return memoryApiFetch('/entities/merge', { method: 'POST', body: JSON.stringify({ unresolved_id: unresolvedId, target_entity_id: targetEntityId, tenant_id: tenantId }) })
 }
 
-export function dismissUnresolvedEntity(unresolvedId: string): Promise<{ dismissed: boolean }> {
-  return memoryApiFetch('/entities/dismiss', { method: 'POST', body: JSON.stringify({ unresolved_id: unresolvedId }) })
+export function dismissUnresolvedEntity(unresolvedId: string, tenantId?: string): Promise<{ dismissed: boolean }> {
+  return memoryApiFetch('/entities/dismiss', { method: 'POST', body: JSON.stringify({ unresolved_id: unresolvedId, tenant_id: tenantId }) })
 }
 
 export interface EntitySearchResult {
@@ -586,6 +610,7 @@ export interface EntitySearchResult {
   entity_type: string
 }
 
-export function searchEntities(query: string): Promise<{ entities: EntitySearchResult[] }> {
-  return memoryApiFetch(`/entities/search?q=${encodeURIComponent(query)}`)
+export function searchEntities(query: string, tenantId?: string): Promise<{ entities: EntitySearchResult[] }> {
+  const tenantParam = tenantId ? `&tenant_id=${encodeURIComponent(tenantId)}` : ''
+  return memoryApiFetch(`/entities/search?q=${encodeURIComponent(query)}${tenantParam}`)
 }

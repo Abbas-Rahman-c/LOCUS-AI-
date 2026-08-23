@@ -13,7 +13,7 @@ import {
   type RelatedEntity,
 } from '../lib/api'
 import { getStateAsOf } from '../lib/memoryTemporal'
-import { computeEntityActivity, isActiveThisWeek, relativeRecencyLabel, type EntityActivity } from '../lib/entityActivity'
+import { computeEntityActivity, entityDescription, isActiveThisWeek, relativeRecencyLabel, type EntityActivity } from '../lib/entityActivity'
 
 // Wider status set than MemoryRecordDetail's STATUS_STYLES (Current/
 // Superseded only, for the old decisions table) - the memory layer has six
@@ -88,7 +88,21 @@ function ActivitySparkline({ weeklyCounts }: { weeklyCounts: number[] }) {
   )
 }
 
-function EntityCard({ id, name, activity, flagged, onSelect }: { id: string; name: string; activity: EntityActivity; flagged: boolean; onSelect: (id: string) => void }) {
+function EntityCard({
+  id,
+  name,
+  description,
+  activity,
+  flagged,
+  onSelect,
+}: {
+  id: string
+  name: string
+  description: string | null
+  activity: EntityActivity
+  flagged: boolean
+  onSelect: (id: string) => void
+}) {
   return (
     <button
       type="button"
@@ -96,7 +110,9 @@ function EntityCard({ id, name, activity, flagged, onSelect }: { id: string; nam
       className="flex flex-col gap-2 rounded-xl border border-[#E5E7EB] bg-white p-3.5 text-left transition-colors hover:border-[#C7C2FF] hover:bg-[#FAFAFF]"
     >
       <div className="flex items-start justify-between gap-2">
-        <p className="min-w-0 truncate text-[13px] font-semibold text-[#111827]">{name}</p>
+        {/* line-clamp instead of truncate - a name wraps to a second line
+            instead of being cut off mid-word. */}
+        <p className="min-w-0 text-[13px] font-semibold leading-snug text-[#111827] line-clamp-2">{name}</p>
         {flagged ? (
           <span
             title="Possible duplicate - pending review"
@@ -106,6 +122,9 @@ function EntityCard({ id, name, activity, flagged, onSelect }: { id: string; nam
           </span>
         ) : null}
       </div>
+      {description ? (
+        <p className="line-clamp-2 text-[12px] leading-snug text-[#6B7280]">{description}</p>
+      ) : null}
       <div className="flex items-center justify-between gap-2">
         <ActivitySparkline weeklyCounts={activity.weeklyCounts} />
         <span className="shrink-0 text-[11px] text-[#9CA3AF]">{relativeRecencyLabel(activity.lastActiveAt)}</span>
@@ -131,7 +150,7 @@ function BrowseMode({
       for (const e of m.entities) byId.set(e.entity_id, { name: e.canonical_name, type: e.entity_type, flagged: e.flagged })
     }
     return [...byId.entries()]
-      .map(([id, v]) => ({ id, ...v, activity: computeEntityActivity(memories, id, now) }))
+      .map(([id, v]) => ({ id, ...v, activity: computeEntityActivity(memories, id, now), description: entityDescription(memories, id) }))
       .filter((e) => e.name.toLowerCase().includes(query.toLowerCase()))
   }, [memories, query, now])
 
@@ -146,9 +165,9 @@ function BrowseMode({
       {activeThisWeek.length > 0 ? (
         <div>
           <p className="mb-2 text-[11px] font-semibold tracking-[0.06em] text-[#9CA3AF]">ACTIVE THIS WEEK</p>
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 md:grid-cols-3">
             {activeThisWeek.map((e) => (
-              <EntityCard key={e.id} id={e.id} name={e.name} activity={e.activity} flagged={e.flagged} onSelect={onSelect} />
+              <EntityCard key={e.id} id={e.id} name={e.name} description={e.description} activity={e.activity} flagged={e.flagged} onSelect={onSelect} />
             ))}
           </div>
         </div>
@@ -162,9 +181,9 @@ function BrowseMode({
             <p className="mb-2 text-[11px] font-semibold tracking-[0.06em] text-[#9CA3AF]">
               {group.label.toUpperCase()} ({inGroup.length})
             </p>
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 md:grid-cols-3">
               {inGroup.map((e) => (
-                <EntityCard key={e.id} id={e.id} name={e.name} activity={e.activity} flagged={e.flagged} onSelect={onSelect} />
+                <EntityCard key={e.id} id={e.id} name={e.name} description={e.description} activity={e.activity} flagged={e.flagged} onSelect={onSelect} />
               ))}
             </div>
           </div>

@@ -9,13 +9,37 @@ import type { CanonicalMemoryObject } from "./types.ts";
 
 const CONFIDENCE_THRESHOLD = 0.6;
 
-export type AttentionCategory = "conflict" | "decision" | "commitment" | "staleness";
+export type AttentionCategory = "conflict" | "decision" | "commitment" | "staleness" | "entity_duplicate";
 
-export interface AttentionItem {
+export interface MemoryAttentionItem {
+  kind: "memory";
   memory: CanonicalMemoryObject;
-  category: AttentionCategory;
+  category: "conflict" | "decision" | "commitment" | "staleness";
   weight: number;
 }
+
+// The judgment tier (entityResolution.ts) only reaches this once real
+// similarity AND a real model call both failed to resolve a mention
+// confidently - genuine ambiguity, not the common case. Surfaced here
+// instead of a dedicated page so nothing is ever required of the customer;
+// unmerged-but-flagged is a safe, permanent-if-needed state. Reuses the
+// exact same /entities/merge and /entities/dismiss actions the internal
+// review-queue page calls - no separate mutation path.
+export interface EntityDuplicateCandidate {
+  unresolvedId: string;
+  mentionText: string;
+  entityType: string;
+  candidateEntityId: string;
+  candidateName: string;
+}
+
+export interface EntityDuplicateAttentionItem extends EntityDuplicateCandidate {
+  kind: "entity_duplicate";
+  category: "entity_duplicate";
+  weight: number;
+}
+
+export type AttentionItem = MemoryAttentionItem | EntityDuplicateAttentionItem;
 
 export interface AttentionResult {
   items: AttentionItem[];
@@ -33,7 +57,11 @@ function hasLinkedOutcome(m: CanonicalMemoryObject, allMemories: CanonicalMemory
 // `memories` list passed in here IS that scoping (isMemoryAccessible
 // re-checked by the caller before this runs), so there's nothing further
 // to filter on here.
-export function getAttentionItems(memories: CanonicalMemoryObject[], limit = 4): AttentionResult {
+export function getAttentionItems(
+  memories: CanonicalMemoryObject[],
+  entityDuplicates: EntityDuplicateCandidate[] = [],
+  limit = 4,
+): AttentionResult {
   const now = new Date();
 
   const conflicts = memories.filter((m) => m.status === "unresolved");
@@ -47,10 +75,11 @@ export function getAttentionItems(memories: CanonicalMemoryObject[], limit = 4):
   const agingMemories = memories.filter((m) => m.freshness === "stale" && m.confidence < CONFIDENCE_THRESHOLD);
 
   const ranked: AttentionItem[] = [
-    ...conflicts.map((m): AttentionItem => ({ memory: m, category: "conflict", weight: 4 })),
-    ...unconfirmedDecisions.map((m): AttentionItem => ({ memory: m, category: "decision", weight: 3 })),
-    ...overdueCommitments.map((m): AttentionItem => ({ memory: m, category: "commitment", weight: 2 })),
-    ...agingMemories.map((m): AttentionItem => ({ memory: m, category: "staleness", weight: 1 })),
+    ...conflicts.map((m): AttentionItem => ({ kind: "memory", memory: m, category: "conflict", weight: 4 })),
+    ...unconfirmedDecisions.map((m): AttentionItem => ({ kind: "memory", memory: m, category: "decision", weight: 3 })),
+    ...overdueCommitments.map((m): AttentionItem => ({ kind: "memory", memory: m, category: "commitment", weight: 2 })),
+    ...entityDuplicates.map((d): AttentionItem => ({ kind: "entity_duplicate", ...d, category: "entity_duplicate", weight: 2 })),
+    ...agingMemories.map((m): AttentionItem => ({ kind: "memory", memory: m, category: "staleness", weight: 1 })),
   ].sort((a, b) => b.weight - a.weight);
 
   return { items: ranked.slice(0, limit), total: ranked.length };
@@ -61,14 +90,19 @@ export function getAttentionItems(memories: CanonicalMemoryObject[], limit = 4):
 
 export type ResolutionAction = "confirm_decision" | "check_in_commitment" | "recheck_freshness" | "dismiss_conflict";
 
-const CATEGORY_TO_ACTION: Record<AttentionCategory, ResolutionAction> = {
+// entity_duplicate deliberately excluded - it doesn't go through
+// resolveMemory at all (nothing about it lives in the memories table); the
+// frontend calls /entities/merge or /entities/dismiss directly instead.
+type MemoryAttentionCategory = MemoryAttentionItem["category"];
+
+const CATEGORY_TO_ACTION: Record<MemoryAttentionCategory, ResolutionAction> = {
   conflict: "dismiss_conflict",
   decision: "confirm_decision",
   commitment: "check_in_commitment",
   staleness: "recheck_freshness",
 };
 
-export function actionForCategory(category: AttentionCategory): ResolutionAction {
+export function actionForCategory(category: MemoryAttentionCategory): ResolutionAction {
   return CATEGORY_TO_ACTION[category];
 }
 
