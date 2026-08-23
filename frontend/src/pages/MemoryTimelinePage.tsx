@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import {
   ApiError,
@@ -69,6 +69,19 @@ const ENTITY_GROUPS: { label: string; types: EntityType[] }[] = [
 
 const ALL_GROUPS = 'All Types'
 const ALL_SOURCES_PICKER = 'All Sources'
+
+// One color per type, reused identically for the section-header badge and
+// the jump-chip row, so it's learned once ("blue = Projects") rather than
+// two different visual languages for the same grouping.
+const GROUP_COLORS: Record<string, { bg: string; text: string; dot: string }> = {
+  People: { bg: 'bg-[#F3E8FF]', text: 'text-[#7C3AED]', dot: 'bg-[#7C3AED]' },
+  Projects: { bg: 'bg-[#DBEAFE]', text: 'text-[#2563EB]', dot: 'bg-[#2563EB]' },
+  Teams: { bg: 'bg-[#DCFCE7]', text: 'text-[#16A34A]', dot: 'bg-[#16A34A]' },
+  'Systems & Topics': { bg: 'bg-[#F1F5F9]', text: 'text-[#475569]', dot: 'bg-[#475569]' },
+  Customers: { bg: 'bg-[#FEF3C7]', text: 'text-[#B45309]', dot: 'bg-[#B45309]' },
+}
+
+const PREVIEW_CARD_COUNT = 4
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
@@ -150,6 +163,9 @@ function BrowseMode({
   onSelect: (id: string) => void
 }) {
   const now = useMemo(() => new Date(), [])
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
+  const [activeSection, setActiveSection] = useState<string | null>(null)
+  const sectionRefs = useRef<Map<string, HTMLDivElement>>(new Map())
 
   const entities = useMemo(() => {
     const byId = new Map<string, { name: string; type: EntityType; flagged: boolean }>()
@@ -164,14 +180,68 @@ function BrowseMode({
       .filter((e) => sourceFilter === ALL_SOURCES_PICKER || memories.some((m) => m.entities.some((me) => me.entity_id === e.id) && m.source_events.some((se) => se.source === sourceFilter)))
   }, [memories, query, groupFilter, sourceFilter, now])
 
+  const activeThisWeek = useMemo(
+    () => entities.filter((e) => isActiveThisWeek(e.activity, now)).sort((a, b) => (b.activity.lastActiveAt ?? '').localeCompare(a.activity.lastActiveAt ?? '')),
+    [entities, now],
+  )
+
+  const sections = useMemo(
+    () =>
+      ENTITY_GROUPS.map((group) => ({
+        group,
+        inGroup: entities.filter((e) => group.types.includes(e.type)).sort((a, b) => a.name.localeCompare(b.name)),
+      })).filter((s) => s.inGroup.length > 0),
+    [entities],
+  )
+
+  // Highlights whichever section is currently scrolled to the top of the
+  // viewport - not just "which chip was clicked last." Re-observes
+  // whenever the set of rendered sections changes (filters, expand/
+  // collapse don't move section boundaries, but a filter change can).
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      (observedEntries) => {
+        const visible = observedEntries.filter((en) => en.isIntersecting).sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)
+        if (visible.length > 0) setActiveSection(visible[0].target.getAttribute('data-section'))
+      },
+      { rootMargin: '-116px 0px -70% 0px', threshold: 0 },
+    )
+    for (const el of sectionRefs.current.values()) observer.observe(el)
+    return () => observer.disconnect()
+  }, [sections])
+
   if (entities.length === 0) {
     return <p className="mt-4 text-[13px] text-[#9CA3AF]">No entities found yet.</p>
   }
 
-  const activeThisWeek = entities.filter((e) => isActiveThisWeek(e.activity, now)).sort((a, b) => (b.activity.lastActiveAt ?? '').localeCompare(a.activity.lastActiveAt ?? ''))
+  const jumpTo = (label: string) => {
+    sectionRefs.current.get(label)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
 
   return (
     <div className="mt-4 flex flex-col gap-6">
+      {sections.length > 1 ? (
+        <div className="sticky top-14 z-10 -mx-5 flex gap-1.5 overflow-x-auto border-b border-[#F0F0F4] bg-white px-5 py-2.5">
+          {sections.map(({ group, inGroup }) => {
+            const color = GROUP_COLORS[group.label]
+            const isActive = activeSection === group.label
+            return (
+              <button
+                key={group.label}
+                type="button"
+                onClick={() => jumpTo(group.label)}
+                className={`flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1.5 text-[12px] font-semibold transition-colors ${
+                  isActive ? `${color.bg} ${color.text} border-transparent` : 'border-[#E5E7EB] bg-white text-[#6B7280] hover:bg-[#F9FAFB]'
+                }`}
+              >
+                <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${color.dot}`} />
+                {group.label} {inGroup.length}
+              </button>
+            )
+          })}
+        </div>
+      ) : null}
+
       {activeThisWeek.length > 0 ? (
         <div>
           <p className="mb-2 text-[11px] font-semibold tracking-[0.06em] text-[#9CA3AF]">ACTIVE THIS WEEK</p>
@@ -183,19 +253,45 @@ function BrowseMode({
         </div>
       ) : null}
 
-      {ENTITY_GROUPS.map((group) => {
-        const inGroup = entities.filter((e) => group.types.includes(e.type)).sort((a, b) => a.name.localeCompare(b.name))
-        if (inGroup.length === 0) return null
+      {sections.map(({ group, inGroup }) => {
+        const color = GROUP_COLORS[group.label]
+        const expanded = expandedGroups.has(group.label)
+        const shown = expanded ? inGroup : inGroup.slice(0, PREVIEW_CARD_COUNT)
         return (
-          <div key={group.label}>
-            <p className="mb-2 text-[11px] font-semibold tracking-[0.06em] text-[#9CA3AF]">
-              {group.label.toUpperCase()} ({inGroup.length})
-            </p>
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 md:grid-cols-3">
-              {inGroup.map((e) => (
+          <div
+            key={group.label}
+            data-section={group.label}
+            ref={(el) => {
+              if (el) sectionRefs.current.set(group.label, el)
+              else sectionRefs.current.delete(group.label)
+            }}
+            className="scroll-mt-28"
+          >
+            <span className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[13px] font-bold ${color.bg} ${color.text}`}>
+              {group.label}
+              <span className="rounded-full bg-white/60 px-1.5 py-0.5 text-[11px] font-semibold">{inGroup.length}</span>
+            </span>
+            <div className="mt-2.5 grid grid-cols-1 gap-2 sm:grid-cols-2 md:grid-cols-3">
+              {shown.map((e) => (
                 <EntityCard key={e.id} id={e.id} name={e.name} description={e.description} activity={e.activity} flagged={e.flagged} onSelect={onSelect} />
               ))}
             </div>
+            {inGroup.length > PREVIEW_CARD_COUNT ? (
+              <button
+                type="button"
+                onClick={() =>
+                  setExpandedGroups((prev) => {
+                    const next = new Set(prev)
+                    if (expanded) next.delete(group.label)
+                    else next.add(group.label)
+                    return next
+                  })
+                }
+                className="mt-2.5 text-[12px] font-semibold text-[#5A45FF] hover:underline"
+              >
+                {expanded ? 'Show fewer' : `Show all ${inGroup.length}`}
+              </button>
+            ) : null}
           </div>
         )
       })}
