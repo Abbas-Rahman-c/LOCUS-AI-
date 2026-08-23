@@ -67,6 +67,8 @@ const ENTITY_GROUPS: { label: string; types: EntityType[] }[] = [
   { label: 'Customers', types: ['Customer'] },
 ]
 
+const ALL_GROUPS = 'All Types'
+
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 }
@@ -136,10 +138,12 @@ function EntityCard({
 function BrowseMode({
   memories,
   query,
+  groupFilter,
   onSelect,
 }: {
   memories: CanonicalMemory[]
   query: string
+  groupFilter: string
   onSelect: (id: string) => void
 }) {
   const now = useMemo(() => new Date(), [])
@@ -149,10 +153,12 @@ function BrowseMode({
     for (const m of memories) {
       for (const e of m.entities) byId.set(e.entity_id, { name: e.canonical_name, type: e.entity_type, flagged: e.flagged })
     }
+    const allowedTypes = groupFilter === ALL_GROUPS ? null : ENTITY_GROUPS.find((g) => g.label === groupFilter)?.types ?? []
     return [...byId.entries()]
       .map(([id, v]) => ({ id, ...v, activity: computeEntityActivity(memories, id, now), description: entityDescription(memories, id) }))
       .filter((e) => e.name.toLowerCase().includes(query.toLowerCase()))
-  }, [memories, query, now])
+      .filter((e) => !allowedTypes || allowedTypes.includes(e.type))
+  }, [memories, query, groupFilter, now])
 
   if (entities.length === 0) {
     return <p className="mt-4 text-[13px] text-[#9CA3AF]">No entities found yet.</p>
@@ -196,22 +202,26 @@ function BrowseMode({
 function FindMode({
   memories,
   query,
+  groupFilter,
   onSelect,
 }: {
   memories: CanonicalMemory[]
   query: string
+  groupFilter: string
   onSelect: (id: string) => void
 }) {
   const entityOptions = useMemo(() => {
-    const byId = new Map<string, { name: string; flagged: boolean }>()
+    const byId = new Map<string, { name: string; type: EntityType; flagged: boolean }>()
     for (const m of memories) {
-      for (const e of m.entities) byId.set(e.entity_id, { name: e.canonical_name, flagged: e.flagged })
+      for (const e of m.entities) byId.set(e.entity_id, { name: e.canonical_name, type: e.entity_type, flagged: e.flagged })
     }
+    const allowedTypes = groupFilter === ALL_GROUPS ? null : ENTITY_GROUPS.find((g) => g.label === groupFilter)?.types ?? []
     return [...byId.entries()]
       .map(([id, v]) => ({ id, ...v }))
       .filter((e) => e.name.toLowerCase().includes(query.toLowerCase()))
+      .filter((e) => !allowedTypes || allowedTypes.includes(e.type))
       .sort((a, b) => a.name.localeCompare(b.name))
-  }, [memories, query])
+  }, [memories, query, groupFilter])
 
   return (
     <div className="mt-4 flex flex-wrap gap-2">
@@ -432,6 +442,13 @@ export default function MemoryTimelinePage() {
   const [error, setError] = useState('')
 
   const [pickerMode, setPickerMode] = useState<'browse' | 'find'>('browse')
+  // Filters which entity GROUP the picker shows (People/Projects/Teams/
+  // Systems & Topics/Customers) - distinct from typeFilter below, which
+  // filters MEMORY type on the already-selected entity's timeline. Group
+  // rather than raw entity_type since that's the axis Browse mode already
+  // organizes by - filtering to the same 5 buckets a user already sees as
+  // section headers, not a 7th vocabulary to learn.
+  const [pickerGroupFilter, setPickerGroupFilter] = useState<string>(ALL_GROUPS)
   const [typeFilter, setTypeFilter] = useState<TypeFilter>(ALL_TYPES)
   const [sourceFilter, setSourceFilter] = useState<SourceFilter>(ALL_SOURCES)
   const [statusFilter, setStatusFilter] = useState<StatusFilter>(ALL_STATUSES)
@@ -547,10 +564,25 @@ export default function MemoryTimelinePage() {
             className="mt-3 h-10 w-full rounded-full border border-[#E5E7EB] px-4 text-[13px] outline-none placeholder:text-[#9CA3AF] focus:border-[#5A45FF]"
           />
 
+          <div className="mt-3 flex flex-wrap gap-1.5">
+            {[ALL_GROUPS, ...ENTITY_GROUPS.map((g) => g.label)].map((label) => (
+              <button
+                key={label}
+                type="button"
+                onClick={() => setPickerGroupFilter(label)}
+                className={`rounded-full px-3 py-1 text-[12px] font-semibold transition-colors ${
+                  pickerGroupFilter === label ? 'bg-[#5A45FF] text-white' : 'bg-[#F3F4F6] text-[#6B7280] hover:bg-[#E5E7EB]'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
           {pickerMode === 'browse' ? (
-            <BrowseMode memories={memories} query={entityQuery} onSelect={selectEntity} />
+            <BrowseMode memories={memories} query={entityQuery} groupFilter={pickerGroupFilter} onSelect={selectEntity} />
           ) : (
-            <FindMode memories={memories} query={entityQuery} onSelect={selectEntity} />
+            <FindMode memories={memories} query={entityQuery} groupFilter={pickerGroupFilter} onSelect={selectEntity} />
           )}
         </div>
       ) : (
