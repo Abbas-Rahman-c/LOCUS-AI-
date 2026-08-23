@@ -5,6 +5,8 @@ import {
   dismissUnresolvedEntity,
   listUnresolvedEntities,
   mergeEntity,
+  searchEntities,
+  type EntitySearchResult,
   type ReviewQueueItem,
   type ReviewQueueSide,
 } from '../lib/api'
@@ -23,6 +25,76 @@ function SideCard({ side, label }: { side: ReviewQueueSide; label: string }) {
         {side.memory_count} {side.memory_count === 1 ? 'memory' : 'memories'}
         {side.sources.length > 0 ? ` · ${side.sources.join(', ')}` : ''}
       </p>
+    </div>
+  )
+}
+
+// Shown when a card has no suggested candidate at all (roughly two-thirds
+// of real pending rows - confirmNewEntity only pre-fills a candidate when
+// its own re-check found one; a manually-flagged "genuinely ambiguous"
+// row never gets one). Without this, those rows were a dead end - the
+// only options were two buttons that both just dismissed, with no way to
+// say "I found the match myself."
+function ManualMatchSearch({ onPick }: { onPick: (result: EntitySearchResult) => void }) {
+  const [query, setQuery] = useState('')
+  const [results, setResults] = useState<EntitySearchResult[]>([])
+  const [searching, setSearching] = useState(false)
+
+  useEffect(() => {
+    const trimmed = query.trim()
+    if (trimmed.length < 2) {
+      setResults([])
+      return
+    }
+    let active = true
+    setSearching(true)
+    const timer = setTimeout(() => {
+      searchEntities(trimmed)
+        .then((res) => {
+          if (active) setResults(res.entities)
+        })
+        .catch(() => {
+          if (active) setResults([])
+        })
+        .finally(() => {
+          if (active) setSearching(false)
+        })
+    }, 250)
+    return () => {
+      active = false
+      clearTimeout(timer)
+    }
+  }, [query])
+
+  return (
+    <div className="flex-1 rounded-xl border border-dashed border-[#E5E7EB] p-4">
+      <p className="text-[10px] font-semibold uppercase tracking-[0.06em] text-[#9CA3AF]">No suggested match — search for one</p>
+      <input
+        type="text"
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        placeholder="Search existing entities…"
+        className="mt-2 h-9 w-full rounded-lg border border-[#E5E7EB] px-3 text-[13px] outline-none placeholder:text-[#9CA3AF] focus:border-[#5A45FF]"
+      />
+      {searching ? <p className="mt-2 text-[12px] text-[#9CA3AF]">Searching…</p> : null}
+      {!searching && results.length > 0 ? (
+        <ul className="mt-2 flex flex-col gap-1">
+          {results.map((r) => (
+            <li key={r.entity_id}>
+              <button
+                type="button"
+                onClick={() => onPick(r)}
+                className="w-full rounded-lg px-2 py-1.5 text-left text-[13px] text-[#374151] hover:bg-[#F8F7FF] hover:text-[#5A45FF]"
+              >
+                {r.canonical_name} <span className="text-[11px] text-[#9CA3AF]">({r.entity_type})</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      {!searching && query.trim().length >= 2 && results.length === 0 ? (
+        <p className="mt-2 text-[12px] text-[#9CA3AF]">No matches found.</p>
+      ) : null}
     </div>
   )
 }
@@ -108,9 +180,9 @@ export default function EntityReviewQueuePage() {
             {current.right ? (
               <SideCard side={current.right} label="Possible match" />
             ) : (
-              <div className="flex flex-1 items-center justify-center rounded-xl border border-dashed border-[#E5E7EB] p-4 text-center text-[13px] text-[#9CA3AF]">
-                No existing entity looks like a match.
-              </div>
+              <ManualMatchSearch
+                onPick={(result) => void runAction(() => mergeEntity(current.id, result.entity_id))}
+              />
             )}
           </div>
 
@@ -146,7 +218,12 @@ export default function EntityReviewQueuePage() {
               >
                 Confirm as new
               </button>
-            ) : (
+            ) : null}
+            {/* "Keep separate" only makes sense when there's a specific
+                candidate to be separate FROM - with no suggested match,
+                it's just a second dismiss button next to "Skip for now"
+                doing the exact same thing. */}
+            {current.right ? (
               <button
                 type="button"
                 disabled={acting}
@@ -155,7 +232,7 @@ export default function EntityReviewQueuePage() {
               >
                 Keep separate
               </button>
-            )}
+            ) : null}
             <button
               type="button"
               disabled={acting}

@@ -579,3 +579,13 @@ export function mergeEntity(unresolvedId: string, targetEntityId: string): Promi
 export function dismissUnresolvedEntity(unresolvedId: string): Promise<{ dismissed: boolean }> {
   return memoryApiFetch('/entities/dismiss', { method: 'POST', body: JSON.stringify({ unresolved_id: unresolvedId }) })
 }
+
+export interface EntitySearchResult {
+  entity_id: string
+  canonical_name: string
+  entity_type: string
+}
+
+export function searchEntities(query: string): Promise<{ entities: EntitySearchResult[] }> {
+  return memoryApiFetch(`/entities/search?q=${encodeURIComponent(query)}`)
+}

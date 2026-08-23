@@ -401,6 +401,29 @@ async function entitySide(
   };
 }
 
+// Lets a reviewer manually find a merge target for a review-queue card
+// that has no suggested candidate at all - confirmNewEntity only flags a
+// merge-review row WITH a candidate when its own live re-check found one;
+// entity_ids passed straight to /debug/flag-entity-cluster with no
+// target_entity_id (the "genuinely ambiguous, human has to look" case)
+// land with candidate_entity_id null. Without this, roughly two-thirds of
+// real pending rows were a dead end: two buttons that both just dismiss,
+// no way to say "actually, merge it into this one I found myself."
+async function handleSearchEntities(req: Request): Promise<Response> {
+  const ctx = await getCurrentTenant(req);
+  const url = new URL(req.url);
+  const q = (url.searchParams.get("q") ?? "").trim();
+  if (q.length < 2) return json({ entities: [] });
+  const rows = await withTenant(ctx.tenantId, (sql) => sql`
+    select entity_id, canonical_name, entity_type
+    from public.entities
+    where tenant_id = ${ctx.tenantId} and status = 'current' and canonical_name ilike ${"%" + q + "%"}
+    order by canonical_name
+    limit 10
+  `);
+  return json({ entities: rows });
+}
+
 // Real-user route (moved above the service-role gate, see Deno.serve
 // dispatch) - a real bug found while wiring this up: these three routes
 // previously only accepted a client-supplied tenant_id (query param or
@@ -1052,6 +1075,13 @@ Deno.serve(async (req) => {
     // here from the service-role block below: a real logged-in user's
     // session token, not the service role key, is what the review-queue
     // page actually has to call these with.
+    if (path.endsWith("/entities/search") && req.method === "GET") {
+      try {
+        return await handleSearchEntities(req);
+      } catch (err) {
+        return json({ detail: err instanceof Error ? err.message : "Unauthorized" }, 401);
+      }
+    }
     if (path.endsWith("/entities/unresolved") && req.method === "GET") {
       try {
         return await handleListUnresolvedEntities(req);
