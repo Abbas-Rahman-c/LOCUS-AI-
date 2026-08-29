@@ -532,6 +532,39 @@ const TRIVIAL_ACK_PHRASES = new Set([
 // this (there is no \p{Emoji} property in ECMAScript regex).
 const EMOJI_ONLY_RE = /^[\p{Extended_Pictographic}\u200d\ufe0f\s]+$/u;
 
+// Gmail-specific: a reply almost always carries the entire prior thread
+// quoted below the new content - Gmail's own "On <date>, <name> <email>
+// wrote:" header, Outlook's "-----Original Message-----"/"From: ... Sent:
+// ... To: ... Subject: ..." block, or a run of "> "-prefixed lines. The
+// model is explicitly told to use only this event's own text, no
+// surrounding conversation (see TRIAGE_EXTRACTION_SYSTEM_PROMPT's opening
+// instruction) - so that quoted tail contributes zero extraction value
+// while still being billed as full-price input tokens on every single
+// reply in a thread. Gmail is the connector with the most reply-heavy
+// traffic, so this is the single biggest per-event cost driver caching
+// and the trivial-ack prefilter don't already touch.
+//
+// Conservative by construction: only cuts at a handful of highly
+// distinctive boundary markers that essentially never occur inside a
+// real, freshly-typed message. If none match, the body is returned
+// completely unchanged.
+const QUOTE_BOUNDARY_PATTERNS: RegExp[] = [
+  /^[ \t]*On .{0,120} wrote:[ \t]*$/m, // Gmail/Apple Mail/most clients' own reply header
+  /^[ \t]*-{2,}[ \t]*Original Message[ \t]*-{2,}/im, // Outlook
+  /^[ \t]*From:[ \t].*\n[ \t]*Sent:[ \t].*\n[ \t]*To:[ \t].*\n[ \t]*Subject:[ \t]/im, // Outlook quoted header block
+  /^[ \t]*_{10,}[ \t]*$/m, // Outlook's long separator line
+  /(?:^[ \t]*>.*(?:\n|$)){3,}/m, // 3+ consecutive "> "-quoted lines (classic plain-text quoting; (?:\n|$) so the LAST quoted line still counts when it's also the last line in the body, with no trailing newline)
+];
+
+function trimGmailQuotedReplyChain(body: string): string {
+  let cutAt = body.length;
+  for (const pattern of QUOTE_BOUNDARY_PATTERNS) {
+    const match = pattern.exec(body);
+    if (match && match.index < cutAt) cutAt = match.index;
+  }
+  return body.slice(0, cutAt).trim();
+}
+
 function isTriviallyDiscardable(rawContent: unknown, source: string): boolean {
   const text = extractEventText(rawContent, source).trim();
   // Empty text isn't this prefilter's job - that's a different, existing
@@ -813,6 +846,26 @@ async function handleIngestionMessageInner(msg: PgmqMsg): Promise<string> {
       });
     } catch (err) {
       console.error(`Failed to attach display name for ${payload.actor}:`, err);
+    }
+  }
+
+  // Trim Gmail's quoted reply chain before either prefilter or the
+  // extraction call sees this event - see trimGmailQuotedReplyChain's
+  // comment. Runs after the raw_events INSERT above, which already
+  // persisted the full untrimmed body, so nothing is lost for
+  // audit/evidence; only what's sent to Claude is reduced. This also
+  // raises the trivial-ack prefilter's hit rate right below: a bare "ok"
+  // reply is otherwise invisible to it, since the quoted chain underneath
+  // makes the whole body fail the exact-match check.
+  if (payload.source === "gmail" && payload.raw_content && typeof payload.raw_content === "object") {
+    const content = payload.raw_content as Record<string, unknown>;
+    if (typeof content.body === "string") {
+      const trimmed = trimGmailQuotedReplyChain(content.body);
+      // Never let trimming produce emptier content than triage would have
+      // seen otherwise - an email that's entirely a forwarded/quoted block
+      // with no new text above it is rare but real, and losing it outright
+      // would be a quality regression, not a cost optimization.
+      if (trimmed) content.body = trimmed;
     }
   }
 
