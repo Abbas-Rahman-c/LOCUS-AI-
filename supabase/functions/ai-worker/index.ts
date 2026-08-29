@@ -21,11 +21,7 @@
 import { withAdmin, withTenant } from "../_shared/db.ts";
 import { decryptToken } from "../_shared/tokenCrypto.ts";
 import { redactFinancialInfo } from "../_shared/financialRedaction.ts";
-// Reused rather than reimplemented a third time - api/index.ts and
-// historicalReplay.ts already each extract Gmail/Slack/Notion raw_content
-// into plain text the same way; this is the one already covering Gmail's
-// subject-prefix and Notion's page-properties cases correctly.
-import { extractEventText } from "../_shared/memory/historicalReplay.ts";
+import { cleanDisplayText } from "../_shared/htmlText.ts";
 
 const corsHeaders = { "Access-Control-Allow-Origin": "*" };
 
@@ -503,6 +499,69 @@ const TRIAGE_EXTRACTION_TOOL = {
     additionalProperties: false,
   },
 };
+
+// Gmail/Slack/Notion raw_content -> plain text. A private copy, same
+// field-extraction rules as api/index.ts's own private extractEventText
+// (Gmail's subject prefixed, Notion reads page properties, everything
+// else falls back to the first populated text-shaped field) - this used
+// to be a shared import from the memory layer's historicalReplay.ts, but
+// that whole module was removed along with the rest of that layer, so
+// this is its own copy now, matching api/index.ts's existing precedent of
+// each caller owning its copy rather than a shared module built for one
+// specific feature that no longer exists.
+// deno-lint-ignore no-explicit-any
+function notionPropertyText(prop: any): string | null {
+  if (!prop || typeof prop !== "object") return null;
+  switch (prop.type) {
+    case "title":
+    case "rich_text": {
+      const parts = (prop[prop.type] ?? []).map((t: { plain_text?: string }) => t.plain_text).filter(Boolean);
+      return parts.length > 0 ? parts.join("") : null;
+    }
+    case "select":
+      return prop.select?.name ?? null;
+    case "status":
+      return prop.status?.name ?? null;
+    case "date":
+      return prop.date?.start ?? null;
+    default:
+      return null;
+  }
+}
+
+// deno-lint-ignore no-explicit-any
+function extractNotionPageText(page: any): string {
+  const properties = page.properties ?? {};
+  // deno-lint-ignore no-explicit-any
+  const titleEntry = Object.entries(properties).find(([, p]: [string, any]) => p?.type === "title");
+  const title = titleEntry ? notionPropertyText(titleEntry[1]) : null;
+  const lines: string[] = [];
+  if (title) lines.push(title);
+  for (const [name, prop] of Object.entries(properties)) {
+    if (titleEntry && name === titleEntry[0]) continue;
+    const value = notionPropertyText(prop);
+    if (value) lines.push(`${name}: ${value}`);
+  }
+  return lines.length > 0 ? lines.join("\n") : (page.url ?? "Notion page");
+}
+
+function extractEventText(rawContent: unknown, source: string): string {
+  if (!rawContent || typeof rawContent !== "object") return cleanDisplayText(String(rawContent ?? ""));
+  const content = rawContent as Record<string, unknown>;
+  if (source === "gmail") {
+    const subject = typeof content.subject === "string" ? content.subject : "";
+    const body = typeof content.body === "string" ? cleanDisplayText(content.body) : "";
+    return subject ? `Subject: ${subject}\n${body}` : body;
+  }
+  if (source === "notion" && "properties" in content) {
+    return cleanDisplayText(extractNotionPageText(content));
+  }
+  for (const field of ["text", "body", "content", "message", "description", "snippet"]) {
+    const val = content[field];
+    if (typeof val === "string" && val) return cleanDisplayText(val);
+  }
+  return cleanDisplayText(JSON.stringify(content));
+}
 
 // Deterministic DISCARD prefilter - catches the same "clearly not
 // decision-relevant" categories the model's own triage step already lists

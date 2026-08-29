@@ -21,11 +21,6 @@
 
 import { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { getServiceClient } from "../_shared/supabase.ts";
-import { withTenant } from "../_shared/db.ts";
-import { loadMemoriesForTenant } from "../_shared/memory/loadMemories.ts";
-import { isMemoryAccessibleBatch } from "../_shared/memory/permissions.ts";
-import { resolvePermissionScopes } from "../_shared/tenantAuth.ts";
-import type { CanonicalMemoryObject } from "../_shared/memory/types.ts";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -182,28 +177,6 @@ const TOOL_SCHEMAS = [
       required: ["decision_id"],
     },
   },
-  // Spec Section 11: prototype-only spike, not a production, action-blocking
-  // feature this phase. Advisory only - returns data for the calling agent
-  // to consider, never blocks or auto-rejects anything. Reads from the new
-  // Memory Intelligence layer (memories, not the decisions table) since
-  // that's the layer with real temporal/conflict state to check against.
-  {
-    name: "check_action",
-    description:
-      "Advisory only, never blocking: checks whether a planned action might conflict with or duplicate existing memory (current or recently-superseded) about the given entities. Returns relevant memories and a plain-language note for the calling agent to consider - it never rejects or blocks the action itself.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        description: { type: "string", description: "Plain-language description of the action being considered." },
-        affected_entity_ids: {
-          type: "array",
-          items: { type: "string", format: "uuid" },
-          description: "Entity ids (from the memory layer's entities table) this action would affect.",
-        },
-      },
-      required: ["description", "affected_entity_ids"],
-    },
-  },
 ];
 
 // ── Tool implementations ───────────────────────────────────────────────────────
@@ -329,64 +302,6 @@ async function toolGetDecisionContext(
       permalink: s.permalink,
       cited_at: s.created_at,
     })),
-  };
-}
-
-// Prototype-only spike (spec Section 11) - advisory, never blocking. Open
-// questions the spec itself flags as unresolved by design (false-positive
-// handling, how this sequences against the rest of the roadmap) are NOT
-// answered here - this is a hypothesis to validate, not a committed
-// interface, per the spec's own instruction.
-async function toolCheckAction(
-  args: Record<string, unknown>,
-  ctx: TenantContext,
-): Promise<Record<string, unknown>> {
-  const description = String(args.description ?? "").trim();
-  const affectedEntityIds = Array.isArray(args.affected_entity_ids)
-    ? args.affected_entity_ids.map(String)
-    : [];
-  if (!description || affectedEntityIds.length === 0) {
-    return { hasRelevantMemory: false, memories: [], note: "description and affected_entity_ids are both required." };
-  }
-
-  const permissionScopes = await resolvePermissionScopes(ctx.userId, ctx.tenantId);
-  const accessible = await withTenant(ctx.tenantId, async (sql) => {
-    const allMemories = await loadMemoriesForTenant(sql, ctx.tenantId);
-    const accessFlags = await isMemoryAccessibleBatch(sql, ctx.tenantId, permissionScopes, allMemories.map((m) => m.permissions.visible_to));
-    return allMemories.filter((_, i) => accessFlags[i]);
-  });
-
-  // "current or recently-superseded" per spec - superseded is included
-  // deliberately (an agent about to redo something already reversed once
-  // is exactly the case this tool exists to flag), unresolved conflicts
-  // too (the most relevant state of all to surface before acting).
-  const relevant = accessible.filter(
-    (m) =>
-      m.entities.some((e) => affectedEntityIds.includes(e.entity_id)) &&
-      (m.status === "current" || m.status === "superseded" || m.status === "unresolved"),
-  );
-
-  let note: string;
-  if (relevant.length === 0) {
-    note = "No relevant memory found for the given entities - nothing on record to flag.";
-  } else {
-    const unresolved = relevant.filter((m) => m.status === "unresolved");
-    const superseded = relevant.filter((m) => m.status === "superseded");
-    const parts: string[] = [];
-    if (unresolved.length > 0) parts.push(`${unresolved.length} unresolved conflict${unresolved.length === 1 ? "" : "s"} on record for these entities`);
-    if (superseded.length > 0) parts.push(`${superseded.length} superseded memor${superseded.length === 1 ? "y" : "ies"} - this may be revisiting something already changed`);
-    note = parts.length > 0
-      ? `Found ${relevant.length} relevant memor${relevant.length === 1 ? "y" : "ies"}: ${parts.join("; ")}.`
-      : `Found ${relevant.length} relevant, current memor${relevant.length === 1 ? "y" : "ies"} - review before proceeding.`;
-  }
-
-  return {
-    hasRelevantMemory: relevant.length > 0,
-    memories: relevant.map((m: CanonicalMemoryObject) => ({
-      memory_id: m.memory_id, type: m.type, title: m.title, summary: m.summary,
-      status: m.status, valid_from: m.valid_from,
-    })),
-    note,
   };
 }
 
@@ -532,8 +447,6 @@ Deno.serve(async (req: Request) => {
       result = await toolSearchDecisions(toolArgs, ctx, supabase);
     } else if (toolName === "get_decision_context") {
       result = await toolGetDecisionContext(toolArgs, ctx, supabase);
-    } else if (toolName === "check_action") {
-      result = await toolCheckAction(toolArgs, ctx);
     } else {
       return toolError(rpcId, `Unknown tool: ${toolName}`);
     }

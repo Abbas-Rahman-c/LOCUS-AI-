@@ -20,7 +20,6 @@ const NAV_LINKS = [
   { label: 'How it works', to: '/dashboard/how-it-works' },
   { label: 'Dashboard', to: '/dashboard' },
   { label: 'Memory Explorer', to: '/decision-log' },
-  { label: 'Memory Timeline', to: '/memory-timeline' },
   { label: 'Team Pulse', to: '/team-pulse' },
   { label: 'Settings', to: '/settings' },
 ] as const
