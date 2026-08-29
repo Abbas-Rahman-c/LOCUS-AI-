@@ -21,6 +21,11 @@
 import { withAdmin, withTenant } from "../_shared/db.ts";
 import { decryptToken } from "../_shared/tokenCrypto.ts";
 import { redactFinancialInfo } from "../_shared/financialRedaction.ts";
+// Reused rather than reimplemented a third time - api/index.ts and
+// historicalReplay.ts already each extract Gmail/Slack/Notion raw_content
+// into plain text the same way; this is the one already covering Gmail's
+// subject-prefix and Notion's page-properties cases correctly.
+import { extractEventText } from "../_shared/memory/historicalReplay.ts";
 
 const corsHeaders = { "Access-Control-Allow-Origin": "*" };
 
@@ -499,6 +504,44 @@ const TRIAGE_EXTRACTION_TOOL = {
   },
 };
 
+// Deterministic DISCARD prefilter - catches the same "clearly not
+// decision-relevant" categories the model's own triage step already lists
+// (see TRIAGE_EXTRACTION_SYSTEM_PROMPT's DISCARD section: pure acks, emoji
+// reactions, bare greetings) and skips the Claude call entirely for them -
+// $0, not a discount, same treatment as the likely_bulk_mail prefilter
+// below. Deliberately conservative: matches only the WHOLE normalized
+// message against a fixed allowlist, never a substring or prefix, so "ok,
+// let's go with Postgres" is never touched - only a message that IS
+// entirely one of these phrases and nothing else. A false DISCARD here is
+// silent and unrecoverable (the event never reaches the model at all), so
+// this stays narrow by design; anything that isn't a clean match still
+// goes to the model exactly as before.
+const TRIVIAL_ACK_PHRASES = new Set([
+  "ok", "okay", "k", "kk", "yep", "yup",
+  "sounds good", "lgtm", "+1",
+  "thanks", "thank you", "thx", "ty",
+  "np", "no problem", "got it",
+  "cool", "nice", "perfect", "awesome", "great",
+  "hi", "hello", "hey", "morning", "good morning", "gm",
+]);
+
+// A message made up entirely of emoji/pictographic characters (plus
+// whitespace, zero-width joiners, and variation selectors) - the other
+// DISCARD example the prompt names explicitly ("emoji ack with no new
+// content"). \p{Extended_Pictographic} is the real Unicode property for
+// this (there is no \p{Emoji} property in ECMAScript regex).
+const EMOJI_ONLY_RE = /^[\p{Extended_Pictographic}\u200d\ufe0f\s]+$/u;
+
+function isTriviallyDiscardable(rawContent: unknown, source: string): boolean {
+  const text = extractEventText(rawContent, source).trim();
+  // Empty text isn't this prefilter's job - that's a different, existing
+  // failure mode (decryption/extraction issue), not a trivial-content one.
+  if (!text) return false;
+  if (EMOJI_ONLY_RE.test(text)) return true;
+  const normalized = text.toLowerCase().replace(/[!.?]+$/, "").trim();
+  return TRIVIAL_ACK_PHRASES.has(normalized);
+}
+
 function buildEventUserMessage(event: {
   source: string; actor: string; thread_ref?: string | null;
   permission_scope: string[]; raw_content: unknown;
@@ -783,6 +826,21 @@ async function handleIngestionMessageInner(msg: PgmqMsg): Promise<string> {
     });
     await pgmqDelete("ingestion", msg.msg_id);
     return "prefiltered_bulk_mail";
+  }
+
+  // Pre-filter: pure acks, emoji-only reactions, and bare greetings - the
+  // same DISCARD categories the model would return anyway (see
+  // isTriviallyDiscardable's comment), answered here for $0 instead of a
+  // paid Haiku call. Every one of these currently still reaches the model
+  // just to be told "no content here" - this is the actual cost driver
+  // caching alone doesn't touch, since caching only discounts the shared
+  // system prompt, not the per-event call itself.
+  if (isTriviallyDiscardable(payload.raw_content, payload.source)) {
+    await withTenant(tenantId, async (sql) => {
+      await sql`UPDATE public.raw_events SET pipeline_status = 'done' WHERE id = ${rawEventId}`;
+    });
+    await pgmqDelete("ingestion", msg.msg_id);
+    return "prefiltered_trivial_ack";
   }
 
   // Triage + extraction, merged into one call (see TRIAGE_EXTRACTION_SYSTEM_PROMPT's
