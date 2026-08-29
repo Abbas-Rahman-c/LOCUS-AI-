@@ -610,16 +610,22 @@ async function resolveDeterministicEntity(
   sql: any, tenantId: string, entityType: "Person" | "Team" | "Project",
   sourceAnchor: string, canonicalName: string,
 ): Promise<string> {
+  // 'current' is the real status value entities.status accepts (check
+  // (status in ('current', 'superseded')), added by
+  // 20260822050000_entity_supersession_and_merge_review.sql) - 'active' was
+  // a mistaken carry-over from source_connections.status, a different
+  // column on a different table, and would have failed every single insert
+  // with a check-constraint violation. Caught in review before merge.
   const existing = await sql`
     SELECT entity_id FROM public.entities
-    WHERE tenant_id = ${tenantId} AND entity_type = ${entityType} AND source_anchor = ${sourceAnchor} AND status = 'active'
+    WHERE tenant_id = ${tenantId} AND entity_type = ${entityType} AND source_anchor = ${sourceAnchor} AND status = 'current'
   `;
   if (existing.length > 0) return existing[0].entity_id as string;
 
   const created = await sql`
     INSERT INTO public.entities (tenant_id, entity_type, canonical_name, source_anchor, status)
-    VALUES (${tenantId}, ${entityType}, ${canonicalName}, ${sourceAnchor}, 'active')
-    ON CONFLICT (tenant_id, entity_type, source_anchor) WHERE source_anchor IS NOT NULL AND status = 'active'
+    VALUES (${tenantId}, ${entityType}, ${canonicalName}, ${sourceAnchor}, 'current')
+    ON CONFLICT (tenant_id, entity_type, source_anchor) WHERE source_anchor IS NOT NULL AND status = 'current'
     DO UPDATE SET canonical_name = EXCLUDED.canonical_name
     RETURNING entity_id
   `;
@@ -975,11 +981,11 @@ async function handleIngestionMessageInner(msg: PgmqMsg): Promise<string> {
   const memoryType = MEMORY_TYPE[extraction.record_type] ?? "Decision";
 
   // Persist (memory + entities + provenance), reconcile, mark done, enqueue embedding.
-  const memoryId = await withTenant(tenantId, async (sql) => {
+  const { memoryId, skipEmbedding } = await withTenant(tenantId, async (sql): Promise<{ memoryId: string; skipEmbedding: boolean }> => {
     const existingMemory = await sql`
       SELECT memory_id FROM public.memory_source_events WHERE tenant_id = ${tenantId} AND raw_event_id = ${rawEventId}
     `;
-    if (existingMemory.length > 0) return existingMemory[0].memory_id as string;
+    if (existingMemory.length > 0) return { memoryId: existingMemory[0].memory_id as string, skipEmbedding: true };
 
     const payloadJson = JSON.stringify({
       attribute_key: extraction.attribute_key,
@@ -1053,6 +1059,8 @@ async function handleIngestionMessageInner(msg: PgmqMsg): Promise<string> {
 
     // Bounded 3-way reconciliation (memory-explorer-upgrade Section 4).
     const reconciliation = await boundedReconcile(sql, tenantId, memoryType, extraction.attribute_key, newMemoryId);
+    let finalMemoryId = newMemoryId;
+    let skipEmbedding = false;
     for (const r of reconciliation) {
       if (r.relation === "update") {
         await sql`UPDATE public.memories SET status = 'superseded', valid_until = now() WHERE memory_id = ${r.candidateMemoryId}`;
@@ -1064,21 +1072,41 @@ async function handleIngestionMessageInner(msg: PgmqMsg): Promise<string> {
           VALUES (${tenantId}, ${newMemoryId}, ${r.candidateMemoryId}, 'conflict')
           ON CONFLICT (memory_id, related_memory_id) DO NOTHING
         `;
-      }
-      // same_fact: the new memory is redundant with an existing current
-      // one - fold it in as additional evidence rather than a second
-      // "current" row for the same attribute_key, which would break the
-      // bounded-candidate assumption (at most a few current rows/key).
-      else if (r.relation === "same_fact") {
-        await sql`UPDATE public.memories SET status = 'superseded', valid_until = now(), supersedes = ${r.candidateMemoryId} WHERE memory_id = ${newMemoryId}`;
+      } else if (r.relation === "same_fact") {
+        // The new memory restates an already-current one - not an update,
+        // not a conflict. Per review feedback: marking the new row
+        // 'superseded' made a freshly-reconfirmed fact display a
+        // "Superseded" badge, which reads backwards (nothing was
+        // replaced). Instead, attach this event's real provenance to the
+        // EXISTING memory as additional evidence and drop the redundant
+        // new row outright - the existing memory's content didn't change,
+        // so it doesn't need a new embedding either.
+        await sql`
+          INSERT INTO public.memory_source_events (tenant_id, memory_id, raw_event_id)
+          VALUES (${tenantId}, ${r.candidateMemoryId}, ${rawEventId})
+          ON CONFLICT DO NOTHING
+        `;
+        await sql`
+          INSERT INTO public.memory_citations (tenant_id, memory_id, raw_event_id, excerpt_ref)
+          VALUES (${tenantId}, ${r.candidateMemoryId}, ${rawEventId}, ${permalink ?? "full-content"})
+        `;
+        await sql`DELETE FROM public.memories WHERE memory_id = ${newMemoryId}`;
+        finalMemoryId = r.candidateMemoryId;
+        skipEmbedding = true;
+        break; // newMemoryId no longer exists - nothing left in `reconciliation` can apply to it
       }
     }
 
     await sql`UPDATE public.raw_events SET pipeline_status = 'done' WHERE id = ${rawEventId}`;
-    return newMemoryId;
+    return { memoryId: finalMemoryId, skipEmbedding };
   });
 
-  await pgmqSend("embedding_queue", { tenant_id: tenantId, memory_id: memoryId });
+  // skipEmbedding covers two cases: a retried duplicate (memory already has
+  // its embedding from the first pass) and same_fact reconciliation (the
+  // surviving memory's content is unchanged - only its provenance grew).
+  if (!skipEmbedding) {
+    await pgmqSend("embedding_queue", { tenant_id: tenantId, memory_id: memoryId });
+  }
   await pgmqDelete("ingestion", msg.msg_id);
   return "persisted";
 }

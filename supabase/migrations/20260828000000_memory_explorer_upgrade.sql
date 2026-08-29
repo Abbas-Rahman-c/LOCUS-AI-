@@ -44,9 +44,31 @@ create index if not exists idx_memories_tags on public.memories using gin (tags)
 
 -- ── Direct raw_events provenance (retires the fixture-event indirection
 -- for new writes going forward) ───────────────────────────────────────
+-- memory_source_events was originally keyed by a composite primary key,
+-- primary key (memory_id, fixture_event_id) - unlike memory_citations,
+-- which already uses a surrogate `id` PK and isn't affected by any of this.
+-- Postgres refuses to drop NOT NULL on a column that's still part of a
+-- primary key ("column ... is in a primary key"), so the very next
+-- statement here would have failed outright and this migration could never
+-- have applied at all. Caught in review (self-caught, re-verifying the
+-- reconciliation fix's own INSERT/ON CONFLICT against this table's real
+-- constraints) before this ever reached a real database. Fixed by moving
+-- to the same surrogate-id-PK shape memory_citations already uses, then
+-- replacing the uniqueness the old composite PK gave with two partial
+-- unique indexes - one per provenance source - so a given memory can't
+-- gain a duplicate source_events row from either path, and ON CONFLICT has
+-- a real constraint to target.
+alter table public.memory_source_events drop constraint if exists memory_source_events_pkey;
+alter table public.memory_source_events add column if not exists id uuid not null default gen_random_uuid();
+alter table public.memory_source_events add primary key (id);
+
 alter table public.memory_source_events add column if not exists raw_event_id uuid references public.raw_events(id) on delete cascade;
 alter table public.memory_source_events alter column fixture_event_id drop not null;
 create index if not exists idx_memory_source_events_raw_event on public.memory_source_events(raw_event_id);
+create unique index if not exists idx_memory_source_events_unique_fixture
+  on public.memory_source_events(memory_id, fixture_event_id) where fixture_event_id is not null;
+create unique index if not exists idx_memory_source_events_unique_raw
+  on public.memory_source_events(memory_id, raw_event_id) where raw_event_id is not null;
 
 alter table public.memory_citations add column if not exists raw_event_id uuid references public.raw_events(id) on delete cascade;
 alter table public.memory_citations alter column fixture_event_id drop not null;
@@ -70,10 +92,17 @@ alter table public.memory_citations add constraint memory_citations_one_source
 -- of going through embedding similarity or judgeEntityMatch. Unique per
 -- (tenant, entity_type, anchor) so two different connectors' ids can never
 -- collide across tenants or types.
+-- Predicate is status = 'current', matching entities.status's real check
+-- constraint (current | superseded, from
+-- 20260822050000_entity_supersession_and_merge_review.sql) - not 'active',
+-- which isn't a value this column accepts at all. Caught in review: an
+-- earlier draft of this migration and ai-worker's own upsert both wrote
+-- 'active' by mistake, which would have failed every single entity insert
+-- with a check-constraint violation before this ever reached production.
 alter table public.entities add column if not exists source_anchor text;
 create unique index if not exists idx_entities_source_anchor
   on public.entities(tenant_id, entity_type, source_anchor)
-  where source_anchor is not null and status = 'active';
+  where source_anchor is not null and status = 'current';
 
 -- ── Bounded reconciliation candidate lookup (Section 4) ────────────────
 -- The exact index the doc's own pre-filter query needs: tenant + type +
