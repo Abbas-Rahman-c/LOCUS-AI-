@@ -1385,6 +1385,97 @@ async function handleDigest(req: Request, url: URL): Promise<Response> {
   }
 }
 
+// ── Handler: GET /attention ────────────────────────────────────────────
+//
+// Rebuilt for the decisions pipeline after the memory-intelligence layer
+// (which the old Attention Strip read from) was removed entirely -
+// deliberately the smallest useful version: unresolved conflicts only,
+// nothing else. Pure SQL read of decision_conflicts, a table the existing
+// pipeline already populates during normal ingestion (see ai-worker's
+// conflict-detection call) - this endpoint makes zero Claude API calls of
+// its own, $0 marginal cost per request, no matter how often the
+// dashboard polls it.
+//
+// decision_conflicts only ever stores 'contradicts' pairs - 'duplicates'
+// auto-resolves via decisions.superseded_by and never reaches this table
+// (see ai-worker/index.ts's own comment on that split), so every row here
+// is already exactly "needs a human to look at it," no relationship
+// filter needed.
+
+interface AttentionConflictItem {
+  id: string;
+  decision_id: string;
+  decision_statement: string;
+  related_decision_id: string;
+  related_decision_statement: string;
+  reason: string;
+  confidence: number;
+  created_at: string;
+}
+
+const ATTENTION_STRIP_LIMIT = 4;
+// Pulled wider than the strip actually shows so permission filtering
+// (below) has real rows left to filter from - matching the same
+// over-fetch-then-filter shape the rest of this file already uses for
+// retrieval (see hybridSearch's fetchK vs top_k).
+const ATTENTION_CANDIDATE_LIMIT = 20;
+
+async function handleAttention(req: Request): Promise<Response> {
+  let ctx: TenantContext;
+  try {
+    ctx = await getCurrentTenant(req);
+  } catch (err) {
+    return errorResponse(401, err instanceof Error ? err.message : "Unauthorized");
+  }
+
+  try {
+    const permissionScopes = await resolvePermissionScopes(ctx.userId, ctx.tenantId);
+
+    const rows = await withTenant(ctx.tenantId, (sql) =>
+      sql`
+        SELECT
+          dc.id, dc.reason, dc.confidence, dc.created_at,
+          d1.id AS decision_id, d1.decision_statement AS decision_statement, d1.permission_scope AS decision_permission_scope,
+          d2.id AS related_decision_id, d2.decision_statement AS related_decision_statement, d2.permission_scope AS related_permission_scope
+        FROM public.decision_conflicts dc
+        JOIN public.decisions d1 ON d1.id = dc.decision_id AND d1.tenant_id = dc.tenant_id
+        JOIN public.decisions d2 ON d2.id = dc.related_decision_id AND d2.tenant_id = dc.tenant_id
+        WHERE dc.tenant_id = ${ctx.tenantId}
+        ORDER BY dc.created_at DESC
+        LIMIT ${ATTENTION_CANDIDATE_LIMIT}
+      `
+    );
+
+    // A conflict is attention-worthy for this viewer only if they could
+    // see BOTH decisions it's between - showing "X conflicts with Y" when
+    // the viewer can't even see what Y is would leak its existence.
+    const accessible = (rows as unknown as {
+      id: string; reason: string; confidence: number; created_at: string;
+      decision_id: string; decision_statement: string; decision_permission_scope: string[] | null;
+      related_decision_id: string; related_decision_statement: string; related_permission_scope: string[] | null;
+    }[]).filter((r) =>
+      isDecisionAccessible(permissionScopes, { permission_scope: r.decision_permission_scope ?? [] } as RetrievalMatch) &&
+      isDecisionAccessible(permissionScopes, { permission_scope: r.related_permission_scope ?? [] } as RetrievalMatch)
+    );
+
+    const items: AttentionConflictItem[] = accessible.slice(0, ATTENTION_STRIP_LIMIT).map((r) => ({
+      id: r.id,
+      decision_id: r.decision_id,
+      decision_statement: r.decision_statement,
+      related_decision_id: r.related_decision_id,
+      related_decision_statement: r.related_decision_statement,
+      reason: r.reason,
+      confidence: r.confidence,
+      created_at: r.created_at,
+    }));
+
+    return jsonResponse({ items, total: accessible.length });
+  } catch (err) {
+    console.error("attention failed:", err);
+    return errorResponse(500, "Failed to load attention items");
+  }
+}
+
 // ── Handler: POST /billing/checkout (Stripe REST API, no SDK needed) ─────
 
 async function createCheckoutSession(tenantId: string, plan: string): Promise<{ checkout_url: string; session_id: string }> {
@@ -1526,6 +1617,7 @@ Deno.serve(async (req: Request) => {
     if (path.includes("/api/v1/decisions")) return await handleDecisions(req, url);
     if (path.endsWith("/search") && req.method === "POST") return await handleSearch(req);
     if (path.endsWith("/digest") && req.method === "GET") return await handleDigest(req, url);
+    if (path.endsWith("/attention") && req.method === "GET") return await handleAttention(req);
     if (path.endsWith("/billing/checkout") && req.method === "POST") return await handleBillingCheckout(req);
     return errorResponse(404, "Not found");
   } catch (err) {

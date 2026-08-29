@@ -1,3 +1,4 @@
+import { AttentionStrip } from '../components/AttentionStrip'
 import { DashboardSearch } from '../components/DashboardSearch'
 import { DashboardStats } from '../components/DashboardStats'
 import { DashboardSources } from '../components/DashboardSources'
@@ -6,6 +7,7 @@ import { DashboardCaptures } from '../components/DashboardCaptures'
 export default function MainDashboardEntry() {
   return (
     <main className="mx-auto max-w-[1120px] px-8 py-8">
+      <AttentionStrip />
       <DashboardSearch />
       <DashboardStats />
 

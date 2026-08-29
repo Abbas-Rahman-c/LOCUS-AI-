@@ -379,3 +379,30 @@ export async function listAllDecisions(hardCap = 2000): Promise<DecisionOut[]> {
 
   return items
 }
+
+// ---- Attention strip ----
+// Rebuilt after the memory-intelligence layer was removed - reads
+// unresolved decision conflicts (decision_conflicts, real data the
+// existing pipeline already produces) via GET /attention on the same
+// api Edge Function everything else here talks to, not a separate
+// service. No new Claude/LLM calls anywhere in this path.
+
+export interface AttentionConflictItem {
+  id: string
+  decision_id: string
+  decision_statement: string
+  related_decision_id: string
+  related_decision_statement: string
+  reason: string
+  confidence: number
+  created_at: string
+}
+
+export interface AttentionResponse {
+  items: AttentionConflictItem[]
+  total: number
+}
+
+export function listAttentionItems(): Promise<AttentionResponse> {
+  return apiFetch<AttentionResponse>('/attention')
+}
