@@ -1290,11 +1290,33 @@ Deno.serve(async (req: Request) => {
   // instead of a real error. Wrapping the whole handler guarantees the
   // caller always sees what actually happened.
   try {
-    const ingestionMsgs = await pgmqRead("ingestion", INGESTION_BATCH);
-    const ingestionResults = await runBounded(ingestionMsgs, CONCURRENCY, handleIngestionMessage);
-
-    const embeddingMsgs = await pgmqRead("embedding_queue", EMBEDDING_BATCH);
-    const embeddingResults = await runBounded(embeddingMsgs, CONCURRENCY, handleEmbeddingMessage);
+    // The two queues are independent - an embedding job's tenant_id/
+    // decision_id already exists in the DB by the time it was enqueued
+    // (a prior invocation's ingestion pass, not this one), so reading and
+    // processing embedding_queue never depends on anything THIS
+    // invocation's ingestion pass does. They used to run fully
+    // sequentially (embedding didn't even start until every ingestion
+    // message finished), which meant an invocation with real work in both
+    // queues paid for both durations back to back - the single biggest
+    // per-invocation latency cost, and pure waste since neither stage was
+    // ever waiting on the other. Running both stages concurrently doesn't
+    // change what either one does, only their wall-clock overlap: worst
+    // case this invocation's own newly-enqueued embedding jobs simply
+    // aren't in the batch this embedding read snapshotted (they get picked
+    // up next tick instead, ~60s later at most) - not a correctness
+    // change, this already happens today in any bursty invocation.
+    const [[ingestionMsgs, ingestionResults], [embeddingMsgs, embeddingResults]] = await Promise.all([
+      (async (): Promise<[PgmqMsg[], { status: string; error?: string }[]]> => {
+        const msgs = await pgmqRead("ingestion", INGESTION_BATCH);
+        const results = await runBounded(msgs, CONCURRENCY, handleIngestionMessage);
+        return [msgs, results];
+      })(),
+      (async (): Promise<[PgmqMsg[], { status: string; error?: string }[]]> => {
+        const msgs = await pgmqRead("embedding_queue", EMBEDDING_BATCH);
+        const results = await runBounded(msgs, CONCURRENCY, handleEmbeddingMessage);
+        return [msgs, results];
+      })(),
+    ]);
 
     const summarize = (results: { status: string; error?: string }[]) => {
       const counts: Record<string, number> = {};
