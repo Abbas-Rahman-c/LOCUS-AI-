@@ -22,8 +22,8 @@ type SettingsSection =
   | 'Notifications'
 
 type CaptureMode = 'decisions-actions' | 'decisions-only'
-type SourceFilter = 'All' | 'Gmail' | 'Notion' | 'Slack'
-type CaptureSource = 'slack' | 'notion' | 'gmail'
+type SourceFilter = 'All' | 'Gmail' | 'Notion' | 'Slack' | 'Jira' | 'Confluence' | 'Discord'
+type CaptureSource = 'slack' | 'notion' | 'gmail' | 'jira' | 'confluence' | 'discord'
 
 type ChannelRow = {
   id: string
@@ -38,6 +38,9 @@ const SOURCE_APP_LABELS: Record<CaptureSource, Exclude<SourceFilter, 'All'>> = {
   slack: 'Slack',
   notion: 'Notion',
   gmail: 'Gmail',
+  jira: 'Jira',
+  confluence: 'Confluence',
+  discord: 'Discord',
 }
 
 type SearchHistoryItem = {
@@ -56,7 +59,7 @@ const SIDEBAR_ITEMS: { id: SettingsSection; label: string }[] = [
   { id: 'Notifications', label: 'Notifications' },
 ]
 
-const SOURCE_FILTERS: SourceFilter[] = ['All', 'Gmail', 'Notion', 'Slack']
+const SOURCE_FILTERS: SourceFilter[] = ['All', 'Gmail', 'Notion', 'Slack', 'Jira', 'Confluence', 'Discord']
 
 function AccountIcon() {
   return (
@@ -851,10 +854,58 @@ function ConnectedSourcesSettings() {
 function CaptureControlsSettings() {
   const [pauseCapture, setPauseCapture] = useState(false)
   const [captureMode, setCaptureMode] = useState<CaptureMode>('decisions-actions')
+  const [memoryModeError, setMemoryModeError] = useState('')
   const [sourceFilter, setSourceFilter] = useState<SourceFilter>('All')
   const [channels, setChannels] = useState<ChannelRow[]>([])
   const [isLoadingChannels, setIsLoadingChannels] = useState(true)
   const [channelsError, setChannelsError] = useState('')
+
+  // Real bug found live: both controls below used to be pure local state,
+  // no backend connection at all - clicking either one just changed which
+  // button looked selected, with zero actual effect on ai-worker. Loads
+  // the tenant's real, persisted setting on mount.
+  useEffect(() => {
+    let active = true
+    getSupabaseClient()
+      .functions.invoke('capture-source-rules', { body: { action: 'get_memory_mode' } })
+      .then(({ data, error }) => {
+        if (!active || error) return
+        setPauseCapture(Boolean(data?.learning_paused))
+        setCaptureMode(data?.core_knowledge_only ? 'decisions-only' : 'decisions-actions')
+      })
+      .catch(() => {
+        // Leave the defaults (unpaused, full context) if this fails to load.
+      })
+    return () => {
+      active = false
+    }
+  }, [])
+
+  const togglePauseCapture = async () => {
+    const next = !pauseCapture
+    setPauseCapture(next)
+    setMemoryModeError('')
+    const { error } = await getSupabaseClient().functions.invoke('capture-source-rules', {
+      body: { action: 'set_memory_mode', learning_paused: next },
+    })
+    if (error) {
+      setPauseCapture(!next)
+      setMemoryModeError(error.message)
+    }
+  }
+
+  const changeCaptureMode = async (mode: CaptureMode) => {
+    const previous = captureMode
+    setCaptureMode(mode)
+    setMemoryModeError('')
+    const { error } = await getSupabaseClient().functions.invoke('capture-source-rules', {
+      body: { action: 'set_memory_mode', core_knowledge_only: mode === 'decisions-only' },
+    })
+    if (error) {
+      setCaptureMode(previous)
+      setMemoryModeError(error.message)
+    }
+  }
 
   useEffect(() => {
     let active = true
@@ -941,6 +992,9 @@ function CaptureControlsSettings() {
         <h3 className="mb-3 text-[11px] font-semibold tracking-[0.08em] text-[#9CA3AF] uppercase">
           Memory Mode
         </h3>
+        {memoryModeError ? (
+          <p className="mb-3 text-[13px] text-[#DC2626]">{memoryModeError}</p>
+        ) : null}
 
         <div className="rounded-2xl border border-[#E8E8ED] bg-white p-5 shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
           <div className="flex items-start justify-between gap-4">
@@ -956,7 +1010,7 @@ function CaptureControlsSettings() {
             </div>
             <Toggle
               checked={pauseCapture}
-              onChange={() => setPauseCapture((value) => !value)}
+              onChange={() => void togglePauseCapture()}
               label="Pause all learning"
             />
           </div>
@@ -965,7 +1019,7 @@ function CaptureControlsSettings() {
         <div className="mt-3 grid grid-cols-2 gap-3">
           <button
             type="button"
-            onClick={() => setCaptureMode('decisions-actions')}
+            onClick={() => void changeCaptureMode('decisions-actions')}
             className={`rounded-2xl border bg-white p-4 text-left transition-colors ${
               captureMode === 'decisions-actions'
                 ? 'border-[#5A45FF]'
@@ -996,7 +1050,7 @@ function CaptureControlsSettings() {
 
           <button
             type="button"
-            onClick={() => setCaptureMode('decisions-only')}
+            onClick={() => void changeCaptureMode('decisions-only')}
             className={`rounded-2xl border bg-white p-4 text-left transition-colors ${
               captureMode === 'decisions-only'
                 ? 'border-[#5A45FF]'

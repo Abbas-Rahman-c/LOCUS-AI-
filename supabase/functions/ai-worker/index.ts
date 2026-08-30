@@ -840,6 +840,32 @@ async function handleIngestionMessageInner(msg: PgmqMsg): Promise<string> {
   };
   const tenantId = payload.tenant_id;
 
+  // Settings > Build Memory > "Pause all learning" - real bug found live:
+  // this control was pure local React state before this, no backend
+  // connection at all. Checked first, before the dedup round trip or any
+  // Claude call - a paused tenant's events are marked done and dropped
+  // from the queue for $0, not silently retried forever (that would just
+  // pile up in the queue) and not merely hidden from display (the UI's
+  // own copy promises "stop Locus AI from reading new messages", a real
+  // ingestion-level skip, not a display filter).
+  const isPaused = await withTenant(tenantId, async (sql) => {
+    const rows = await sql`SELECT learning_paused FROM public.tenants WHERE id = ${tenantId}`;
+    return rows.length > 0 && rows[0].learning_paused === true;
+  });
+  if (isPaused) {
+    // No raw_events row written at all - nothing was learned, so there's
+    // nothing to audit, and connection_id/raw_content are both NOT NULL
+    // with no default (would need the full encrypt-and-resolve-connection
+    // work the normal path does, exactly what pausing is meant to skip).
+    // Safe to just drop the message: pollers advance their own cursors
+    // independently of what ai-worker does with an enqueued message, so
+    // this doesn't risk the same event getting silently lost forever -
+    // it simply isn't captured while paused, matching "stop reading new
+    // messages" literally.
+    await pgmqDelete("ingestion", msg.msg_id);
+    return "learning_paused";
+  }
+
   // is_duplicate(): only a row already marked pipeline_status='done' counts
   // as truly seen - a 'pending' row means a prior attempt crashed mid-flight
   // and deserves a real retry (see migration 017's docstring).
@@ -1034,6 +1060,28 @@ async function handleIngestionMessageInner(msg: PgmqMsg): Promise<string> {
     alternatives_considered: string[]; actors: { source_actor_id: string; role: string }[]; confidence: number;
   };
   extraction.confidence = result.confidence;
+
+  // Settings > Build Memory > "Core knowledge only" - real bug found live,
+  // same as "Pause all learning": pure local React state before this, no
+  // backend connection. Checked here, after extraction (the triage call
+  // already ran either way - this does NOT reduce that call's own token
+  // cost, matching the UI's own copy about volume/precision, not spend).
+  // An action_item/blocker gets discarded exactly like a DISCARD/held-out
+  // UNCERTAIN result - not persisted, raw_event still marked done so it's
+  // never retried.
+  if (extraction.record_type === "action_item" || extraction.record_type === "blocker") {
+    const isCoreKnowledgeOnly = await withTenant(tenantId, async (sql) => {
+      const rows = await sql`SELECT core_knowledge_only FROM public.tenants WHERE id = ${tenantId}`;
+      return rows.length > 0 && rows[0].core_knowledge_only === true;
+    });
+    if (isCoreKnowledgeOnly) {
+      await withTenant(tenantId, async (sql) => {
+        await sql`UPDATE public.raw_events SET pipeline_status = 'done' WHERE id = ${rawEventId}`;
+      });
+      await pgmqDelete("ingestion", msg.msg_id);
+      return "core_knowledge_only_filtered";
+    }
+  }
 
   // Second, independent redaction pass on the model's own output. The
   // source text was already scrubbed in queue.ts before extraction ever

@@ -25,6 +25,7 @@
 
 import { getServiceClient } from "../_shared/supabase.ts";
 import { decryptToken } from "../_shared/tokenCrypto.ts";
+import { refreshAtlassianAccess, type AtlassianConnection } from "../_shared/atlassianAuth.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -40,8 +41,10 @@ function jsonResponse(body: Record<string, unknown>, status: number) {
   });
 }
 
-type Source = "slack" | "gmail" | "notion";
+type Source = "slack" | "gmail" | "notion" | "jira" | "confluence" | "discord";
 type RealItem = { source: Source; item_id: string; item_name: string };
+
+const DISCORD_BOT_TOKEN = Deno.env.get("DISCORD_BOT_TOKEN");
 
 function getNotionPageTitle(page: Record<string, unknown>): string {
   const props = (page.properties as Record<string, unknown> | undefined) ?? {};
@@ -55,7 +58,42 @@ function getNotionPageTitle(page: Record<string, unknown>): string {
   return "Untitled";
 }
 
-async function fetchRealItems(source: Source, accessToken: string): Promise<RealItem[]> {
+// Jira projects / Confluence spaces need the resolved cloud_id (the
+// 3LO proxy path is .../ex/{jira|confluence}/{cloudId}/...), unlike
+// Slack/Gmail/Notion which call the provider's own api.* domain directly
+// with just the access token.
+async function fetchRealItems(source: Source, accessToken: string, cloudId?: string): Promise<RealItem[]> {
+  if (source === "jira") {
+    // /rest/api/3/project/search is the current, non-deprecated endpoint -
+    // verified directly against Atlassian's own docs before using this,
+    // not assumed (the sibling issue-search endpoint was found removed
+    // entirely earlier this session).
+    const resp = await fetch(`https://api.atlassian.com/ex/jira/${cloudId}/rest/api/3/project/search`, {
+      headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" },
+    });
+    if (!resp.ok) return [];
+    const data = await resp.json();
+    const projects = (data.values ?? []) as { id: string; key: string; name: string }[];
+    return projects.map((p) => ({ source: "jira" as const, item_id: p.id, item_name: `${p.key} - ${p.name}` }));
+  }
+
+  if (source === "confluence") {
+    // v1 /wiki/rest/api/space is deprecated (v2 /wiki/api/v2/spaces is the
+    // replacement, wants a read:space:confluence scope this app doesn't
+    // have yet) but still functional as of this write - reusing the
+    // scopes already granted (search:confluence's own description says it
+    // also covers space-summary data) rather than requesting a fourth
+    // scope + another disconnect/reconnect cycle unless a real live call
+    // proves that's actually necessary.
+    const resp = await fetch(`https://api.atlassian.com/ex/confluence/${cloudId}/wiki/rest/api/space?limit=100`, {
+      headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" },
+    });
+    if (!resp.ok) return [];
+    const data = await resp.json();
+    const spaces = (data.results ?? []) as { id: number; key: string; name: string }[];
+    return spaces.map((s) => ({ source: "confluence" as const, item_id: String(s.id), item_name: s.name }));
+  }
+
   if (source === "notion") {
     const resp = await fetch("https://api.notion.com/v1/search", {
       method: "POST",
@@ -106,6 +144,23 @@ async function fetchRealItems(source: Source, accessToken: string): Promise<Real
     .map((l) => ({ source: "gmail" as const, item_id: l.id, item_name: l.name }));
 }
 
+// Discord uses the one global bot token (see discord-oauth/index.ts's
+// header comment for why), not a per-tenant access token - a separate
+// function from fetchRealItems since its whole calling shape is
+// different (guild_id + the global token, not accessToken alone).
+const GUILD_TEXT_CHANNEL_TYPE = 0;
+async function fetchDiscordChannels(guildId: string): Promise<RealItem[]> {
+  if (!DISCORD_BOT_TOKEN) return [];
+  const resp = await fetch(`https://discord.com/api/v10/guilds/${guildId}/channels`, {
+    headers: { Authorization: `Bot ${DISCORD_BOT_TOKEN}` },
+  });
+  if (!resp.ok) return [];
+  const channels = (await resp.json()) as { id: string; type: number; name?: string }[];
+  return channels
+    .filter((c) => c.type === GUILD_TEXT_CHANNEL_TYPE)
+    .map((c) => ({ source: "discord" as const, item_id: c.id, item_name: `#${c.name ?? c.id}` }));
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -153,20 +208,43 @@ Deno.serve(async (req: Request) => {
   if (action === "list") {
     const { data: sources } = await supabase
       .from("source_connections")
-      .select("source, oauth_token_ref")
+      .select("id, tenant_id, source, oauth_token_ref, external_workspace_id, cursor_state")
       .eq("tenant_id", tenantId)
       .eq("status", "active");
 
     // A tenant can have more than one active connection for the same
     // source (e.g. two Gmail accounts) - dedupe by (source, item_id) so the
-    // same channel/page/label fetched from multiple connections doesn't
-    // show up multiple times.
+    // same channel/page/label/project/space fetched from multiple
+    // connections doesn't show up multiple times.
     const itemsByKey = new Map<string, RealItem>();
     for (const row of sources ?? []) {
       const source = row.source as Source;
-      const accessToken = await decryptToken(row.oauth_token_ref as string | null);
-      if (!accessToken) continue;
       try {
+        if (source === "jira" || source === "confluence") {
+          // Atlassian access tokens expire in ~1h - refresh unconditionally
+          // before use, same as jira-poller/confluence-poller already do,
+          // since this Settings page could be opened well after the last
+          // background poll refreshed it.
+          const refreshed = await refreshAtlassianAccess({
+            id: row.id as string,
+            tenant_id: row.tenant_id as string,
+            oauth_token_ref: row.oauth_token_ref as string | null,
+            cursor_state: row.cursor_state as AtlassianConnection["cursor_state"],
+          });
+          if (!refreshed) continue;
+          for (const item of await fetchRealItems(source, refreshed.accessToken, refreshed.cloudId)) {
+            itemsByKey.set(`${item.source}:${item.item_id}`, item);
+          }
+          continue;
+        }
+        if (source === "discord") {
+          for (const item of await fetchDiscordChannels(row.external_workspace_id as string)) {
+            itemsByKey.set(`${item.source}:${item.item_id}`, item);
+          }
+          continue;
+        }
+        const accessToken = await decryptToken(row.oauth_token_ref as string | null);
+        if (!accessToken) continue;
         for (const item of await fetchRealItems(source, accessToken)) {
           itemsByKey.set(`${item.source}:${item.item_id}`, item);
         }
@@ -292,6 +370,45 @@ Deno.serve(async (req: Request) => {
     }
 
     return jsonResponse({ success: true }, 200);
+  }
+
+  if (action === "get_memory_mode") {
+    const { data: tenant, error: tenantError } = await supabase
+      .from("tenants")
+      .select("learning_paused, core_knowledge_only")
+      .eq("id", tenantId)
+      .single();
+
+    if (tenantError || !tenant) {
+      console.error("Failed to load tenant memory mode:", tenantError);
+      return jsonResponse({ error: "Unable to load memory mode" }, 500);
+    }
+
+    return jsonResponse({
+      learning_paused: Boolean(tenant.learning_paused),
+      core_knowledge_only: Boolean(tenant.core_knowledge_only),
+    }, 200);
+  }
+
+  if (action === "set_memory_mode") {
+    const update: Record<string, boolean> = {};
+    if (typeof body.learning_paused === "boolean") update.learning_paused = body.learning_paused;
+    if (typeof body.core_knowledge_only === "boolean") update.core_knowledge_only = body.core_knowledge_only;
+    if (Object.keys(update).length === 0) {
+      return jsonResponse({ error: "learning_paused and/or core_knowledge_only (boolean) required" }, 400);
+    }
+
+    const { error: updateError } = await supabase
+      .from("tenants")
+      .update(update)
+      .eq("id", tenantId);
+
+    if (updateError) {
+      console.error("Failed to update tenant memory mode:", updateError);
+      return jsonResponse({ error: "Unable to update memory mode" }, 500);
+    }
+
+    return jsonResponse({ success: true, ...update }, 200);
   }
 
   return jsonResponse({ error: `Unknown action: ${action}` }, 400);
