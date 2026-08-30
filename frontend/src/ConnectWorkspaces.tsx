@@ -81,12 +81,13 @@ export default function ConnectWorkspaces({ email, onContinue }: { email: string
         jira: 'idle',
         confluence: 'idle',
         discord: 'idle',
+        github: 'idle',
       }
     }
-    return { slack: 'idle', notion: 'idle', gmail: 'idle', jira: 'idle', confluence: 'idle', discord: 'idle' }
+    return { slack: 'idle', notion: 'idle', gmail: 'idle', jira: 'idle', confluence: 'idle', discord: 'idle', github: 'idle' }
   })
   const [toolError, setToolError] = useState<Record<ToolId, string>>({
-    slack: '', notion: '', gmail: '', jira: '', confluence: '', discord: '',
+    slack: '', notion: '', gmail: '', jira: '', confluence: '', discord: '', github: '',
   })
   const canContinue = Object.values(toolState).some((state) => state === 'connected')
 

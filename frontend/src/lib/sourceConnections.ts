@@ -9,7 +9,7 @@ import { getTenantId } from './api'
  * slack-oauth / notion-oauth / gmail-oauth Edge Functions' popup flow.
  */
 
-export type SourceId = 'slack' | 'notion' | 'gmail' | 'jira' | 'confluence' | 'discord'
+export type SourceId = 'slack' | 'notion' | 'gmail' | 'jira' | 'confluence' | 'discord' | 'github'
 
 export interface SourceConnectionRow {
   id: string
@@ -38,7 +38,8 @@ function isOAuthMessage(value: unknown): value is OAuthMessage {
   return (
     message.type === 'locus:source-oauth' &&
     (message.source === 'slack' || message.source === 'notion' || message.source === 'gmail' ||
-      message.source === 'jira' || message.source === 'confluence' || message.source === 'discord') &&
+      message.source === 'jira' || message.source === 'confluence' || message.source === 'discord' ||
+      message.source === 'github') &&
     typeof message.success === 'boolean'
   )
 }

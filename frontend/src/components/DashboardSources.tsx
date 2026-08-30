@@ -11,6 +11,7 @@ const SOURCE_META: SourceMeta[] = [
   { id: 'jira', name: 'Jira', source: 'Jira' },
   { id: 'confluence', name: 'Confluence', source: 'Confluence' },
   { id: 'discord', name: 'Discord', source: 'Discord' },
+  { id: 'github', name: 'GitHub', source: 'GitHub' },
 ]
 
 type ConnectionInfo = { status: string; lastSyncedAt: string | null } | null
@@ -36,6 +37,7 @@ export function DashboardSources() {
     jira: null,
     confluence: null,
     discord: null,
+    github: null,
   })
 
   useEffect(() => {

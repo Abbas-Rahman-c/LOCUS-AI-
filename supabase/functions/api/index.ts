@@ -481,15 +481,15 @@ async function buildThreadContext(
     const actorNameByRawId = new Map<string, string>();
     if (rawActorIds.length > 0) {
       const actorRows = await sql`
-        SELECT display_name, email, notion_user_id, slack_user_id, atlassian_account_id, discord_user_id FROM public.actors
+        SELECT display_name, email, notion_user_id, slack_user_id, atlassian_account_id, discord_user_id, github_user_id FROM public.actors
         WHERE tenant_id = ${tenantId}
           AND (slack_user_id = ANY(${rawActorIds}) OR notion_user_id = ANY(${rawActorIds}) OR email = ANY(${rawActorIds})
-            OR atlassian_account_id = ANY(${rawActorIds}) OR discord_user_id = ANY(${rawActorIds}))
+            OR atlassian_account_id = ANY(${rawActorIds}) OR discord_user_id = ANY(${rawActorIds}) OR github_user_id = ANY(${rawActorIds}))
       `;
       for (const ar of actorRows) {
         const name = guessActorName(ar.display_name, ar.email, ar.notion_user_id, ar.slack_user_id);
         if (!name) continue;
-        for (const rawId of [ar.slack_user_id, ar.notion_user_id, ar.email, ar.atlassian_account_id, ar.discord_user_id]) {
+        for (const rawId of [ar.slack_user_id, ar.notion_user_id, ar.email, ar.atlassian_account_id, ar.discord_user_id, ar.github_user_id]) {
           if (rawId) actorNameByRawId.set(rawId, name);
         }
       }

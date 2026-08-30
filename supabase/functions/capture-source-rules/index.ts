@@ -26,6 +26,7 @@
 import { getServiceClient } from "../_shared/supabase.ts";
 import { decryptToken } from "../_shared/tokenCrypto.ts";
 import { refreshAtlassianAccess, type AtlassianConnection } from "../_shared/atlassianAuth.ts";
+import { githubApiHeaders, mintInstallationToken } from "../_shared/githubAuth.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -41,7 +42,7 @@ function jsonResponse(body: Record<string, unknown>, status: number) {
   });
 }
 
-type Source = "slack" | "gmail" | "notion" | "jira" | "confluence" | "discord";
+type Source = "slack" | "gmail" | "notion" | "jira" | "confluence" | "discord" | "github";
 type RealItem = { source: Source; item_id: string; item_name: string };
 
 const DISCORD_BOT_TOKEN = Deno.env.get("DISCORD_BOT_TOKEN");
@@ -161,6 +162,26 @@ async function fetchDiscordChannels(guildId: string): Promise<RealItem[]> {
     .map((c) => ({ source: "discord" as const, item_id: c.id, item_name: `#${c.name ?? c.id}` }));
 }
 
+// GitHub uses the App-level installation token (see _shared/githubAuth.ts's
+// header comment), not a per-tenant access token - same reason this is a
+// separate function from fetchRealItems as fetchDiscordChannels, just with
+// installation_id + a freshly-minted token instead of a global bot token.
+async function fetchGithubRepos(installationId: string): Promise<RealItem[]> {
+  try {
+    const token = await mintInstallationToken(installationId);
+    const resp = await fetch("https://api.github.com/installation/repositories", {
+      headers: githubApiHeaders(token),
+    });
+    if (!resp.ok) return [];
+    const data = await resp.json();
+    const repos = (data.repositories ?? []) as { id: number; full_name: string }[];
+    return repos.map((r) => ({ source: "github" as const, item_id: r.full_name, item_name: r.full_name }));
+  } catch (err) {
+    console.error("Failed to fetch GitHub repos:", err);
+    return [];
+  }
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -239,6 +260,14 @@ Deno.serve(async (req: Request) => {
         }
         if (source === "discord") {
           for (const item of await fetchDiscordChannels(row.external_workspace_id as string)) {
+            itemsByKey.set(`${item.source}:${item.item_id}`, item);
+          }
+          continue;
+        }
+        if (source === "github") {
+          const installationId = (row.cursor_state as { installation_id?: number } | null)?.installation_id;
+          if (!installationId) continue;
+          for (const item of await fetchGithubRepos(String(installationId))) {
             itemsByKey.set(`${item.source}:${item.item_id}`, item);
           }
           continue;
