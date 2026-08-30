@@ -132,6 +132,24 @@ Deno.serve(async (_req) => {
           .join("\n\n");
         const body = [descriptionText, commentsText].filter(Boolean).join("\n\n");
 
+        // Every real structured identity this issue actually has - the
+        // creator plus every comment author - so extraction's own
+        // "mentioned"/"decided_by" participants (identified from the raw
+        // TEXT, which only ever gives a name) can be matched back to a
+        // real account id + display name instead of showing "Unknown".
+        // Deduped by accountId (the same person often comments more than
+        // once).
+        const knownActorsMap = new Map<string, string>();
+        if (issue.fields.creator?.accountId && issue.fields.creator.displayName) {
+          knownActorsMap.set(issue.fields.creator.accountId, issue.fields.creator.displayName);
+        }
+        for (const c of comments) {
+          if (c.author?.accountId && c.author.displayName) {
+            knownActorsMap.set(c.author.accountId, c.author.displayName);
+          }
+        }
+        const knownActors = Array.from(knownActorsMap, ([source_actor_id, name]) => ({ name, source_actor_id }));
+
         const envelope: IngestionEnvelope = {
           tenant_id: source.tenant_id,
           connection_id: source.id,
@@ -141,6 +159,7 @@ Deno.serve(async (_req) => {
           actor_display_name: issue.fields.creator?.displayName,
           thread_ref: issue.key,
           permission_scope: source.external_workspace_id ? [String(source.external_workspace_id)] : [],
+          known_actors: knownActors,
           raw_content: {
             subject: issue.fields.summary ?? "",
             body,

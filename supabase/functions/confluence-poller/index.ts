@@ -89,6 +89,16 @@ Deno.serve(async (_req) => {
       for (const page of pages) {
         const bodyText = cleanDisplayText(page.body?.storage?.value ?? "");
 
+        // Only the last editor is available from this search response
+        // without an extra API call per page (page history isn't fetched
+        // here) - a real, if smaller, identity roster than Jira's (which
+        // also has comment authors). Still lets extraction's own
+        // "mentioned" participants resolve to a real name when the last
+        // editor is who they meant, same matching mechanism as jira-poller.
+        const knownActors = page.version?.by?.accountId && page.version.by.displayName
+          ? [{ name: page.version.by.displayName, source_actor_id: page.version.by.accountId }]
+          : [];
+
         const envelope: IngestionEnvelope = {
           tenant_id: source.tenant_id,
           connection_id: source.id,
@@ -98,6 +108,7 @@ Deno.serve(async (_req) => {
           actor_display_name: page.version?.by?.displayName,
           thread_ref: page.id,
           permission_scope: source.external_workspace_id ? [String(source.external_workspace_id)] : [],
+          known_actors: knownActors,
           raw_content: {
             subject: page.title,
             body: bodyText,

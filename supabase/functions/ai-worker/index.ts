@@ -706,18 +706,34 @@ async function resolveActorId(
     return rows[0].id;
   }
 
+  // Real bug found live: none of these three branches ever wrote
+  // display_name at all, only the email branch above did - a Slack/
+  // Notion/Jira/Confluence participant's real name was silently
+  // discarded even when the caller passed one in, showing "Unknown" in
+  // the UI regardless. No unique constraint on these columns (see the
+  // migration comment that added atlassian_account_id), so this stays a
+  // manual SELECT-then-INSERT/UPDATE rather than ON CONFLICT, matching
+  // the shape this already had - just no longer dropping displayName on
+  // the floor. Same COALESCE-preserve-existing-name pattern the email
+  // branch already uses, so a later call with no name never blanks out
+  // a real one already stored.
   const existing = column === "slack_user_id"
-    ? await sql`SELECT id FROM actors WHERE tenant_id = ${tenantId} AND slack_user_id = ${sourceActorId}`
+    ? await sql`SELECT id, display_name FROM actors WHERE tenant_id = ${tenantId} AND slack_user_id = ${sourceActorId}`
     : column === "notion_user_id"
-    ? await sql`SELECT id FROM actors WHERE tenant_id = ${tenantId} AND notion_user_id = ${sourceActorId}`
-    : await sql`SELECT id FROM actors WHERE tenant_id = ${tenantId} AND atlassian_account_id = ${sourceActorId}`;
-  if (existing.length > 0) return existing[0].id;
+    ? await sql`SELECT id, display_name FROM actors WHERE tenant_id = ${tenantId} AND notion_user_id = ${sourceActorId}`
+    : await sql`SELECT id, display_name FROM actors WHERE tenant_id = ${tenantId} AND atlassian_account_id = ${sourceActorId}`;
+  if (existing.length > 0) {
+    if (displayName && !existing[0].display_name) {
+      await sql`UPDATE actors SET display_name = ${displayName} WHERE id = ${existing[0].id}`;
+    }
+    return existing[0].id;
+  }
 
   const created = column === "slack_user_id"
-    ? await sql`INSERT INTO actors (tenant_id, slack_user_id, kind) VALUES (${tenantId}, ${sourceActorId}, 'internal') RETURNING id`
+    ? await sql`INSERT INTO actors (tenant_id, slack_user_id, display_name, kind) VALUES (${tenantId}, ${sourceActorId}, ${displayName ?? null}, 'internal') RETURNING id`
     : column === "notion_user_id"
-    ? await sql`INSERT INTO actors (tenant_id, notion_user_id, kind) VALUES (${tenantId}, ${sourceActorId}, 'internal') RETURNING id`
-    : await sql`INSERT INTO actors (tenant_id, atlassian_account_id, kind) VALUES (${tenantId}, ${sourceActorId}, 'internal') RETURNING id`;
+    ? await sql`INSERT INTO actors (tenant_id, notion_user_id, display_name, kind) VALUES (${tenantId}, ${sourceActorId}, ${displayName ?? null}, 'internal') RETURNING id`
+    : await sql`INSERT INTO actors (tenant_id, atlassian_account_id, display_name, kind) VALUES (${tenantId}, ${sourceActorId}, ${displayName ?? null}, 'internal') RETURNING id`;
   return created[0].id;
 }
 
@@ -815,6 +831,7 @@ async function handleIngestionMessageInner(msg: PgmqMsg): Promise<string> {
     thread_ref?: string | null; permission_scope: string[]; raw_content: unknown;
     source_permalink?: string | null; received_at: string; actor_display_name?: string;
     connection_id?: string; likely_bulk_mail?: boolean;
+    known_actors?: { name: string; source_actor_id: string }[];
   };
   const tenantId = payload.tenant_id;
 
@@ -1055,7 +1072,21 @@ async function handleIngestionMessageInner(msg: PgmqMsg): Promise<string> {
 
     for (const actorRef of extraction.actors ?? []) {
       try {
-        const actorId = await resolveActorId(sql, tenantId, payload.source, actorRef.source_actor_id);
+        // Extraction identifies participants from the event's own TEXT (an
+        // @mention, a name in a comment), which only ever gives a name
+        // string - never a real account id. Matched against the
+        // connector's own known_actors (real structured identities it
+        // already had, e.g. an issue's creator + comment authors) by exact
+        // case-insensitive name, so a recognized participant gets their
+        // real id/name instead of a garbage "account id" made from
+        // whatever text the model extracted. No match falls back to the
+        // extracted text as-is, same as before this existed.
+        const known = payload.known_actors?.find(
+          (k) => k.name.toLowerCase() === actorRef.source_actor_id.toLowerCase(),
+        );
+        const actorId = known
+          ? await resolveActorId(sql, tenantId, payload.source, known.source_actor_id, known.name)
+          : await resolveActorId(sql, tenantId, payload.source, actorRef.source_actor_id);
         await sql`
           INSERT INTO public.decision_actors (tenant_id, decision_id, actor_id, role)
           VALUES (${tenantId}, ${newDecisionId}, ${actorId}, ${actorRef.role})

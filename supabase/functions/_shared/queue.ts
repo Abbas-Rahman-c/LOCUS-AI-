@@ -43,6 +43,20 @@ export interface IngestionEnvelope {
   // (e.g. Gmail's List-Unsubscribe header) before any AI call. ai-worker
   // skips triage+extraction entirely for these - $0 cost, not a discount.
   likely_bulk_mail?: boolean;
+  // Real, structured identities the connector already knows for this
+  // event (an issue's creator + comment authors, a page's editors) -
+  // distinct from `actor`/`actor_display_name`, which name only the ONE
+  // primary sender/creator. Extraction identifies participants from the
+  // event's own TEXT (an @mention, a name in a comment), which only ever
+  // gives a name string, never a real account id - matched against this
+  // list by name (case-insensitive) so a recognized participant gets
+  // their real id/display_name instead of a garbage "account id" made
+  // from whatever text the model happened to extract. An unmatched
+  // mention still falls back to today's behavior (name stored as-is, no
+  // display name) - this only improves the cases it can genuinely
+  // resolve, never guesses. Generic, not Jira/Confluence-specific -
+  // any connector with structured participant data can set this.
+  known_actors?: { name: string; source_actor_id: string }[];
 }
 
 export async function enqueueEvent(envelope: IngestionEnvelope) {
