@@ -123,6 +123,111 @@ function FormattedText({ text }: { text: string }) {
 // one click away.
 const TRUNCATE_AT = 420
 
+// Same initials rule as accountRegistry.ts's own getInitials - first
+// letter of the first two words, kept local rather than imported since
+// that module is scoped to the account-switcher's own concerns.
+function getInitials(name: string): string {
+  return (
+    name
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part[0]?.toUpperCase())
+      .join('') || '?'
+  )
+}
+
+type ThreadGroup = { actor: string; messages: ThreadMessage[] }
+
+// A raw flat list repeats the sender's name and timestamp above every
+// single short message ("yes", "sure i will update the tasks by
+// evening") - noisy for exactly the kind of quick back-and-forth a
+// Discord/Slack channel actually looks like. Consecutive messages from
+// the same person collapse under one avatar/name header instead, the way
+// every real chat client already does this.
+function groupConsecutive(messages: ThreadMessage[]): ThreadGroup[] {
+  const groups: ThreadGroup[] = []
+  for (const message of messages) {
+    const last = groups[groups.length - 1]
+    if (last && last.actor === message.actor) {
+      last.messages.push(message)
+    } else {
+      groups.push({ actor: message.actor, messages: [message] })
+    }
+  }
+  return groups
+}
+
+function formatMessageTime(at: string): string {
+  return new Date(at).toLocaleString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  })
+}
+
+function ConversationPanel({
+  thread,
+  threadError,
+}: {
+  thread: ThreadMessage[] | null
+  threadError: string
+}) {
+  if (threadError) {
+    return <p className="text-[13px] text-[#9CA3AF]">{threadError}</p>
+  }
+  if (thread === null) {
+    return <p className="text-[13px] text-[#9CA3AF]">Loading…</p>
+  }
+  if (thread.length === 0) {
+    return <p className="text-[13px] text-[#9CA3AF]">No prior messages found in this thread.</p>
+  }
+
+  const groups = groupConsecutive(thread)
+
+  return (
+    <div className="max-h-[440px] overflow-y-auto rounded-xl border border-[#F0F0F4] bg-[#FAFAFC] p-3.5">
+      <ol className="flex flex-col gap-4">
+        {groups.map((group, groupIndex) => (
+          <li key={groupIndex} className="flex gap-2.5">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#EEEBFF] text-[11px] font-semibold text-[#5A45FF]">
+              {getInitials(group.actor)}
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-[12px] font-semibold text-[#374151]">
+                {group.actor}
+                <span className="ml-1.5 font-normal text-[#9CA3AF]">
+                  {formatMessageTime(group.messages[0].at)}
+                </span>
+              </p>
+              <div className="mt-1.5 flex flex-col gap-1.5">
+                {group.messages.map((message, messageIndex) => (
+                  <div
+                    key={messageIndex}
+                    className={`rounded-lg px-3 py-2 ${
+                      message.is_source
+                        ? 'border border-[#DDD6FE] bg-white shadow-[0_1px_2px_rgba(90,69,255,0.08)]'
+                        : 'bg-white/70'
+                    }`}
+                  >
+                    {message.is_source ? (
+                      <span className="mb-1.5 inline-flex items-center gap-1 rounded-full bg-[#EEEBFF] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.04em] text-[#5A45FF]">
+                        Source
+                      </span>
+                    ) : null}
+                    <TruncatedMessageText text={message.text} />
+                  </div>
+                ))}
+              </div>
+            </div>
+          </li>
+        ))}
+      </ol>
+    </div>
+  )
+}
+
 function TruncatedMessageText({ text }: { text: string }) {
   const [expanded, setExpanded] = useState(false)
   const isLong = text.length > TRUNCATE_AT
@@ -313,32 +418,18 @@ export function MemoryRecordDetail({
             {record.status}
           </span>
         </DetailRow>
-        <DetailRow label="CONVERSATION">
-          {threadError ? (
-            <span className="text-[#9CA3AF]">{threadError}</span>
-          ) : thread === null ? (
-            <span className="text-[#9CA3AF]">Loading…</span>
-          ) : thread.length === 0 ? (
-            <span className="text-[#9CA3AF]">No prior messages found in this thread.</span>
-          ) : (
-            <ol className="flex flex-col gap-2.5">
-              {thread.map((message, index) => (
-                <li key={index} className="border-l-2 border-[#EEEBFF] pl-3">
-                  <p className="text-[12px] font-semibold text-[#6B7280]">
-                    {message.actor} ·{' '}
-                    {new Date(message.at).toLocaleString('en-US', {
-                      month: 'short',
-                      day: 'numeric',
-                      hour: 'numeric',
-                      minute: '2-digit',
-                    })}
-                  </p>
-                  <TruncatedMessageText text={message.text} />
-                </li>
-              ))}
-            </ol>
-          )}
-        </DetailRow>
+      </div>
+
+      <div className="mt-5">
+        <div className="mb-2 flex items-center justify-between">
+          <span className="text-[11px] font-semibold tracking-[0.06em] text-[#9CA3AF]">CONVERSATION</span>
+          {thread && thread.length > 0 ? (
+            <span className="text-[11px] text-[#9CA3AF]">
+              {thread.length} message{thread.length === 1 ? '' : 's'}
+            </span>
+          ) : null}
+        </div>
+        <ConversationPanel thread={thread} threadError={threadError} />
       </div>
 
       <div className="mt-4 flex flex-wrap items-center gap-2.5">

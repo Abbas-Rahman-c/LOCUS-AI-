@@ -35,6 +35,22 @@ Deno.test("leaves ordinary decision text untouched", () => {
   assertEquals(out, "Chose PostgreSQL for the context layer instead of MongoDB.");
 });
 
+Deno.test("leaves a Discord user mention's snowflake id intact", () => {
+  const out = redactFinancialInfo("Hi <@1234567890123456789> could you check this?");
+  assertEquals(out, "Hi <@1234567890123456789> could you check this?");
+});
+
+Deno.test("leaves a Discord nickname/channel/role mention intact", () => {
+  const out = redactFinancialInfo("<@!1234567890123456789> see <#1234567890123456789> and <@&1234567890123456789>");
+  assertEquals(out, "<@!1234567890123456789> see <#1234567890123456789> and <@&1234567890123456789>");
+});
+
+Deno.test("still redacts a real long number sitting right next to a Discord mention", () => {
+  const out = redactFinancialInfo("<@1234567890123456789> my account is 000123456789, can you check?");
+  assertStringIncludes(out, "<@1234567890123456789>");
+  assertEquals(out.includes("000123456789"), false);
+});
+
 Deno.test("deep-redacts nested raw_content shapes (Notion-style pages)", () => {
   const page = {
     properties: { Title: { text: "Vendor payment" } },

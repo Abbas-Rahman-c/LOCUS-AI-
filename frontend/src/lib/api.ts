@@ -258,6 +258,11 @@ export interface ThreadMessage {
   actor: string
   source: string
   text: string
+  /** True for the exact message(s) this record was actually extracted
+   * from - never filtered out regardless of how the rest of the thread
+   * gets trimmed, so the real evidence is always distinguishable from
+   * surrounding context. */
+  is_source: boolean
 }
 
 /** A conflict flagged automatically when this decision was captured -

@@ -191,9 +191,30 @@ function stripPlainTextArtifacts(text: string): string {
 // future gap in them) - so already-clean bodies pass through untouched, but
 // nothing readable surviving falls back to a plain placeholder instead of
 // rendering a near-empty wall of whitespace or a stray markup fragment.
+//
+// Real bug found live: isReadableProse()'s 4-word minimum exists to catch
+// garbled HTML/CSS remnants (style-property soup, a stray "96" left over
+// from a stripped tag) - it was never meant to gate genuinely plain chat
+// text, but it ran unconditionally, so a completely legitimate short
+// Discord/Slack message ("yes", "sure i will update the tasks by evening",
+// "Hi <@user>") got replaced with the placeholder just for being short.
+// Confirmed live: several real messages in one conversation all showed
+// "(no readable message content captured)" despite having real content.
+// The 4-word gate now only applies when this function actually had
+// something to clean up (real HTML was stripped, or CSS-remnant patterns
+// were found and removed) - text that was already plain going in only
+// needs to be non-empty, since there was never any garbling risk to guard
+// against in the first place.
 export function cleanDisplayText(text: string): string {
   const repaired = repairMojibake(text);
-  const htmlStripped = looksLikeHtml(repaired) ? htmlToPlainText(repaired) : repaired;
-  const cleaned = stripPlainTextArtifacts(stripLeadingArtifactToken(stripCssRemnants(htmlStripped)));
+  const wasHtml = looksLikeHtml(repaired);
+  const htmlStripped = wasHtml ? htmlToPlainText(repaired) : repaired;
+  const cssStripped = stripCssRemnants(htmlStripped);
+  const hadCssRemnants = cssStripped !== htmlStripped;
+  const cleaned = stripPlainTextArtifacts(stripLeadingArtifactToken(cssStripped));
+
+  if (!wasHtml && !hadCssRemnants) {
+    return cleaned.trim().length > 0 ? cleaned : "(no readable message content captured)";
+  }
   return isReadableProse(cleaned) ? cleaned : "(no readable message content captured)";
 }

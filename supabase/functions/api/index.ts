@@ -220,7 +220,26 @@ function extractEventText(rawContent: unknown, source: string): string {
   return cleanDisplayText(JSON.stringify(content));
 }
 
-type ThreadMessage = { at: string; actor: string; source: string; text: string };
+type ThreadMessage = { at: string; actor: string; source: string; text: string; is_source: boolean };
+
+// Discord's own mention syntax (<@123...> user, <@!123...> nickname form) -
+// resolved the same way an actual sender is: against the tenant's actors
+// table, using the exact map buildThreadContext already builds for that.
+// Scoped to Discord only since no other connector emits this bracket
+// syntax. Real bug found live: a message like "Hi <@1234567890>" rendered
+// literally in the reconstructed conversation instead of "Hi @Rajith" -
+// only the message's own *sender* was ever being resolved to a name, never
+// people mentioned inside the message body. Only fixes messages ingested
+// after this deploy - a mention already mangled into "<@[REDACTED-NUMBER]>"
+// by the financialRedaction over-broad digit-run pass (see that file's own
+// fix) had its real id destroyed before it was ever stored, so there's
+// nothing left here to resolve for those older rows.
+function resolveDiscordMentions(text: string, actorNameByRawId: Map<string, string>): string {
+  return text.replace(/<@!?(\d{15,25})>/g, (full, id: string) => {
+    const name = actorNameByRawId.get(id);
+    return name ? `@${name}` : full;
+  });
+}
 
 // postgres.js's bytea decoding varies by how the column comes back over the
 // wire - normally a Uint8Array/Buffer, but a hex-encoded "\x4c4f..." string
@@ -486,7 +505,8 @@ async function buildThreadContext(
       at: m.at,
       actor: actorNameByRawId.get(m.rawActor) ?? m.rawActor,
       source: m.source,
-      text: m.text,
+      text: m.source === "discord" ? resolveDiscordMentions(m.text, actorNameByRawId) : m.text,
+      is_source: m.isSource,
     }));
   } catch (err) {
     console.error("buildThreadContext query failed:", err);
