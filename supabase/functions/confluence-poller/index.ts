@@ -60,7 +60,14 @@ Deno.serve(async (_req) => {
 
       const lastSyncedAt = source.last_synced_at || new Date(0).toISOString();
       const cql = `lastmodified >= "${toCqlDate(lastSyncedAt)}" order by lastmodified asc`;
-      const searchUrl = new URL(`https://api.atlassian.com/ex/confluence/${cloudId}/wiki/rest/api/content/search`);
+      // 3LO proxy format for the v1 REST API is .../ex/confluence/{cloudId}
+      // /rest/api/... - NOT .../wiki/rest/api/... (that /wiki/ prefix only
+      // belongs to the newer v2 API's path shape, .../wiki/api/v2/...).
+      // Verified against Atlassian's own docs before writing this, not
+      // assumed - got the equivalent wrong for Jira on the first pass
+      // (deprecated /rest/api/3/search, fixed above) and didn't want to
+      // repeat that here without checking first.
+      const searchUrl = new URL(`https://api.atlassian.com/ex/confluence/${cloudId}/rest/api/content/search`);
       searchUrl.searchParams.set("cql", cql);
       searchUrl.searchParams.set("expand", "body.storage,version");
       searchUrl.searchParams.set("limit", "50");
@@ -69,8 +76,9 @@ Deno.serve(async (_req) => {
         headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" },
       });
       if (!response.ok) {
-        console.error(`Confluence API error for ${source.id}:`, await response.text());
-        results.push({ source_id: source.id, error: `search failed: ${response.status}` });
+        const bodyText = await response.text();
+        console.error(`Confluence API error for ${source.id}:`, bodyText);
+        results.push({ source_id: source.id, error: `search failed: ${response.status} ${bodyText}` });
         continue;
       }
 

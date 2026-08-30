@@ -27,7 +27,15 @@ const CLIENT_SECRET = Deno.env.get("ATLASSIAN_CLIENT_SECRET");
 const REDIRECT_URI = Deno.env.get("CONFLUENCE_REDIRECT_URI");
 
 const SOURCE = "confluence" as const;
-const SCOPES = "read:confluence-content.all offline_access";
+// search:confluence is the scope GET /wiki/rest/api/content/search (the
+// CQL search confluence-poller uses) actually requires - confirmed
+// directly against Atlassian's own scopes reference after
+// read:confluence-content.all alone got "Unauthorized; scope does not
+// match" from a real live call. Its own description says APIs using it
+// "may also return data allowed by read:confluence-space.summary and
+// read:confluence-content.summary" - kept content.all too since the
+// poller also reads full page bodies (body.storage), not just summaries.
+const SCOPES = "read:confluence-content.all search:confluence offline_access";
 
 interface AccessibleResource {
   id: string;

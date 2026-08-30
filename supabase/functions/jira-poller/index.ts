@@ -96,7 +96,12 @@ Deno.serve(async (_req) => {
 
       const lastSyncedAt = source.last_synced_at || new Date(0).toISOString();
       const jql = `updated >= "${toJqlDate(lastSyncedAt)}" ORDER BY updated ASC`;
-      const searchUrl = new URL(`https://api.atlassian.com/ex/jira/${cloudId}/rest/api/3/search`);
+      // /rest/api/3/search was removed by Atlassian (returns 410 Gone,
+      // confirmed live) - /rest/api/3/search/jql is the real replacement.
+      // Same query params, only pagination changed (nextPageToken instead
+      // of startAt) - not handled here, same single-page simplicity
+      // notion-poller already has (maxResults=50, no pagination loop).
+      const searchUrl = new URL(`https://api.atlassian.com/ex/jira/${cloudId}/rest/api/3/search/jql`);
       searchUrl.searchParams.set("jql", jql);
       searchUrl.searchParams.set("fields", "summary,description,updated,creator,comment");
       searchUrl.searchParams.set("maxResults", "50");
