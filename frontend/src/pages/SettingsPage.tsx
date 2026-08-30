@@ -465,6 +465,11 @@ const CONNECTED_SOURCE_META: { id: SourceId; name: SourceName; description: stri
     name: 'Confluence',
     description: 'Capture decisions from pages and spaces.',
   },
+  {
+    id: 'discord',
+    name: 'Discord',
+    description: 'Capture decisions from server channels.',
+  },
 ]
 
 function formatConnectedSourceSync(info: { status: string; last_synced_at: string | null }) {
@@ -504,6 +509,7 @@ function ConnectedSourcesSettings() {
     gmail: [],
     jira: [],
     confluence: [],
+    discord: [],
   })
   const [isLoading, setIsLoading] = useState(true)
   const [connectingId, setConnectingId] = useState<SourceId | null>(null)
@@ -521,7 +527,7 @@ function ConnectedSourcesSettings() {
 
   const loadConnections = () =>
     fetchSourceConnections().then((rows) => {
-      const next: Record<SourceId, SourceConnectionRow[]> = { slack: [], notion: [], gmail: [], jira: [], confluence: [] }
+      const next: Record<SourceId, SourceConnectionRow[]> = { slack: [], notion: [], gmail: [], jira: [], confluence: [], discord: [] }
       for (const row of rows) {
         if (row.status === 'active') next[row.source].push(row)
       }

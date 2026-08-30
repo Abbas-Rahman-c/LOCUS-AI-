@@ -10,6 +10,7 @@ const SOURCE_META: SourceMeta[] = [
   { id: 'gmail', name: 'Gmail', source: 'Gmail' },
   { id: 'jira', name: 'Jira', source: 'Jira' },
   { id: 'confluence', name: 'Confluence', source: 'Confluence' },
+  { id: 'discord', name: 'Discord', source: 'Discord' },
 ]
 
 type ConnectionInfo = { status: string; lastSyncedAt: string | null } | null
@@ -34,6 +35,7 @@ export function DashboardSources() {
     gmail: null,
     jira: null,
     confluence: null,
+    discord: null,
   })
 
   useEffect(() => {

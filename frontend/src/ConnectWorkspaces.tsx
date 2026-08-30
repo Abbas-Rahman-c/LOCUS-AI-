@@ -80,12 +80,13 @@ export default function ConnectWorkspaces({ email, onContinue }: { email: string
         // exist only so this object satisfies Record<SourceId, ToolState>.
         jira: 'idle',
         confluence: 'idle',
+        discord: 'idle',
       }
     }
-    return { slack: 'idle', notion: 'idle', gmail: 'idle', jira: 'idle', confluence: 'idle' }
+    return { slack: 'idle', notion: 'idle', gmail: 'idle', jira: 'idle', confluence: 'idle', discord: 'idle' }
   })
   const [toolError, setToolError] = useState<Record<ToolId, string>>({
-    slack: '', notion: '', gmail: '', jira: '', confluence: '',
+    slack: '', notion: '', gmail: '', jira: '', confluence: '', discord: '',
   })
   const canContinue = Object.values(toolState).some((state) => state === 'connected')
 

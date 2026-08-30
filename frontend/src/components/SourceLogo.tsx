@@ -1,4 +1,4 @@
-export type SourceName = 'Slack' | 'Notion' | 'Gmail' | 'Jira' | 'Confluence'
+export type SourceName = 'Slack' | 'Notion' | 'Gmail' | 'Jira' | 'Confluence' | 'Discord'
 
 const SOURCE_LOGOS: Partial<Record<SourceName, string>> = {
   Slack: '/slack-logo.png',
@@ -15,6 +15,7 @@ const SOURCE_LOGOS: Partial<Record<SourceName, string>> = {
 const FALLBACK_BADGE: Partial<Record<SourceName, { letter: string; bg: string; fg: string }>> = {
   Jira: { letter: 'J', bg: '#0052CC', fg: '#FFFFFF' },
   Confluence: { letter: 'C', bg: '#1868DB', fg: '#FFFFFF' },
+  Discord: { letter: 'D', bg: '#5865F2', fg: '#FFFFFF' },
 }
 
 export function SourceLogo({
