@@ -317,8 +317,29 @@ async function resolveSlackNamesLive(sql: any, tenantId: string, slackUserIds: s
 // messages near the decision in time now show up, not the channel's
 // whole lifetime. Pure SQL - no embedding or LLM call involved, so this
 // adds zero token cost.
+//
+// Real gap found by checking a live decision against this fix, not
+// assumed: the time window alone doesn't help when a channel's whole
+// history happens to sit inside one continuous burst - checked directly
+// against the "Trial solution is now live" Discord decision and all 46
+// of that channel's messages fell inside the 6h window, because a small
+// team's single Discord channel genuinely interleaves several unrelated
+// topics in real time, not spread across days. That's a topical problem,
+// not a chronological one, so only a topical filter can fix it. Below,
+// once a thread has more than a handful of candidate messages, the
+// decision's own statement and every candidate message are embedded
+// (Voyage, same model/dimension already used for decision_embeddings)
+// and only the messages most semantically related to the decision are
+// kept - the origin/source event(s) are always force-kept regardless of
+// score, since those are the actual evidence the decision was extracted
+// from, not just similar-sounding context. This is the one place in the
+// app where per-view embedding cost is worth it: cheap Voyage calls, not
+// Claude, proportional to how many decisions people actually open, and
+// it's solving a problem the time window structurally cannot.
 const THREAD_CONTEXT_WINDOW_MS = 6 * 60 * 60 * 1000; // 6h either side of the origin event(s)
 const THREAD_CONTEXT_MAX_MESSAGES = 40;
+const THREAD_CONTEXT_RELEVANCE_MIN_MESSAGES = 12; // below this, just show everything - not worth an embedding call
+const THREAD_CONTEXT_RELEVANCE_TOP_K = 20;
 
 // deno-lint-ignore no-explicit-any
 async function buildThreadContext(
@@ -326,6 +347,7 @@ async function buildThreadContext(
   tenantId: string,
   originRawEventId: string | null,
   sourceRawEventIds: string[],
+  decisionStatement: string | null,
 ): Promise<ThreadMessage[]> {
   const rawEventIds = [...new Set([originRawEventId, ...sourceRawEventIds].filter((id): id is string => !!id))];
   if (rawEventIds.length === 0) return [];
@@ -374,16 +396,49 @@ async function buildThreadContext(
         `;
 
     // deno-lint-ignore no-explicit-any
-    const decrypted: { at: string; rawActor: string; source: string; text: string }[] = [];
+    const decrypted: { id: string; at: string; rawActor: string; source: string; text: string; isSource: boolean }[] = [];
     for (const row of eventRows) {
       try {
         const bytes = byteaToUint8Array(row.raw_content);
         const plaintext = await decryptRawContent(bytes);
         const envelope = JSON.parse(plaintext) as { raw_content?: unknown; actor?: string };
         const text = extractEventText(envelope.raw_content, row.source);
-        decrypted.push({ at: row.received_at, rawActor: envelope.actor ?? "unknown", source: row.source, text });
+        decrypted.push({
+          id: row.id,
+          at: row.received_at,
+          rawActor: envelope.actor ?? "unknown",
+          source: row.source,
+          text,
+          isSource: rawEventIds.includes(row.id),
+        });
       } catch (err) {
         console.error(`Failed to decrypt/parse raw_event ${row.id}:`, err);
+      }
+    }
+
+    // Topical relevance filter - see the function header for why the time
+    // window alone isn't enough. Only kicks in once there's actually
+    // something to trim; a normal-sized thread skips this entirely, so
+    // the added embedding cost is never paid for the common case.
+    let relevant = decrypted;
+    if (decisionStatement && decrypted.length > THREAD_CONTEXT_RELEVANCE_MIN_MESSAGES) {
+      try {
+        const [statementEmbedding, messageEmbeddings] = await Promise.all([
+          embedQuery(decisionStatement),
+          embedBatch(decrypted.map((m) => m.text), "document"),
+        ]);
+        const scored = decrypted.map((m, i) => ({ m, score: cosineSimilarity(statementEmbedding, messageEmbeddings[i]) }));
+        const mustKeep = scored.filter((s) => s.m.isSource);
+        const rest = scored.filter((s) => !s.m.isSource).sort((a, b) => b.score - a.score);
+        const budget = Math.max(0, THREAD_CONTEXT_RELEVANCE_TOP_K - mustKeep.length);
+        relevant = [...mustKeep, ...rest.slice(0, budget)]
+          .map((s) => s.m)
+          .sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime());
+      } catch (err) {
+        // Fails open to the time-windowed set, unfiltered - a relevance
+        // enrichment breaking is not a reason to hide the conversation
+        // entirely.
+        console.error("thread-context relevance filter failed, falling back to time-windowed set:", err);
       }
     }
 
@@ -403,7 +458,7 @@ async function buildThreadContext(
     // 3-column list every other actor-identifier lookup already needed
     // extending. Confirmed live: a real Discord conversation showed the
     // raw snowflake id instead of a name.
-    const rawActorIds = [...new Set(decrypted.map((m) => m.rawActor))];
+    const rawActorIds = [...new Set(relevant.map((m) => m.rawActor))];
     const actorNameByRawId = new Map<string, string>();
     if (rawActorIds.length > 0) {
       const actorRows = await sql`
@@ -427,7 +482,7 @@ async function buildThreadContext(
       for (const [id, name] of liveResolved) actorNameByRawId.set(id, name);
     }
 
-    return decrypted.map((m) => ({
+    return relevant.map((m) => ({
       at: m.at,
       actor: actorNameByRawId.get(m.rawActor) ?? m.rawActor,
       source: m.source,
@@ -729,6 +784,7 @@ async function getDecisionById(tenantId: string, decisionId: string) {
         tenantId,
         row.origin_raw_event_id,
         sourceRows.map((sr) => sr.raw_event_id).filter(Boolean),
+        row.decision_statement ?? null,
       ),
     };
   });
@@ -756,6 +812,40 @@ async function embedQuery(text: string): Promise<number[]> {
     throw new Error("Voyage returned an unexpected embedding shape");
   }
   return embedding;
+}
+
+// Used only by buildThreadContext's relevance filter - embeds every
+// candidate thread message in one batched Voyage call (Voyage's input
+// array accepts multiple texts per request) rather than one call per
+// message, so cost stays one request regardless of how noisy a channel
+// is. input_type "document" matches how decision_embeddings itself is
+// stored, mirroring the asymmetric query/document convention embedQuery
+// already uses for search.
+async function embedBatch(texts: string[], inputType: "query" | "document"): Promise<number[][]> {
+  const resp = await fetchWithTimeout("https://api.voyageai.com/v1/embeddings", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${VOYAGE_API_KEY}`, "content-type": "application/json" },
+    body: JSON.stringify({
+      input: texts, model: VOYAGE_MODEL, input_type: inputType,
+      output_dimension: VOYAGE_OUTPUT_DIMENSION, truncation: true,
+    }),
+  }, 30_000);
+  if (!resp.ok) throw new Error(`Voyage API error ${resp.status}: ${await resp.text()}`);
+  const data = await resp.json();
+  const embeddings: number[][] = (data.data ?? []).map((d: { embedding: number[] }) => d.embedding);
+  if (embeddings.length !== texts.length) throw new Error("Voyage batch embedding count mismatch");
+  return embeddings;
+}
+
+function cosineSimilarity(a: number[], b: number[]): number {
+  let dot = 0, normA = 0, normB = 0;
+  for (let i = 0; i < a.length; i++) {
+    dot += a[i] * b[i];
+    normA += a[i] * a[i];
+    normB += b[i] * b[i];
+  }
+  if (normA === 0 || normB === 0) return 0;
+  return dot / (Math.sqrt(normA) * Math.sqrt(normB));
 }
 
 type RetrievalMatch = {
