@@ -1,9 +1,20 @@
-export type SourceName = 'Slack' | 'Notion' | 'Gmail'
+export type SourceName = 'Slack' | 'Notion' | 'Gmail' | 'Jira' | 'Confluence'
 
-const SOURCE_LOGOS: Record<SourceName, string> = {
+const SOURCE_LOGOS: Partial<Record<SourceName, string>> = {
   Slack: '/slack-logo.png',
   Notion: '/notion-logo.png',
   Gmail: '/gmail-logo.png',
+}
+
+// Jira/Confluence have no real brand-logo asset in /public yet (the other
+// three were added as actual PNG files) - rather than block the connector
+// on sourcing official logo files, these render as a plain colored initial
+// instead. Honest placeholder, not a fake logo: swap in a real asset file
+// under SOURCE_LOGOS above whenever one's added, no other code changes
+// needed.
+const FALLBACK_BADGE: Partial<Record<SourceName, { letter: string; bg: string; fg: string }>> = {
+  Jira: { letter: 'J', bg: '#0052CC', fg: '#FFFFFF' },
+  Confluence: { letter: 'C', bg: '#1868DB', fg: '#FFFFFF' },
 }
 
 export function SourceLogo({
@@ -13,12 +24,26 @@ export function SourceLogo({
   source: SourceName
   className?: string
 }) {
+  const logoSrc = SOURCE_LOGOS[source]
+  if (logoSrc) {
+    return (
+      <img
+        src={logoSrc}
+        alt=""
+        aria-hidden="true"
+        className={`bg-white object-contain ${className}`}
+      />
+    )
+  }
+
+  const badge = FALLBACK_BADGE[source]
   return (
-    <img
-      src={SOURCE_LOGOS[source]}
-      alt=""
+    <span
       aria-hidden="true"
-      className={`bg-white object-contain ${className}`}
-    />
+      className={`flex items-center justify-center rounded font-bold ${className}`}
+      style={{ backgroundColor: badge?.bg ?? '#9CA3AF', color: badge?.fg ?? '#FFFFFF', fontSize: '0.7em' }}
+    >
+      {badge?.letter ?? '?'}
+    </span>
   )
 }

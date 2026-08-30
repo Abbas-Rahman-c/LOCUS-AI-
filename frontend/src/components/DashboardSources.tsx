@@ -8,6 +8,8 @@ const SOURCE_META: SourceMeta[] = [
   { id: 'slack', name: 'Slack', source: 'Slack' },
   { id: 'notion', name: 'Notion', source: 'Notion' },
   { id: 'gmail', name: 'Gmail', source: 'Gmail' },
+  { id: 'jira', name: 'Jira', source: 'Jira' },
+  { id: 'confluence', name: 'Confluence', source: 'Confluence' },
 ]
 
 type ConnectionInfo = { status: string; lastSyncedAt: string | null } | null
@@ -30,6 +32,8 @@ export function DashboardSources() {
     slack: null,
     notion: null,
     gmail: null,
+    jira: null,
+    confluence: null,
   })
 
   useEffect(() => {

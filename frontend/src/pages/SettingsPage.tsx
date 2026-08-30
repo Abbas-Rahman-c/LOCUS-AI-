@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import AccountSettings from './AccountSettings'
 import { getSupabaseClient } from '../lib/supabase'
 import { DEMO_EMAIL_KEY, WORKSPACES_DONE_KEY } from '../lib/sessionKeys'
+import { SourceLogo, type SourceName } from '../components/SourceLogo'
 import {
   connectSource,
   disconnectSource,
@@ -438,24 +439,31 @@ function SearchSettings() {
   )
 }
 
-const CONNECTED_SOURCE_META: { id: SourceId; name: string; description: string; icon: string }[] = [
+const CONNECTED_SOURCE_META: { id: SourceId; name: SourceName; description: string }[] = [
   {
     id: 'slack',
     name: 'Slack',
     description: "Capture decisions from channels and threads you're already in.",
-    icon: '/slack-logo.png',
   },
   {
     id: 'notion',
     name: 'Notion',
     description: 'Capture decisions from docs, wikis, and databases.',
-    icon: '/notion-logo.png',
   },
   {
     id: 'gmail',
     name: 'Gmail',
     description: 'Capture decisions from email threads and replies.',
-    icon: '/gmail-logo.png',
+  },
+  {
+    id: 'jira',
+    name: 'Jira',
+    description: 'Capture decisions from issues and comments.',
+  },
+  {
+    id: 'confluence',
+    name: 'Confluence',
+    description: 'Capture decisions from pages and spaces.',
   },
 ]
 
@@ -494,6 +502,8 @@ function ConnectedSourcesSettings() {
     slack: [],
     notion: [],
     gmail: [],
+    jira: [],
+    confluence: [],
   })
   const [isLoading, setIsLoading] = useState(true)
   const [connectingId, setConnectingId] = useState<SourceId | null>(null)
@@ -511,7 +521,7 @@ function ConnectedSourcesSettings() {
 
   const loadConnections = () =>
     fetchSourceConnections().then((rows) => {
-      const next: Record<SourceId, SourceConnectionRow[]> = { slack: [], notion: [], gmail: [] }
+      const next: Record<SourceId, SourceConnectionRow[]> = { slack: [], notion: [], gmail: [], jira: [], confluence: [] }
       for (const row of rows) {
         if (row.status === 'active') next[row.source].push(row)
       }
@@ -616,7 +626,7 @@ function ConnectedSourcesSettings() {
               >
                 <div className="flex items-start gap-3">
                   <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-[#E5E7EB] bg-white">
-                    <img src={source.icon} alt="" className="h-7 w-7 object-contain" />
+                    <SourceLogo source={source.name} className="h-7 w-7" />
                   </div>
                   <div className="min-w-0">
                     <h3 className="text-[15px] font-semibold text-[#111827]">{source.name}</h3>

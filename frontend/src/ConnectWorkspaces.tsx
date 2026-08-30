@@ -73,11 +73,20 @@ export default function ConnectWorkspaces({ email, onContinue }: { email: string
         slack: connected.has('slack') ? 'connected' : 'idle',
         notion: connected.has('notion') ? 'connected' : 'idle',
         gmail: connected.has('gmail') ? 'connected' : 'idle',
+        // Not offered on this onboarding screen (see the `tools` array
+        // above - deliberately curated to the 3 most common sources, not
+        // every connector this product supports). Settings > Connections
+        // is where a user adds the rest after onboarding. These two keys
+        // exist only so this object satisfies Record<SourceId, ToolState>.
+        jira: 'idle',
+        confluence: 'idle',
       }
     }
-    return { slack: 'idle', notion: 'idle', gmail: 'idle' }
+    return { slack: 'idle', notion: 'idle', gmail: 'idle', jira: 'idle', confluence: 'idle' }
   })
-  const [toolError, setToolError] = useState<Record<ToolId, string>>({ slack: '', notion: '', gmail: '' })
+  const [toolError, setToolError] = useState<Record<ToolId, string>>({
+    slack: '', notion: '', gmail: '', jira: '', confluence: '',
+  })
   const canContinue = Object.values(toolState).some((state) => state === 'connected')
 
   // Real initial state: read existing source_connections rows for this tenant
