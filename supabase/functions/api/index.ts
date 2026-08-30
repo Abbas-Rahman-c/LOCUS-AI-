@@ -352,21 +352,34 @@ async function buildThreadContext(
     }
 
     // Envelopes only ever carry the raw platform identifier (a Slack "U..."
-    // id, a Notion user id, a Gmail address) - resolve to real names the
-    // same way decision participants already are, instead of showing raw
-    // ids in the reconstructed conversation.
+    // id, a Notion user id, a Gmail address, an Atlassian accountId, a
+    // Discord user id) - resolve to real names the same way decision
+    // participants already are, instead of showing raw ids in the
+    // reconstructed conversation.
+    //
+    // Real bug found live: this query's WHERE clause only ever matched
+    // slack_user_id/notion_user_id/email, structurally excluding Jira/
+    // Confluence/Discord actors from ever being found here at all -
+    // unlike listDecisions/getDecision's own actor resolution, which joins
+    // by the actors table's internal UUID (source-agnostic, unaffected by
+    // this), buildThreadContext re-derives identity from the raw platform
+    // id carried in each event's own envelope, so it needed the same
+    // 3-column list every other actor-identifier lookup already needed
+    // extending. Confirmed live: a real Discord conversation showed the
+    // raw snowflake id instead of a name.
     const rawActorIds = [...new Set(decrypted.map((m) => m.rawActor))];
     const actorNameByRawId = new Map<string, string>();
     if (rawActorIds.length > 0) {
       const actorRows = await sql`
-        SELECT display_name, email, notion_user_id, slack_user_id FROM public.actors
+        SELECT display_name, email, notion_user_id, slack_user_id, atlassian_account_id, discord_user_id FROM public.actors
         WHERE tenant_id = ${tenantId}
-          AND (slack_user_id = ANY(${rawActorIds}) OR notion_user_id = ANY(${rawActorIds}) OR email = ANY(${rawActorIds}))
+          AND (slack_user_id = ANY(${rawActorIds}) OR notion_user_id = ANY(${rawActorIds}) OR email = ANY(${rawActorIds})
+            OR atlassian_account_id = ANY(${rawActorIds}) OR discord_user_id = ANY(${rawActorIds}))
       `;
       for (const ar of actorRows) {
         const name = guessActorName(ar.display_name, ar.email, ar.notion_user_id, ar.slack_user_id);
         if (!name) continue;
-        for (const rawId of [ar.slack_user_id, ar.notion_user_id, ar.email]) {
+        for (const rawId of [ar.slack_user_id, ar.notion_user_id, ar.email, ar.atlassian_account_id, ar.discord_user_id]) {
           if (rawId) actorNameByRawId.set(rawId, name);
         }
       }
