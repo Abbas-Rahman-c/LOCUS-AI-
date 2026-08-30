@@ -22,6 +22,7 @@ import {
   resolveRedirectOrigin,
   resolveTenantFromAuthorize,
 } from "../_shared/oauth_tenant.ts";
+import { enforceRouteRateLimit } from "../_shared/routeRateLimit.ts";
 
 const CLIENT_ID = Deno.env.get("SLACK_CLIENT_ID");
 const CLIENT_SECRET = Deno.env.get("SLACK_CLIENT_SECRET");
@@ -96,6 +97,14 @@ async function backfillSlackHistory(tenantId: string, teamId: string, accessToke
   }
 }
 
+// Deploy note: this function must ALWAYS be deployed with --no-verify-jwt.
+// It's driven by a plain browser popup navigation (see /authorize below),
+// which can't attach a Supabase Authorization header - without this flag,
+// Supabase's own gateway 401s every request before this code ever runs
+// (real bug hit live building jira-oauth/confluence-oauth: forgetting the
+// flag on first deploy broke the connect flow entirely, invisible to
+// deno check/npm run build since the gateway rejects it before this
+// function's own code is reached at all).
 Deno.serve(async (req: Request) => {
   const url = new URL(req.url);
 
@@ -104,6 +113,7 @@ Deno.serve(async (req: Request) => {
     const syncMode = url.searchParams.get("sync_mode") === "new" ? "new" : "full";
     try {
       const tenantId = await resolveTenantFromAuthorize(url);
+      await enforceRouteRateLimit(tenantId, "slack-oauth");
 
       const slackAuthUrl = new URL("https://slack.com/oauth/v2/authorize");
       slackAuthUrl.searchParams.set("client_id", CLIENT_ID ?? "");

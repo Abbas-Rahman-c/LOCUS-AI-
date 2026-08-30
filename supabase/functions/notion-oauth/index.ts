@@ -9,6 +9,7 @@ import {
   resolveTenantFromAuthorize,
 } from "../_shared/oauth_tenant.ts";
 import { encryptToken } from "../_shared/tokenCrypto.ts";
+import { enforceRouteRateLimit } from "../_shared/routeRateLimit.ts";
 
 console.log("Notion OAuth handler started!");
 
@@ -18,6 +19,8 @@ const REDIRECT_URI = Deno.env.get("NOTION_REDIRECT_URI");
 
 const SOURCE = "notion" as const;
 
+// Deploy note: this function must ALWAYS be deployed with --no-verify-jwt.
+// See slack-oauth/index.ts's identical comment for why.
 Deno.serve(async (req: Request) => {
   const url = new URL(req.url);
 
@@ -27,6 +30,7 @@ Deno.serve(async (req: Request) => {
     const syncMode = url.searchParams.get("sync_mode") === "new" ? "new" : "full";
     try {
       const tenantId = await resolveTenantFromAuthorize(url);
+      await enforceRouteRateLimit(tenantId, "notion-oauth");
 
       const notionAuthUrl = new URL("https://api.notion.com/v1/oauth/authorize");
       notionAuthUrl.searchParams.set("client_id", CLIENT_ID ?? "");

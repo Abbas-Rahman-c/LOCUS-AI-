@@ -29,6 +29,7 @@ import {
   resolveTenantFromAuthorize,
 } from "../_shared/oauth_tenant.ts";
 import { encryptToken } from "../_shared/tokenCrypto.ts";
+import { enforceRouteRateLimit } from "../_shared/routeRateLimit.ts";
 
 console.log("Jira OAuth handler started!");
 
@@ -46,6 +47,10 @@ interface AccessibleResource {
   scopes: string[];
 }
 
+// Deploy note: this function must ALWAYS be deployed with --no-verify-jwt.
+// See slack-oauth/index.ts's identical comment for why - this exact bug
+// was hit live on this function's first deploy (missing the flag), fixed
+// on redeploy, and this comment is the reason it shouldn't happen again.
 Deno.serve(async (req: Request) => {
   const url = new URL(req.url);
 
@@ -55,6 +60,7 @@ Deno.serve(async (req: Request) => {
     const syncMode = url.searchParams.get("sync_mode") === "new" ? "new" : "full";
     try {
       const tenantId = await resolveTenantFromAuthorize(url);
+      await enforceRouteRateLimit(tenantId, "jira-oauth");
 
       const authorizeUrl = new URL("https://auth.atlassian.com/authorize");
       authorizeUrl.searchParams.set("audience", "api.atlassian.com");

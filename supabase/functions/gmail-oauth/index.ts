@@ -9,6 +9,7 @@ import {
   resolveTenantFromAuthorize,
 } from "../_shared/oauth_tenant.ts";
 import { encryptToken } from "../_shared/tokenCrypto.ts";
+import { enforceRouteRateLimit } from "../_shared/routeRateLimit.ts";
 
 console.log("Gmail OAuth handler started!");
 
@@ -18,6 +19,8 @@ const REDIRECT_URI = Deno.env.get("GMAIL_REDIRECT_URI");
 
 const SOURCE = "gmail" as const;
 
+// Deploy note: this function must ALWAYS be deployed with --no-verify-jwt.
+// See slack-oauth/index.ts's identical comment for why.
 Deno.serve(async (req: Request) => {
   const url = new URL(req.url);
 
@@ -27,6 +30,13 @@ Deno.serve(async (req: Request) => {
     const syncMode = url.searchParams.get("sync_mode") === "new" ? "new" : "full";
     try {
       const tenantId = await resolveTenantFromAuthorize(url);
+      // Same "expensive route" guard /search and /digest already use -
+      // bounds how many times a tenant can INITIATE a connect flow (20 /
+      // 5 min), not how many times Gmail's own API gets called during
+      // normal polling (a separate, unrelated concern this doesn't
+      // touch). Applied to every connector's /authorize the same way, not
+      // just the new ones.
+      await enforceRouteRateLimit(tenantId, "gmail-oauth");
 
       const scopes = [
         "https://www.googleapis.com/auth/gmail.readonly",
