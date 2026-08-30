@@ -676,6 +676,11 @@ const ACTOR_IDENTIFIER_COLUMN: Record<string, string> = {
   gmail: "email",
   slack: "slack_user_id",
   notion: "notion_user_id",
+  // One shared column, not two - a user's Atlassian accountId is the same
+  // identity across every product on one site, unlike Slack/Notion's
+  // per-product ids.
+  jira: "atlassian_account_id",
+  confluence: "atlassian_account_id",
 };
 
 // deno-lint-ignore no-explicit-any
@@ -703,12 +708,16 @@ async function resolveActorId(
 
   const existing = column === "slack_user_id"
     ? await sql`SELECT id FROM actors WHERE tenant_id = ${tenantId} AND slack_user_id = ${sourceActorId}`
-    : await sql`SELECT id FROM actors WHERE tenant_id = ${tenantId} AND notion_user_id = ${sourceActorId}`;
+    : column === "notion_user_id"
+    ? await sql`SELECT id FROM actors WHERE tenant_id = ${tenantId} AND notion_user_id = ${sourceActorId}`
+    : await sql`SELECT id FROM actors WHERE tenant_id = ${tenantId} AND atlassian_account_id = ${sourceActorId}`;
   if (existing.length > 0) return existing[0].id;
 
   const created = column === "slack_user_id"
     ? await sql`INSERT INTO actors (tenant_id, slack_user_id, kind) VALUES (${tenantId}, ${sourceActorId}, 'internal') RETURNING id`
-    : await sql`INSERT INTO actors (tenant_id, notion_user_id, kind) VALUES (${tenantId}, ${sourceActorId}, 'internal') RETURNING id`;
+    : column === "notion_user_id"
+    ? await sql`INSERT INTO actors (tenant_id, notion_user_id, kind) VALUES (${tenantId}, ${sourceActorId}, 'internal') RETURNING id`
+    : await sql`INSERT INTO actors (tenant_id, atlassian_account_id, kind) VALUES (${tenantId}, ${sourceActorId}, 'internal') RETURNING id`;
   return created[0].id;
 }
 
