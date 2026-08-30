@@ -304,6 +304,22 @@ async function resolveSlackNamesLive(sql: any, tenantId: string, slackUserIds: s
 // opening its own nested withTenant connection - and never lets a failure
 // here take down the whole decision fetch, since this is a quality
 // enrichment, not core data; fails open to an empty thread on any error.
+// Real bug found live: thread_ref means "one genuine conversation" for
+// every connector except Discord, where the poller sets it to the whole
+// channel ID (discord-poller/index.ts) - there's no cheaper per-message
+// grouping available yet (Discord's real reply-chain data isn't captured
+// during ingestion). Left unbounded, this function pulled a channel's
+// *entire* ingested history as "conversation" for any one decision from
+// it. Fixed with a time window around the origin event(s) plus a hard
+// row cap - harmless for Slack/Gmail/Jira/Confluence/Notion (their
+// thread_ref is already a tight, naturally short-lived container so the
+// window never binds), and it's what actually fixes Discord: only
+// messages near the decision in time now show up, not the channel's
+// whole lifetime. Pure SQL - no embedding or LLM call involved, so this
+// adds zero token cost.
+const THREAD_CONTEXT_WINDOW_MS = 6 * 60 * 60 * 1000; // 6h either side of the origin event(s)
+const THREAD_CONTEXT_MAX_MESSAGES = 40;
+
 // deno-lint-ignore no-explicit-any
 async function buildThreadContext(
   sql: any,
@@ -315,22 +331,42 @@ async function buildThreadContext(
   if (rawEventIds.length === 0) return [];
 
   try {
-    const threadRefRows = await sql`
-      SELECT DISTINCT thread_ref FROM public.raw_events
-      WHERE id = ANY(${rawEventIds}) AND tenant_id = ${tenantId} AND thread_ref IS NOT NULL
+    const originRows = await sql`
+      SELECT thread_ref, received_at FROM public.raw_events
+      WHERE id = ANY(${rawEventIds}) AND tenant_id = ${tenantId}
     `;
-    const threadRefs = threadRefRows.map((r: { thread_ref: string }) => r.thread_ref);
+    const threadRefs = [
+      ...new Set(originRows.map((r: { thread_ref: string | null }) => r.thread_ref).filter((v: string | null): v is string => !!v)),
+    ];
+    const originTimes = originRows
+      .map((r: { received_at: string }) => new Date(r.received_at).getTime())
+      .filter((t: number) => !Number.isNaN(t));
+    const windowStart = originTimes.length > 0
+      ? new Date(Math.min(...originTimes) - THREAD_CONTEXT_WINDOW_MS).toISOString()
+      : null;
+    const windowEnd = originTimes.length > 0
+      ? new Date(Math.max(...originTimes) + THREAD_CONTEXT_WINDOW_MS).toISOString()
+      : null;
 
     // raw_events has no plain-text "actor" column - only actor_id (a
     // foreign key the current ingestion pipeline never populates). The
     // real actor identity only ever existed inside the encrypted envelope
     // itself, which is already being decrypted below anyway.
     const eventRows = threadRefs.length > 0
-      ? await sql`
-          SELECT id, source, received_at, raw_content FROM public.raw_events
-          WHERE thread_ref = ANY(${threadRefs}) AND tenant_id = ${tenantId}
-          ORDER BY received_at ASC
-        `
+      ? (windowStart && windowEnd
+        ? await sql`
+            SELECT id, source, received_at, raw_content FROM public.raw_events
+            WHERE thread_ref = ANY(${threadRefs}) AND tenant_id = ${tenantId}
+              AND received_at BETWEEN ${windowStart} AND ${windowEnd}
+            ORDER BY received_at ASC
+            LIMIT ${THREAD_CONTEXT_MAX_MESSAGES}
+          `
+        : await sql`
+            SELECT id, source, received_at, raw_content FROM public.raw_events
+            WHERE thread_ref = ANY(${threadRefs}) AND tenant_id = ${tenantId}
+            ORDER BY received_at ASC
+            LIMIT ${THREAD_CONTEXT_MAX_MESSAGES}
+          `)
       : await sql`
           SELECT id, source, received_at, raw_content FROM public.raw_events
           WHERE id = ANY(${rawEventIds}) AND tenant_id = ${tenantId}
