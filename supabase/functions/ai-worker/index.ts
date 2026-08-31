@@ -684,6 +684,7 @@ const ACTOR_IDENTIFIER_COLUMN: Record<string, string> = {
   discord: "discord_user_id",
   github: "github_user_id",
   monday: "monday_user_id",
+  clickup: "clickup_user_id",
 };
 
 // deno-lint-ignore no-explicit-any
@@ -730,7 +731,9 @@ async function resolveActorId(
     ? await sql`SELECT id, display_name FROM actors WHERE tenant_id = ${tenantId} AND discord_user_id = ${sourceActorId}`
     : column === "github_user_id"
     ? await sql`SELECT id, display_name FROM actors WHERE tenant_id = ${tenantId} AND github_user_id = ${sourceActorId}`
-    : await sql`SELECT id, display_name FROM actors WHERE tenant_id = ${tenantId} AND monday_user_id = ${sourceActorId}`;
+    : column === "monday_user_id"
+    ? await sql`SELECT id, display_name FROM actors WHERE tenant_id = ${tenantId} AND monday_user_id = ${sourceActorId}`
+    : await sql`SELECT id, display_name FROM actors WHERE tenant_id = ${tenantId} AND clickup_user_id = ${sourceActorId}`;
   if (existing.length > 0) {
     if (displayName && !existing[0].display_name) {
       await sql`UPDATE actors SET display_name = ${displayName} WHERE id = ${existing[0].id}`;
@@ -748,7 +751,9 @@ async function resolveActorId(
     ? await sql`INSERT INTO actors (tenant_id, discord_user_id, display_name, kind) VALUES (${tenantId}, ${sourceActorId}, ${displayName ?? null}, 'internal') RETURNING id`
     : column === "github_user_id"
     ? await sql`INSERT INTO actors (tenant_id, github_user_id, display_name, kind) VALUES (${tenantId}, ${sourceActorId}, ${displayName ?? null}, 'internal') RETURNING id`
-    : await sql`INSERT INTO actors (tenant_id, monday_user_id, display_name, kind) VALUES (${tenantId}, ${sourceActorId}, ${displayName ?? null}, 'internal') RETURNING id`;
+    : column === "monday_user_id"
+    ? await sql`INSERT INTO actors (tenant_id, monday_user_id, display_name, kind) VALUES (${tenantId}, ${sourceActorId}, ${displayName ?? null}, 'internal') RETURNING id`
+    : await sql`INSERT INTO actors (tenant_id, clickup_user_id, display_name, kind) VALUES (${tenantId}, ${sourceActorId}, ${displayName ?? null}, 'internal') RETURNING id`;
   return created[0].id;
 }
 

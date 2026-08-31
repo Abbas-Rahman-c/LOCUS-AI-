@@ -42,7 +42,7 @@ function jsonResponse(body: Record<string, unknown>, status: number) {
   });
 }
 
-type Source = "slack" | "gmail" | "notion" | "jira" | "confluence" | "discord" | "github" | "monday";
+type Source = "slack" | "gmail" | "notion" | "jira" | "confluence" | "discord" | "github" | "monday" | "clickup";
 type RealItem = { source: Source; item_id: string; item_name: string };
 
 const DISCORD_BOT_TOKEN = Deno.env.get("DISCORD_BOT_TOKEN");
@@ -64,6 +64,21 @@ function getNotionPageTitle(page: Record<string, unknown>): string {
 // Slack/Gmail/Notion which call the provider's own api.* domain directly
 // with just the access token.
 async function fetchRealItems(source: Source, accessToken: string, cloudId?: string): Promise<RealItem[]> {
+  if (source === "clickup") {
+    // cloudId doubles as team_id here - the same "extra per-connection
+    // id" param Jira/Confluence already pass through for their own
+    // cloudId, not a new concept.
+    const teamId = cloudId;
+    if (!teamId) return [];
+    const resp = await fetch(`https://api.clickup.com/api/v2/team/${teamId}/space`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (!resp.ok) return [];
+    const data = await resp.json();
+    const spaces = (data.spaces ?? []) as { id: string; name: string }[];
+    return spaces.map((s) => ({ source: "clickup" as const, item_id: s.id, item_name: s.name }));
+  }
+
   if (source === "monday") {
     // GraphQL, and the Authorization header takes the raw token - no
     // "Bearer " prefix, same real gotcha noted in monday-oauth/
@@ -291,7 +306,11 @@ Deno.serve(async (req: Request) => {
         }
         const accessToken = await decryptToken(row.oauth_token_ref as string | null);
         if (!accessToken) continue;
-        for (const item of await fetchRealItems(source, accessToken)) {
+        // ClickUp's team_id lives in external_workspace_id, reused
+        // through the same "extra per-connection id" param Jira/
+        // Confluence already pass their cloudId through - no need for
+        // a new parameter just for this source.
+        for (const item of await fetchRealItems(source, accessToken, row.external_workspace_id as string | undefined)) {
           itemsByKey.set(`${item.source}:${item.item_id}`, item);
         }
       } catch (err) {
