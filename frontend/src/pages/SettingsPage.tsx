@@ -22,8 +22,8 @@ type SettingsSection =
   | 'Notifications'
 
 type CaptureMode = 'decisions-actions' | 'decisions-only'
-type SourceFilter = 'All' | 'Gmail' | 'Notion' | 'Slack' | 'Jira' | 'Confluence' | 'Discord' | 'GitHub' | 'Monday' | 'ClickUp'
-type CaptureSource = 'slack' | 'notion' | 'gmail' | 'jira' | 'confluence' | 'discord' | 'github' | 'monday' | 'clickup'
+type SourceFilter = 'All' | 'Gmail' | 'Notion' | 'Slack' | 'Jira' | 'Confluence' | 'Discord' | 'GitHub' | 'Monday' | 'ClickUp' | 'Outlook'
+type CaptureSource = 'slack' | 'notion' | 'gmail' | 'jira' | 'confluence' | 'discord' | 'github' | 'monday' | 'clickup' | 'outlook_calendar'
 
 type ChannelRow = {
   id: string
@@ -44,6 +44,7 @@ const SOURCE_APP_LABELS: Record<CaptureSource, Exclude<SourceFilter, 'All'>> = {
   github: 'GitHub',
   monday: 'Monday',
   clickup: 'ClickUp',
+  outlook_calendar: 'Outlook',
 }
 
 type SearchHistoryItem = {
@@ -62,7 +63,7 @@ const SIDEBAR_ITEMS: { id: SettingsSection; label: string }[] = [
   { id: 'Notifications', label: 'Notifications' },
 ]
 
-const SOURCE_FILTERS: SourceFilter[] = ['All', 'Gmail', 'Notion', 'Slack', 'Jira', 'Confluence', 'Discord', 'GitHub', 'Monday', 'ClickUp']
+const SOURCE_FILTERS: SourceFilter[] = ['All', 'Gmail', 'Notion', 'Slack', 'Jira', 'Confluence', 'Discord', 'GitHub', 'Monday', 'ClickUp', 'Outlook']
 
 function AccountIcon() {
   return (
@@ -491,6 +492,11 @@ const CONNECTED_SOURCE_META: { id: SourceId; name: SourceName; description: stri
     name: 'ClickUp',
     description: 'Capture decisions from tasks and comments.',
   },
+  {
+    id: 'outlook_calendar',
+    name: 'Outlook',
+    description: 'Capture decisions from meeting descriptions.',
+  },
 ]
 
 function formatConnectedSourceSync(info: { status: string; last_synced_at: string | null }) {
@@ -534,6 +540,7 @@ function ConnectedSourcesSettings() {
     github: [],
     monday: [],
     clickup: [],
+    outlook_calendar: [],
   })
   const [isLoading, setIsLoading] = useState(true)
   const [connectingId, setConnectingId] = useState<SourceId | null>(null)
@@ -551,7 +558,7 @@ function ConnectedSourcesSettings() {
 
   const loadConnections = () =>
     fetchSourceConnections().then((rows) => {
-      const next: Record<SourceId, SourceConnectionRow[]> = { slack: [], notion: [], gmail: [], jira: [], confluence: [], discord: [], github: [], monday: [], clickup: [] }
+      const next: Record<SourceId, SourceConnectionRow[]> = { slack: [], notion: [], gmail: [], jira: [], confluence: [], discord: [], github: [], monday: [], clickup: [], outlook_calendar: [] }
       for (const row of rows) {
         if (row.status === 'active') next[row.source].push(row)
       }

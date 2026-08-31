@@ -42,7 +42,7 @@ function jsonResponse(body: Record<string, unknown>, status: number) {
   });
 }
 
-type Source = "slack" | "gmail" | "notion" | "jira" | "confluence" | "discord" | "github" | "monday" | "clickup";
+type Source = "slack" | "gmail" | "notion" | "jira" | "confluence" | "discord" | "github" | "monday" | "clickup" | "outlook_calendar";
 type RealItem = { source: Source; item_id: string; item_name: string };
 
 const DISCORD_BOT_TOKEN = Deno.env.get("DISCORD_BOT_TOKEN");
@@ -125,6 +125,16 @@ async function fetchRealItems(source: Source, accessToken: string, cloudId?: str
     const data = await resp.json();
     const spaces = (data.results ?? []) as { id: number; key: string; name: string }[];
     return spaces.map((s) => ({ source: "confluence" as const, item_id: String(s.id), item_name: s.name }));
+  }
+
+  if (source === "outlook_calendar") {
+    // A single personal calendar has no real "channel"-equivalent
+    // sub-items the way Slack/Gmail/Discord/GitHub/Monday/ClickUp do -
+    // the source-level connect/disconnect already controls whether it's
+    // captured at all. Explicit early return, not a fallthrough to the
+    // Gmail-labels fetch below (which would silently misfire a Gmail
+    // API call using a Microsoft access token otherwise).
+    return [];
   }
 
   if (source === "notion") {

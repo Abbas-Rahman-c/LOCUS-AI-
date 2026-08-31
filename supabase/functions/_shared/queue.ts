@@ -9,7 +9,7 @@ import { redactFinancialInfoDeep } from "./financialRedaction.ts";
 
 export interface IngestionEnvelope {
   tenant_id: string;
-  source: "slack" | "gmail" | "notion" | "jira" | "confluence" | "discord" | "github" | "monday" | "clickup";
+  source: "slack" | "gmail" | "notion" | "jira" | "confluence" | "discord" | "github" | "monday" | "clickup" | "outlook_calendar";
   source_id: string;
   actor: string;
   thread_ref: string;

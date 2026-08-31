@@ -685,6 +685,12 @@ const ACTOR_IDENTIFIER_COLUMN: Record<string, string> = {
   github: "github_user_id",
   monday: "monday_user_id",
   clickup: "clickup_user_id",
+  // Reuses the same "email" column Gmail already indexes, not a new
+  // column - a Microsoft Calendar organizer/attendee identity IS an
+  // email address, the exact same identifier space. This also means
+  // the same real person shows up as one actor across Gmail and
+  // Outlook Calendar, not two - a genuine improvement, not a shortcut.
+  outlook_calendar: "email",
 };
 
 // deno-lint-ignore no-explicit-any

@@ -14,6 +14,7 @@ const SOURCE_META: SourceMeta[] = [
   { id: 'github', name: 'GitHub', source: 'GitHub' },
   { id: 'monday', name: 'Monday.com', source: 'Monday' },
   { id: 'clickup', name: 'ClickUp', source: 'ClickUp' },
+  { id: 'outlook_calendar', name: 'Outlook Calendar', source: 'Outlook' },
 ]
 
 type ConnectionInfo = { status: string; lastSyncedAt: string | null } | null
@@ -42,6 +43,7 @@ export function DashboardSources() {
     github: null,
     monday: null,
     clickup: null,
+    outlook_calendar: null,
   })
 
   useEffect(() => {
