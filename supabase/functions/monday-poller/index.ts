@@ -36,6 +36,24 @@
 // Monday's own docs don't document an update-time filter rule there -
 // same "recapture full current state, filter after the fact" shape
 // notion-poller and jira-poller already use for comments.
+//
+// Real gap found live: an item's source_id used to be just `item-<id>`,
+// meaning raw_events' one-row-ever-per-source_id uniqueness captured an
+// item's state exactly ONCE, on its first poll, and silently treated
+// every later change to that same item as "already seen" forever -
+// wrong for something like a bug ticket, where the whole point is that
+// its status changes over its lifetime ("Awaiting Review" -> "Fixing"
+// -> "Fixed" IS the decision-worthy content, not just its creation).
+// Confirmed live: a real bug moving to "Fixed" after its first capture
+// was invisible, not because of missing content (the column_values fix
+// above), but because the item was already marked done and skipped.
+// source_id now includes updated_at, so each meaningfully-different
+// state of an item becomes its own real, distinct snapshot instead of
+// only ever the first one - thread_ref stays item-scoped (not
+// timestamped) so every snapshot of the same item still groups into one
+// conversation. This is a real, disclosed pattern worth applying to
+// Jira/GitHub's own item-level (not comment-level) envelopes too - not
+// done here, out of scope for this connector's own fix.
 
 import { withAdmin, withTenant } from "../_shared/db.ts";
 import { enqueueEvent, IngestionEnvelope } from "../_shared/queue.ts";
@@ -181,7 +199,7 @@ Deno.serve(async (_req) => {
               tenant_id: source.tenant_id,
               connection_id: source.id,
               source: "monday",
-              source_id: `item-${item.id}`,
+              source_id: `item-${item.id}-${item.updated_at}`,
               actor: item.creator?.id ? String(item.creator.id) : "unknown",
               actor_display_name: item.creator?.name,
               thread_ref: `${board.id}/${item.id}`,
