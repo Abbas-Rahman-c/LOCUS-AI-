@@ -54,6 +54,10 @@ interface MondayUpdate {
   created_at?: string;
   creator?: { id?: string; name?: string } | null;
 }
+interface MondayColumnValue {
+  column?: { title?: string } | null;
+  text?: string | null;
+}
 interface MondayItem {
   id: string;
   name?: string;
@@ -61,6 +65,27 @@ interface MondayItem {
   updated_at?: string;
   creator?: { id?: string; name?: string } | null;
   updates?: MondayUpdate[];
+  column_values?: MondayColumnValue[];
+}
+
+// Real bug found live: this poller originally captured only item.name -
+// the bare title - as the entire body for an item envelope. Confirmed
+// against a real board (a bug tracker) that this is genuinely thin: the
+// actual meaningful content of a Monday item usually lives in its
+// column_values (Status, Priority, Reporter, custom fields), not in a
+// separate description field or in `updates` - most rows never get a
+// comment at all. Without this, triage saw almost nothing to work with
+// per item and correctly discarded most of them as non-actionable,
+// which looked like "extraction is too conservative" but was really
+// "there's nothing here to extract from" - a content gap, not a
+// judgment gap. Formats every non-empty column into one line each,
+// skipping columns with no text representation (not every column type
+// has one, per Monday's own docs).
+function formatColumnValues(columnValues: MondayColumnValue[] | undefined): string {
+  return (columnValues ?? [])
+    .filter((cv) => cv.column?.title && cv.text && cv.text.trim())
+    .map((cv) => `${cv.column!.title}: ${cv.text}`)
+    .join("\n");
 }
 interface MondayBoard {
   id: string;
@@ -121,6 +146,10 @@ Deno.serve(async (_req) => {
               url
               updated_at
               creator { id name }
+              column_values {
+                column { title }
+                text
+              }
               updates {
                 id
                 body
@@ -146,6 +175,8 @@ Deno.serve(async (_req) => {
           const isNewItem = itemUpdatedAt && itemUpdatedAt > lastSyncedAt;
 
           if (isNewItem) {
+            const columnsText = formatColumnValues(item.column_values);
+            const body = [item.name ?? "", columnsText].filter(Boolean).join("\n\n");
             const envelope: IngestionEnvelope = {
               tenant_id: source.tenant_id,
               connection_id: source.id,
@@ -158,7 +189,7 @@ Deno.serve(async (_req) => {
               known_actors: knownActorsFor(item.creator),
               raw_content: {
                 subject: `${board.name ?? "Board"}: ${item.name ?? ""}`,
-                body: item.name ?? "",
+                body,
               },
               source_permalink: item.url,
               received_at: new Date().toISOString(),
