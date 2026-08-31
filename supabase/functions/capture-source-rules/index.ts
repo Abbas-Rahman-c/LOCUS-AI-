@@ -42,7 +42,7 @@ function jsonResponse(body: Record<string, unknown>, status: number) {
   });
 }
 
-type Source = "slack" | "gmail" | "notion" | "jira" | "confluence" | "discord" | "github";
+type Source = "slack" | "gmail" | "notion" | "jira" | "confluence" | "discord" | "github" | "monday";
 type RealItem = { source: Source; item_id: string; item_name: string };
 
 const DISCORD_BOT_TOKEN = Deno.env.get("DISCORD_BOT_TOKEN");
@@ -64,6 +64,23 @@ function getNotionPageTitle(page: Record<string, unknown>): string {
 // Slack/Gmail/Notion which call the provider's own api.* domain directly
 // with just the access token.
 async function fetchRealItems(source: Source, accessToken: string, cloudId?: string): Promise<RealItem[]> {
+  if (source === "monday") {
+    // GraphQL, and the Authorization header takes the raw token - no
+    // "Bearer " prefix, same real gotcha noted in monday-oauth/
+    // monday-poller. accessToken here is already the decrypted token
+    // (this function is only ever called with one, matching every other
+    // non-Atlassian/Discord/GitHub source's plain-token shape).
+    const resp = await fetch("https://api.monday.com/v2", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: accessToken },
+      body: JSON.stringify({ query: "query { boards(limit: 50) { id name } }" }),
+    });
+    if (!resp.ok) return [];
+    const data = await resp.json();
+    const boards = (data.data?.boards ?? []) as { id: string; name: string }[];
+    return boards.map((b) => ({ source: "monday" as const, item_id: b.id, item_name: b.name }));
+  }
+
   if (source === "jira") {
     // /rest/api/3/project/search is the current, non-deprecated endpoint -
     // verified directly against Atlassian's own docs before using this,

@@ -22,8 +22,8 @@ type SettingsSection =
   | 'Notifications'
 
 type CaptureMode = 'decisions-actions' | 'decisions-only'
-type SourceFilter = 'All' | 'Gmail' | 'Notion' | 'Slack' | 'Jira' | 'Confluence' | 'Discord' | 'GitHub'
-type CaptureSource = 'slack' | 'notion' | 'gmail' | 'jira' | 'confluence' | 'discord' | 'github'
+type SourceFilter = 'All' | 'Gmail' | 'Notion' | 'Slack' | 'Jira' | 'Confluence' | 'Discord' | 'GitHub' | 'Monday'
+type CaptureSource = 'slack' | 'notion' | 'gmail' | 'jira' | 'confluence' | 'discord' | 'github' | 'monday'
 
 type ChannelRow = {
   id: string
@@ -42,6 +42,7 @@ const SOURCE_APP_LABELS: Record<CaptureSource, Exclude<SourceFilter, 'All'>> = {
   confluence: 'Confluence',
   discord: 'Discord',
   github: 'GitHub',
+  monday: 'Monday',
 }
 
 type SearchHistoryItem = {
@@ -60,7 +61,7 @@ const SIDEBAR_ITEMS: { id: SettingsSection; label: string }[] = [
   { id: 'Notifications', label: 'Notifications' },
 ]
 
-const SOURCE_FILTERS: SourceFilter[] = ['All', 'Gmail', 'Notion', 'Slack', 'Jira', 'Confluence', 'Discord', 'GitHub']
+const SOURCE_FILTERS: SourceFilter[] = ['All', 'Gmail', 'Notion', 'Slack', 'Jira', 'Confluence', 'Discord', 'GitHub', 'Monday']
 
 function AccountIcon() {
   return (
@@ -479,6 +480,11 @@ const CONNECTED_SOURCE_META: { id: SourceId; name: SourceName; description: stri
     name: 'GitHub',
     description: 'Capture decisions from issues, pull requests, and comments.',
   },
+  {
+    id: 'monday',
+    name: 'Monday',
+    description: 'Capture decisions from boards, items, and updates.',
+  },
 ]
 
 function formatConnectedSourceSync(info: { status: string; last_synced_at: string | null }) {
@@ -520,6 +526,7 @@ function ConnectedSourcesSettings() {
     confluence: [],
     discord: [],
     github: [],
+    monday: [],
   })
   const [isLoading, setIsLoading] = useState(true)
   const [connectingId, setConnectingId] = useState<SourceId | null>(null)
@@ -537,7 +544,7 @@ function ConnectedSourcesSettings() {
 
   const loadConnections = () =>
     fetchSourceConnections().then((rows) => {
-      const next: Record<SourceId, SourceConnectionRow[]> = { slack: [], notion: [], gmail: [], jira: [], confluence: [], discord: [], github: [] }
+      const next: Record<SourceId, SourceConnectionRow[]> = { slack: [], notion: [], gmail: [], jira: [], confluence: [], discord: [], github: [], monday: [] }
       for (const row of rows) {
         if (row.status === 'active') next[row.source].push(row)
       }
